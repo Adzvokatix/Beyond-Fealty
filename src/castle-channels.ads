@@ -1,0 +1,41 @@
+--  Generator channels.  Each gets an independent sub-seed, so retuning one
+--  feature (say, tree density) never reshuffles another (say, coal seams).
+package Castle.Channels with Pure is
+   Warp_X        : constant := 1;
+   Warp_Y        : constant := 2;
+   Hill_Mask     : constant := 3;
+   Mountain_Mask : constant := 4;
+   Plains        : constant := 5;
+   Hills         : constant := 6;
+   Ridges        : constant := 7;
+   Detail        : constant := 8;
+   Fold          : constant := 10;
+   Granite       : constant := 11;
+   Coal          : constant := 12;
+   Salt          : constant := 13;
+   Iron          : constant := 14;
+   Vein_District : constant := 15;
+   Silver_Vein   : constant := 16;
+   Gold_Vein     : constant := 17;
+   Placer        : constant := 18;
+   Bog           : constant := 19;
+   Moisture      : constant := 20;
+   Meadow        : constant := 21;
+   Plants        : constant := 22;
+   Plant_Height  : constant := 23;
+   Meander       : constant := 24;
+   Cliffs        : constant := 40;
+   Cliff_Phase   : constant := 41;
+   Cliff_Step    : constant := 42;
+   Cliff_Edge    : constant := 43;
+   Forest        : constant := 30;
+   Trees         : constant := 31;
+   Bushes        : constant := 32;
+   Boulders      : constant := 33;
+   Rocky         : constant := 34;
+   Pine_Mix      : constant := 36;
+   Aspen_Grove   : constant := 37;
+   Veg_Patch     : constant := 38;
+   Grass_Drift   : constant := 39;
+   Last          : constant := 63;
+end Castle.Channels;
