@@ -1,0 +1,43 @@
+--  Castle Game engine.  Build:  gprbuild -P castle.gpr -XCASTLE_MODE=release
+project Castle is
+
+   type Mode_Type is ("debug", "release");
+   Mode : Mode_Type := external ("CASTLE_MODE", "release");
+
+   for Languages   use ("Ada");
+   for Source_Dirs use ("src", "tools", "game");
+   for Object_Dir  use "obj/" & Mode;
+   case Mode is                        --  separate, so one build never runs as the other
+      when "debug"   => for Exec_Dir use "bin/debug";
+      when "release" => for Exec_Dir use "bin";
+   end case;
+   for Main        use ("worldgen_preview.adb", "probe.adb", "village_preview.adb",
+                        "terrain_stats.adb", "climate_year.adb", "camera_check.adb", "edit_check.adb", "water_check.adb", "water_sim_check.adb", "fall_find.adb", "ui_check.adb", "water_probe.adb", "dynamics_check.adb", "serf_check.adb", "path_check.adb", "colony_check.adb", "deer_check.adb", "pick_check.adb", "flora_stats.adb", "colony_run.adb",
+                        "castle_game.adb");
+
+   --  -ffp-contract=off: never fuse a*b+c into FMA.  World generation must
+   --  give the same world for the same seed on every machine and build.
+   Common := ("-gnat2022", "-gnatwa", "-gnatwJ", "-gnatwl", "-ffp-contract=off");
+
+   package Compiler is
+      case Mode is
+         when "debug" =>
+            for Default_Switches ("Ada") use Common &
+              ("-O1", "-g", "-gnata", "-gnato", "-gnatVa", "-fstack-check");
+         when "release" =>
+            for Default_Switches ("Ada") use Common &
+              ("-O3", "-gnatn", "-gnatp", "-march=x86-64-v3", "-funroll-loops");
+      end case;
+   end Compiler;
+
+   package Linker is
+      for Switches ("castle_game.adb") use ("-lglfw", "-lGL");
+      for Switches ("camera_check.adb") use ("-lglfw", "-lGL");
+      for Switches ("ui_check.adb") use ("-lGL");   --  links the GPU half, never calls it
+   end Linker;
+
+   package Binder is
+      for Default_Switches ("Ada") use ("-Es");   --  symbolic tracebacks
+   end Binder;
+
+end Castle;

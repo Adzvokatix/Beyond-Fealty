@@ -1,0 +1,6 @@
+name = "castle"
+description = "Castle Game engine - procedural voxel world (0.25 m blocks)"
+version = "0.1.0-dev"
+authors = ["John Herrin"]
+executables = ["worldgen_preview"]
+project-files = ["castle.gpr"]

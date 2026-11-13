@@ -1,0 +1,39 @@
+PROCEEDURAL GENERATION
+
+Proceedurally generated buildings follow the following guidelines
+
+
+Hovel (TIER 1 HABITATION) MADE OF WOOD and straw
+
+Hovels are generated using the .25m block structure.
+
+Serfs require a minimum of 25-30m^2 living area.
+
+When a serf is a part of the village and has no habitiation they will demand habitiation
+
+Player will draw paths and designate habitation building zones.
+
+The game will register a demand and assign a portion of the zone starting closest to the homestake and attached to a pathway.
+
+The game will reserve a 7mx7m area for that habitation, and place the blueprint within .5m to 1m from the pathway, if the blueprint touches
+the edge of the zone the hovels can share walls with neighboring housing.
+
+As such the walls will extend .25 meters past the edge of the generated living area footprint.
+
+As such if 30m^2 is drawn for this particular footprint, and a 5mx6m grid is chosen as the livable area, with the walls it will be 5.5mx6.5m
+
+A door 1mx2m will be generated facing the pathway and a small path will be generated from the door to the drawn pathway.
+The door frame will be darker coloration
+
+A window 1mx1m will be generated on the same face of the building along with the door with at least .25m from the interior edge of the end wall and .25m from the door.
+The window will be .5m from the ground, and the .25 block under the window will have a dark coolor for the sill under the window.
+
+Dark wood columns at each corner and beams along the top of the walls will be drawn with a darker color.
+
+Buildings wall height can vary from 2.25m to 2.5m
+
+Roof will be thatch and built from straw.
+
+Interior floor will be wood plank and the ground will be normalized to be level for the footprint.
+
+Once the blueprint is generated, availbile builders will complete the structure, and a serf will be assigned residency.

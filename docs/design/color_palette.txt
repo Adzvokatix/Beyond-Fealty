@@ -1,0 +1,62 @@
+Muted Dark Environmental Colors(Use for terrain, stone, wood, night, interiors, foliage)
+Ash Stone #3C3C3C
+Weathered Oak #4A3428
+Deep Forest #1B3329
+River Slate #2D3E48
+Shadow Earth #3F2C22
+Mist Iron #4A5560
+Moss Shadow #24362C
+Cool Stone Blue #3A4550
+Dusk Blue #2F3F52
+Fog Blue #4C5C68
+
+Rich Dark Contrasting Colors(Use for banners, clothing, UI, blood, gold, magic, important characters)
+Heraldic Crimson #8B1E1E
+Burgundy Velvet #5C1518
+Gilded Amber #B08D3E
+Aged Gold #C9A227
+Royal Indigo #1E3A5F
+Deep Emerald #0E4F3A
+Warm Copper #8B4513
+Storm Blue #2A4A7A
+Sapphire #2458A0
+Twilight Purple #3D2A5C
+Royal Violet #4A306E
+Brightened Crimson #A52828 (slight lift)
+Brightened Gold #D4B84A (slight lift)
+Brightened Sapphire #3A6EB8 (slight lift)
+
+Muted Environmental
+Pine Shadow #1A2E26
+Olive Dark #2F3B2A
+Marsh Green #2A4035
+
+Rich Contrasting
+Deep Hunter #0F5A3A
+Emerald Lift #1A6B4A (slightly brighter)
+Forest Gold-Green #3D5C2E
+
+Additional Browns
+
+Muted Environmental
+Dark Bark #3A2A1E
+Mudstone #4E3B2F
+Ashen Brown #5A4638
+
+Rich Contrasting
+Aged Leather #6B3E26
+Copper Brown #8B5A2B
+Warm Umber #7A4E2A (slight lift)
+
+Additional Grays
+
+Muted Environmental
+Charcoal #2A2A2A
+Stone Gray #4A4E52
+Fog Gray #5C6268
+Blue-Gray Shadow #3A4550
+
+Rich Contrasting
+Iron #3F4A52
+Silvered Steel #6A7278 (slight lift)
+Warm Gray #5A534C
