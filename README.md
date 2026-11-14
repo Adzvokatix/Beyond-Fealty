@@ -1,6 +1,4 @@
 [README.md](https://github.com/user-attachments/files/34827949/README.md)
-# "Castle Game" = "Beyond the Pale:
-
 # Castle Game engine — world generation and the 3D view
 
 Procedural voxel world for the castle colony game, in Ada 2022.
