@@ -187,10 +187,10 @@ package body Castle.Camera is
        C.Y + C.Held * Cos (C.Held_Pitch) * Sin (C.Yaw),
        C.Z + 1.5 + C.Held * Sin (C.Held_Pitch) + C.Lift));
 
-   function View_Proj (C : State; Aspect : Float) return Mat4 is
+   function View_Proj (C : State; Aspect : Float; Far : Float := Far_M) return Mat4 is
       E : constant Vec3 := Eye (C);
    begin
-      return Perspective (Fov_Y, Aspect, Near_M, Far_M)
+      return Perspective (Fov_Y, Aspect, Near_M, Far)
         * Look_Dir ((C.X - E.X, C.Y - E.Y, C.Z - E.Z), (0.0, 0.0, 1.0));
    end View_Proj;
 

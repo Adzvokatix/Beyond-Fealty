@@ -32,7 +32,8 @@ package Castle.Blocks with Pure is
       --  built
       Plank, Shingle, Footpath,
       Thatch,                                               --  a roof of straw (on the end: blocks are saved by position)
-      Daub)                                                 --  wattle and daub: a wall's panels between its timbers
+      Daub,                                                 --  wattle and daub: a wall's panels between its timbers
+      Fieldstone)                                           --  gathered stones laid dry: a retaining wall, a stair's treads
      with Size => 8;
 
    subtype Trunk is Material with Static_Predicate => Trunk in Log | Aspen_Log | Pine_Log;
@@ -54,6 +55,21 @@ package Castle.Blocks with Pure is
    end record;
 
    Air_Block : constant Block := (Mat => Air, State => 0);
+
+   --  A block of thatch that has been dressed (a roof's steps trimmed to
+   --  one slope by whoever thatched it) says so in its state, and how it
+   --  lies (and so does the top block of daub of a gable's step under it,
+   --  whose top is brought up to the same slope): the mesher marks its faces and the renderer draws them sloped
+   --  (Castle.Mesher, "A dressed roof").  Nothing else reads a block's
+   --  state yet.
+   Dressed     : constant := 128;   --  it is trimmed
+   Falls_Mask  : constant := 3;     --  the way its top falls: 0 toward +x, 1 -x, 2 +y, 3 -y
+   At_Eave     : constant := 4;     --  it is the lowest of its slope: its edge is cut blunt, half a block thick
+   At_Ridge    : constant := 8;     --  it is a ridge's one middle block: it falls both ways from its middle line
+   Verge_Lo    : constant := 16;    --  it ends its row at the roof's edge down the other axis (toward -y for a
+   Verge_Hi    : constant := 32;    --  slope along x, -x for one along y), or up it: that edge is drawn in a little
+   Under       : constant := 64;    --  it is the lower of the two blocks of thatch there, where the roof hangs
+                                    --  out past a gable: its underside is trimmed to the slope as the top is
 
    type Brick is record
       Mat     : Material := Air;               --  the ore, or the rock itself
@@ -127,7 +143,8 @@ package Castle.Blocks with Pure is
       Shingle       => Castle.Colors.Dark_Bark,
       Footpath      => Castle.Colors.Ashen_Brown,
       Thatch        => Castle.Colors.Thatch_Straw,
-      Daub          => Castle.Colors.Daub_Clay);
+      Daub          => Castle.Colors.Daub_Clay,
+      Fieldstone    => Castle.Colors.Field_Stone);
 
    function Base_Color (M : Material) return Castle.Colors.RGB is (Castle.Colors.Of_Hex (Base_Hex (M)));
 

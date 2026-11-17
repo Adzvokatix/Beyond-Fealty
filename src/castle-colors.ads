@@ -94,5 +94,6 @@ package Castle.Colors with Pure is
    Abyss_Blue  : constant := 16#0F1D30#; --  Royal_Indigo x 0.5: the deepest water
    Thatch_Straw : constant := 16#967C42#; --  Gilded_Amber 70 %, Warm_Gray 30 %: a roof of straw, weathered
    Daub_Clay    : constant := 16#BDAEA0#; --  Warm_Gray x 2.1: a wall of wattle and daub, dried pale
+   Field_Stone  : constant := 16#6D6D6C#; --  Fog_Gray and Warm_Gray, half and half, x 1.2: a wall of gathered stones
 
 end Castle.Colors;

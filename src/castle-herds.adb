@@ -3,7 +3,6 @@ with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 with Castle.Climate;
-with Castle.Nav;
 
 package body Castle.Herds is
 
@@ -57,7 +56,7 @@ package body Castle.Herds is
       Pace   : Float := 6.5;
       Seed   : U64 := 0;
       N      : Natural := 0;
-      Startle : Float := 0.0;              --  seconds left of its start on a heading of its own
+      Startle : Float := 0.0;              --  seconds until its turn in the chain: it stands, head up, then runs with the node
    end record;
 
    Herds   : array (1 .. Max_Herds) of Herd_Rec;
@@ -125,6 +124,14 @@ package body Castle.Herds is
 
    --  Ground a herd can be on: somewhere to stand at (X, Y) (the highest
    --  floor walked on) under no more than Wade rows of water.
+   Fright_N : Natural := 0;       --  times a herd was frightened (Frights; not saved)
+   Ground   : Castle.Nav.Region := Castle.Nav.Everywhere;   --  where the herds' ways may go (Set_Ground; not saved)
+
+   procedure Set_Ground (Within : Castle.Nav.Region) is
+   begin
+      Ground := Within;
+   end Set_Ground;
+
    function Dry_Spot (X, Y : Float; Wade : Natural) return Boolean is
       N : Natural;
       F : Castle.Nav.Floor_List;
@@ -230,6 +237,7 @@ package body Castle.Herds is
       N_Deer := 0;
       Pending := False;
       Now := 0.0;
+      Fright_N := 0;
       for H of Herds loop
          H.Used := False;
       end loop;
@@ -346,9 +354,12 @@ package body Castle.Herds is
    --  (the herds' flight together: by a way that keeps out of water deeper
    --  than Wade rows)
    function Go (H : in out Herd_Rec; T : Vec3; Pace : Float; Wade : Natural := Castle.Nav.Wade_B) return Boolean is
+      --  (water blocks it: a place that cannot be got to that dry, on the
+      --  ground within Dry_Reach_M of the stake, is not made for at all)
       R : Castle.Nav.Route :=
-        (if Old_Way then Castle.Nav.Plan (H.Node, T)
-         else Castle.Nav.Plan (H.Node, T, Budget => Herd_Budget, Wade => Wade));
+        (if Old_Way then Castle.Nav.Plan (H.Node, T, Within => Ground)
+         else Castle.Nav.Plan (H.Node, T, Budget => Herd_Budget, Wade => Wade,
+                               Within => Castle.Nav.Within_M (Stake_At.X, Stake_At.Y, Dry_Reach_M), Refuse => True));
    begin
       --  the node never stops in water: a way that ends in it (one that
       --  falls short of where it was going) is cut back to its last dry turn
@@ -400,6 +411,7 @@ package body Castle.Herds is
       end Try;
    begin
       H.Calm := 0.0;
+      Fright_N := Fright_N + 1;
       for Far of Reach loop
          for A of Turns loop
             Try (A, Far);
@@ -419,25 +431,34 @@ package body Castle.Herds is
          begin
             if D.Alive and then D.Herd = Hi then
                declare
-                  Off  : constant Vec3 := Flat_Unit (D.Pos - From, Away);
                   Fawn : constant Boolean := Float (Now - D.Born) < Hours_A_Year;
-                  U1   : constant Float := Rnd (D);
-                  U2   : constant Float := Rnd (D);
                   U3   : constant Float := Rnd (D);
+                  --  its turn in the chain: how many of the herd are nearer the danger than it
+                  Mine : constant Float := Flat_Dist (D.Pos, From);
+                  Turn : Natural := 0;
                begin
-                  if not Fled then
-                     --  nowhere for the herd to go: each bolts a moment by itself
-                     D.Panic := 1.5 + 1.5 * U1;
-                     D.Startle := D.Panic;
-                     D.Dir := Turned (Off, 1.2 * (U2 - 0.5));
-                  else
+                  for J in 1 .. N_Deer loop
+                     if J /= K and then Deer (J).Alive and then Deer (J).Herd = Hi then
+                        declare
+                           Theirs : constant Float := Flat_Dist (Deer (J).Pos, From);
+                        begin
+                           if Theirs < Mine or else (Theirs = Mine and then J < K) then
+                              Turn := Turn + 1;
+                           end if;
+                        end;
+                     end if;
+                  end loop;
+                  if Fled then
+                     --  locked to the node: it runs with it, for its own place round it, when its turn comes
                      D.Panic := Flight_Max_S;
                      if Startle then
-                        --  (its own heading: between away from the danger and the way the herd goes)
-                        D.Startle := Startle_S * (1.0 + 0.5 * U1);
-                        D.Dir := Turned (Flat_Unit (Off + Travel (H), Off), 0.8 * (U2 - 0.5));
+                        D.Startle := Chain_S * Float (Turn);
+                        if Turn = 0 then
+                           D.Dir := Travel (H);    --  (it turns the way the node goes, whichever way it stood:
+                        end if;                    --  setting off as it faced, it ran a step or two at the danger)
                      end if;
                   end if;
+                  --  (nowhere for the herd to go: it stays with the node, head up; none bolts by itself)
                   D.Pace := (if Fawn then 5.0 else 6.0) + 1.5 * U3;
                end;
                D.Act := Castle.Deer.Alert;
@@ -453,6 +474,7 @@ package body Castle.Herds is
       Turns : constant array (1 .. 7) of Float := [0.0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6];
    begin
       H.Calm := 0.0;
+      Fright_N := Fright_N + 1;
       for A of Turns loop
          declare
             V : constant Vec3 := Turned (Away, A);
@@ -669,15 +691,12 @@ package body Castle.Herds is
       if D.Panic > 0.0 then
          D.Panic := D.Panic - Dt;
          if D.Startle > 0.0 then
-            --  its start: off on its own heading, away from the danger
+            --  not its turn yet: the flight comes down the herd from the deer nearest the danger; it
+            --  stands, head up, and turns the way the node goes as its turn comes
             D.Startle := D.Startle - Dt;
-            declare
-               Its_Own : constant Vec3 := D.Dir;
-            begin
-               if not Head_Step (D, Its_Own, D.Pace, Flight_Turn, Flight_Wade_B, Dt) then
-                  D.Startle := 0.0;              --  no way on: with the herd, then
-               end if;
-            end;
+            if D.Startle <= 0.0 then
+               D.Dir := Travel (H);
+            end if;
          elsif By_Trail then
             declare
                Faces : constant Vec3 := D.Dir;
@@ -885,15 +904,17 @@ package body Castle.Herds is
                if Herds (Hi).Used and then Herds (Hi).Calm > (if Running then Turn_Again_S else Settle_S) then
                   Seen :
                   for P of Near loop
-                     for K in 1 .. N_Deer loop
-                        if Deer (K).Alive and then Deer (K).Herd = Hi
-                          and then Flat_Dist (Deer (K).Pos, P.P)
-                                   <= (if P.Stalking then Stalked_M elsif Running then Close_M else Fear_M)
-                        then
-                           Flee (Hi, P.P, Startle => not Running);
-                           exit Seen;
-                        end if;
-                     end loop;
+                     if not P.Still then            --  one who stands still frightens no herd
+                        for K in 1 .. N_Deer loop
+                           if Deer (K).Alive and then Deer (K).Herd = Hi
+                             and then Flat_Dist (Deer (K).Pos, P.P)
+                                      <= (if P.Stalking then Stalked_M elsif Running then Close_M else Fear_M)
+                           then
+                              Flee (Hi, P.P, Startle => not Running);
+                              exit Seen;
+                           end if;
+                        end loop;
+                     end if;
                   end loop Seen;
                end if;
             end;
@@ -930,6 +951,7 @@ package body Castle.Herds is
 
    ------------------------------------------------------------------ queries
 
+   function Frights return Natural is (Fright_N);
    function Herd_Count return Natural is (N_Herds);
    function Node (H : Positive) return Vec3 is (Herds (H).Node);
    function Panicked (H : Positive) return Boolean is
@@ -1156,10 +1178,11 @@ package body Castle.Herds is
          end loop;
       else
          --  from before the herds fled together: they do from here on.  A deer
-         --  caught in its panic of the old kind runs that out as its start.
+         --  caught in its panic of the old kind goes on with the herd at once
+         --  (a start of its own is no more: none waits a turn in a chain).
          Old_Way := False;
          for K in 1 .. N_Deer loop
-            Deer (K).Startle := Float'Max (0.0, Deer (K).Panic);
+            Deer (K).Startle := 0.0;
          end loop;
       end if;
       if Pos /= B'Last + 1 then

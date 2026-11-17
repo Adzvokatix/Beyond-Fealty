@@ -12,28 +12,103 @@
   belly holds 10 hours of food; at 40 % a member eats at the next break in
   its work, at 15 % it leaves off work to eat if there is food (never with
   a load in its arms, a butchering, a shot or a pot on the fire under way).
-  Stew comes first: it takes a bowl at the pot (set aside for it on the
-  way) and sits at the fire to eat it. Without stew it eats raw: what it
-  carries if that is food, else from the nearest stockpile cell, apples
-  first, then berries, then vegetables (the cook's best greens are left to
-  last). Raw food fills a belly poorly; cooked into stew the same food goes
-  about three times as far, and meat is never eaten raw:
+  **A load in its arms is taken where it was going first**, and then it
+  eats (`Load_First` in `Think`; John, 2026-11-13: "people carrying items
+  to the stockpile will stop and eat instead of completing their task and
+  then eating, this creates an oddity where foresters carrying logs back
+  to the stockpile have a log on their sholder while they are eating"). A
+  gatherer goes home with a part load rather than pick more. Not so: for
+  one that fends (what it carries is its meal); for one down to its last
+  (below 15 %: what it carries has had hours to get where it was going,
+  and has not); with nowhere in the stockpiles to put it; and for food of
+  its own gathering when there is no stew to be had, which it eats where
+  it is, as before. (Taken home, that food went into the stores, where
+  the cook keeps a pot's fill: on the housing run's first day, with
+  nothing cooked yet, the band went hungry beside it and fended, the cook
+  with them, and nothing was cooked until the next morning.) On the
+  reference band (seed 1, all of 2026-11-12 on, 41 days) 47 meals were
+  begun with a load in the eater's arms, every one of them stew at the
+  fire: 31 by gatherers with what they were taking home, 7 by the
+  forester with a log for the stockpile, 9 by the cook with a load for
+  the pot or the fire. Now none (on the housing run 66, now one, by a
+  fender). Food in hand over those 41 days 10.1 to 14.8 days (10.1 to
+  17.2 before), 16 deer (17), nobody died.
+  `colony_check` looks at every meal of three days of a band with a cook,
+  foresters and gatherers. Stew comes first: it takes a bowl at the pot
+  (set aside for it on the way) and sits at the fire to eat it. Without
+  stew it eats raw: what it carries if that is food, else from the
+  nearest stockpile cell, apples first, then berries, then vegetables
+  (the cook's best greens are left to last). Raw food fills a belly
+  poorly; cooked into stew the same food goes about three times as far,
+  and meat is never eaten raw:
 
   | | raw | in stew |
   |---|---|---|
-  | a joint of meat | (never) | 30 |
+  | a pound of meat (a joint, with `--no-curing`) | (never) | 48 (30) |
   | a vegetable | 3 | 8 |
   | an apple | 2 | 5 |
   | a handful of berries | 1 | 3 |
   | a handful of grain | (never) | 4 |
 
+  **What the cook keeps** (John, 2026-11-12: "rather than waiting for the
+  cook to use the stockpile to cook food, the serfs were eating raw
+  directly from the stockpile preventing food from being cooked, can the
+  cook reserve food in the stockpile and only suprlus is availible to eat
+  raw if no stew is present"; first values of mine, his to tune). While
+  the camp's hearth stands and the band has a living cook, a pot's fill of
+  what is stored is the cook's (`Cook_Keeps`, 900 points as stew, whatever
+  is in the pot already): meat for half of it while there is meat, and for
+  the rest greens in the cook's own order (vegetables, berries, apples),
+  from what the winter store does not hold. Nobody eating raw touches
+  those greens: only what is over them is eaten raw, and only with no stew
+  to be had, as before. So with less than a pot's fill stored the hungry
+  wait for the stew; at 15 % they fend for themselves, as with nothing
+  stored. Someone starving who has found nothing to gather breaks into
+  what is kept, as into the winter store (a serf won't let itself
+  starve); in winter, when nothing can be gathered, that is anyone below
+  15 %. Before the hearth stands, and in a band with no cook, nothing is
+  kept: there is nobody to cook it. What a serf carries is its own to eat,
+  as it was. The camp's sheet says what is kept ("Kept for the pot: 57
+  vegetables, 30 berries"). `--no-cook-hold` (`Set_Cook_Hold (False)`) is
+  the stores as they were; the seven older reference runs are held at it.
+  Measured on the reference band (seed 1, with everything of 2026-11-12
+  on: today's pace, meat by the pound, the standing orders). **The first
+  day** (traced with `colony_run --who`): the hearth stands at a quarter
+  past ten; the cook makes its bed, picks up sticks (no log is stored
+  yet), and from a quarter past eleven carries the pot's fill to it a load
+  at a time as it comes in (ten pounds of meat, then vegetables twelve at
+  a time: 53 by twenty past one), going for sticks twice more as the fire
+  burns down; it stirs from ten to two, and the first stew is ready at
+  half past two. With nothing kept the pot is longer in filling, since the
+  hungry eat from the same vegetables, and the stew is ready at a quarter
+  past three. Either way **the pot is not stirred until it is full or
+  there is nothing more to fetch** (`Think_Cook`: a rule of stage 4, not
+  changed here): on a first day that is three hours with food in the pot
+  and none to eat, and it is the larger part of what a hungry band is
+  seen waiting for. With the hold the hungry wait: the hungriest is at
+  25 % when the stew comes (32 % with nothing kept), and nobody fends.
+  **Over 41 days**: 363 berries and 16 vegetables are eaten raw where 637
+  and 80 are with nothing kept, 47,183 points of stew are cooked where
+  46,709 are, and all six are living at the end either way. With no
+  orders given (no winter store, the meat reserve 20 lb): the first stew
+  at a quarter to three where a quarter past three; 11 vegetables eaten
+  raw in 41 days where 60 berries and 123 vegetables. It
+  bites when little is stored (a first day, a lean week): with meat by
+  the pound the pot is seldom empty, and little is eaten raw either way.
+  **Meat is counted in pounds since 2026-11-12**, a doe's sixty being two
+  days' food for the six, kept whole if she is salted as she is butchered
+  (`colony.md`, "The lord's cart"); every figure in this document from
+  before that day is of joints, eight to a doe.
   With nothing to eat it works on, "hungry"; with an empty belly it is
   "starving" and walks and works at 60 % until it has eaten. At night (9 pm
   to half past 5, children an hour and elders half an hour earlier to
   bed, give or take a little each) everyone puts its load away, eats supper
-  unless nearly full, and sleeps on its back at its own place round the
-  fire (round the stake while there is no camp), getting hungry half as
-  fast. The band panel shows the food in days (stored and in the pot, as
+  unless nearly full, and sleeps at its own place round the fire (round
+  the stake while there is no camp; in its hovel when it has one), getting
+  hungry half as fast. It lies on its side, a little curled up, under its
+  cloak, and on a bed of straw once it has made one (`habitation.md`: the
+  bed and the cloak change nothing but what is seen; `Set_Beds (False)`,
+  `--no-beds`, is the band without beds). The band panel shows the food in days (stored and in the pot, as
   the cook would make it), how many are hungry and asleep, and the band's
   confidence; the status words say "eating stew", "eating", "asleep",
   "hungry:", "starving:", "fending for itself:".
@@ -171,7 +246,10 @@
   * The first day's cost stands (John, the same answer): eating raw from
     the stockpile, or fending for oneself when it is empty or held, "is the
     opportunity cost for not having a stockpile or food cooking"; cooked
-    food goes further than raw, and meat is never eaten raw. Those are the
+    food goes further than raw, and meat is never eaten raw. (Since
+    2026-11-12 what is "held" is also the cook's pot's fill, once the
+    hearth stands: "What the cook keeps", above. Until it stands the
+    stockpile is eaten raw as it was.) Those are the
     eating rules above, unchanged: a member eats at the next break in its
     work once below 40 %, and leaves its work to eat, or with nothing free
     to eat to fend for itself, below 15 % (`Hungry_At`, `Very_Hungry`).
@@ -242,8 +320,22 @@
   straw is being cut, so the straw reserve limits it for now.
 * **Fending for itself.** A member down to 15 % with no stew, nothing in
   the stockpiles and nothing in its hands leaves its job and gathers for
-  itself what a gatherer would go for, eating it as soon as it has enough;
-  its own work waits ("fending for itself:"). In winter a member whose
+  itself, eating as soon as it has enough; its own work waits ("fending
+  for itself:"). **It goes for whatever there is to eat nearest to where
+  it stands** (John, 2026-11-12: "serfs would go long distances to fend
+  for themselves to eat vegetables when furit and berries were near by"):
+  a ripe bush, an apple tree in fruit or wild vegetables, by the way to
+  it alone. A gatherer's rules are not its own (vegetables alone while
+  none are stored, vegetables worth a longer way, the way home from a
+  bush counted with the way to it): until that day a fender was sent by
+  them, and six starving by the stake with bushes all about walked to
+  the vegetables 20 m off. **One that carries a kill and has nowhere to
+  butcher it** (every place of the stockpile taken) stands with it while
+  it can; hungry, or night come, it puts the deer down and sees to itself
+  (a serf won't let itself starve), and a kill lying out is fetched only
+  while there is somewhere to butcher it. Until 2026-11-12 it stood with
+  the deer in its arms and starved, since no need is seen to by one that
+  carries a kill: found in the stage 6 run at the band's new pace. In winter a member whose
   belly has been empty for two game days dies of hunger and lies where it
   fell; outside winter they fend for themselves, weak but alive.
 * **Winter.** Nothing is gathered in winter: the berries are gone and the
@@ -288,6 +380,13 @@
   out), the band's confidence in
   the player, not each one's. (Leaving when it runs low, theft and spoilage
   come later.)
+* **The band's pace** (2026-11-12; `colony.md`, "The band's pace"): the
+  band works and walks half as fast again as it did when everything below
+  was measured, and hunger goes by the clock as it did. Nothing here was
+  retuned for it, on purpose (it is John's to ask for): the figures below
+  and under "Winter" are the band at pace 1 (`--pace 1`), and what the
+  reference band does at the new pace is in the pass's handoff
+  (`docs/handoffs/Handoff_2026_11_12_housing_pass.md`, "Measured").
 * **How it was tuned.** On seed 1 at the README's stake, with the camp at
   1172 1082 and nothing stored to start with, `--log-hours 2` over four
   and a half game days: a cook, two hunters, two gatherers and a forester

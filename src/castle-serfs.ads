@@ -41,6 +41,11 @@ package Castle.Serfs is
    --  Facing, every job and age in turn; seen from in front, the first is
    --  on the left (in the order Describe lists them).
 
+   Walker_Round_M : constant := 64.0;
+   --  A walker's way (and a walking deer's, Castle.Animals) is looked for
+   --  on the ground within this of the circle on its two ends: with the
+   --  whole map held, an end that cannot be got to would otherwise be looked
+   --  for over all of it.
    procedure Spawn_Walker (From, To : Vec3; Seed : U64; Job : Job_Kind; Winter : Boolean;
                            Speed : Float := 1.3);
    --  A serf walking From to To and back, pausing at each end, by routes
@@ -64,13 +69,15 @@ package Castle.Serfs is
    --  shoulder into the trunk at Spot.  The work pose comes and goes through
    --  a filter, not at once.  A serf with a log on its shoulder carries it
    --  on the off side, steadied with the off hand.
-   type Motion_Kind is (Stand, Walk, Pick, Put_Down, Chop, Sneak, Aim, Eat, Lie, Stir, Sit_Eat);
+   type Motion_Kind is (Stand, Walk, Pick, Put_Down, Chop, Sneak, Aim, Eat, Lie, Stir, Sit_Eat, Sleep);
    --  Sneak: walking crouched and leaning in (a hunter stalking); Aim: the
    --  bow held out toward Spot, the string drawn back to the cheek; Eat:
    --  food held at the chest in the off hand, the other hand going between
-   --  it and the mouth; Lie: lying on its back, asleep, its feet toward Spot
-   --  (it lies down and gets up through a filter, tipping back about its
-   --  heels); Stir: facing the pot at Spot, the dominant hand going round in
+   --  it and the mouth; Lie: lying on its back, its feet toward Spot (it lies
+   --  down and gets up through a filter, tipping back about its heels: the
+   --  dead lie so); Sleep: asleep, lying on its side a little curled up,
+   --  its feet toward Spot (it rolls onto its side as it goes down; which
+   --  side is its own: John, 2026-11-12, "have serfs sleep on their side"); Stir: facing the pot at Spot, the dominant hand going round in
    --  it, the other at its rim; Sit_Eat: eating, sitting on a seat 35 cm
    --  high at Where, facing Spot, the feet out in front.
    function Spawn_Driven (G : Genome; O : Outfit; Where : Vec3; Facing : Float) return Natural;
@@ -81,6 +88,15 @@ package Castle.Serfs is
    --  the axe's mark).  Log: a load on the shoulder (a log, a sheaf).
    --  Buckets: one in each hand, so the arms hang a little out from the
    --  body and hardly swing.
+   procedure Perch (I : Positive; Up : Float);
+   --  Serf I stands Up metres over the ground under it (on a ladder's
+   --  rungs): the whole of it is drawn that much higher, eased over a
+   --  moment, its hands still going to Spot.  0 (as every serf starts): on
+   --  the ground.  No climbing is shown.
+   procedure Lie_Facing (I : Positive; On : Boolean; P : Vec3 := (0.0, 0.0, 0.0));
+   --  Asleep on its side, serf I turns its face to P (the fire it lies
+   --  across the way to): which side it lies on follows from the way it
+   --  lies.  Off (as every serf starts): the side that is its own.
    function Log_Rest (I : Positive) return Vec3;
    --  Where the middle of the underside of a shoulder load sits (the top of
    --  the off shoulder, beside the head), as last animated.
@@ -89,6 +105,13 @@ package Castle.Serfs is
    function Shoulders_Top (I : Positive) return Vec3;
    --  The middle of the tops of the shoulders, behind the neck: where a
    --  load across both shoulders rests, as last animated.
+   function Cloak_Of (I : Positive) return RGB;    --  the colour of its cloak, worn or not
+   function Height_Of (I : Positive) return Float; --  metres, soles to crown
+   function Lies (I : Positive) return Float;      --  how far it is lying down, 0 .. 1, as last animated
+   procedure Lying_Frame (I : Positive; Hips, Along, Belly : out Vec3);
+   --  Lying: the ground point under its hips, the way from its hips to its
+   --  head, and the way its belly faces (both level, unit), as last animated:
+   --  where a cloak spread over it goes.
    procedure Restyle (I : Positive; O : Outfit);   --  dressed for another job
    procedure Clear;                                --  every serf gone (a save loaded)
 
@@ -102,6 +125,7 @@ package Castle.Serfs is
    function Describe (I : Positive) return String;
    function Where (I : Positive) return Vec3;   --  the ground point under serf I
    function Posed (I : Positive) return Castle.Poses.Pose;   --  as last animated
+   function Frames_Of (I : Positive) return Castle.Poses.Frames;   --  its bones in the world, as last submitted
    function Rig_Of (I : Positive) return Rig;
 
    function Ground_At (X, Y, Near_Z : Float) return Float;

@@ -1,3 +1,4 @@
+with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 with Castle.Geology; use Castle.Geology;
 with Castle.Flora;
@@ -6,7 +7,120 @@ package body Castle.Chunks is
 
    procedure Free_Bricks is new Ada.Unchecked_Deallocation (Brick_Grid, Brick_Grid_Access);
    procedure Free_Refs   is new Ada.Unchecked_Deallocation (Ref_Grid, Ref_Grid_Access);
-   procedure Free_Fine   is new Ada.Unchecked_Deallocation (Fine_Pool, Fine_Pool_Access);
+   procedure Free_Fine   is new Ada.Unchecked_Deallocation (Word_Pool, Word_Pool_Access);
+
+   use type Interfaces.Unsigned_16;
+
+   --  A fine brick's record in its chunk's pool (the spec): a word of how
+   --  many different blocks it holds (0: written whole), those blocks, then
+   --  which of them each of its 64 places is, place X + 4 Y + 16 Z, packed
+   --  from each word's low end.
+   function To_Word is new Ada.Unchecked_Conversion (Block, Interfaces.Unsigned_16);
+   function To_Block is new Ada.Unchecked_Conversion (Interfaces.Unsigned_16, Block);
+
+   Most_Words : constant := 65;      --  a brick written whole
+   function Bits_For (K : Positive) return Positive is (if K <= 2 then 1 elsif K <= 4 then 2 else 4);
+   function Words_For (K : Natural) return Positive is (if K = 0 then Most_Words else 1 + K + 4 * Bits_For (K));
+
+   --  Write F at Pool (At_W ..); Used: the words it took.
+   procedure Write_Fine (F : Fine_Brick; Pool : in out Word_Pool; At_W : Positive; Used : out Positive) is
+      Seen : array (1 .. 16) of Block;
+      K    : Natural := 0;
+      Which : array (0 .. 63) of Natural := (others => 0);
+      Whole : Boolean := not Small_Bricks;
+   begin
+      if not Whole then
+         Places :
+         for Z in 0 .. 3 loop
+            for Y in 0 .. 3 loop
+               for X in 0 .. 3 loop
+                  declare
+                     B : constant Block := F (X, Y, Z);
+                     N : Natural := 0;
+                  begin
+                     for I in 1 .. K loop
+                        if Seen (I) = B then
+                           N := I;
+                           exit;
+                        end if;
+                     end loop;
+                     if N = 0 then
+                        if K = 16 then
+                           Whole := True;
+                           exit Places;
+                        end if;
+                        K := K + 1;
+                        Seen (K) := B;
+                        N := K;
+                     end if;
+                     Which (X + 4 * Y + 16 * Z) := N - 1;
+                  end;
+               end loop;
+            end loop;
+         end loop Places;
+      end if;
+      if Whole then
+         Pool (At_W) := 0;
+         for Z in 0 .. 3 loop
+            for Y in 0 .. 3 loop
+               for X in 0 .. 3 loop
+                  Pool (At_W + 1 + X + 4 * Y + 16 * Z) := To_Word (F (X, Y, Z));
+               end loop;
+            end loop;
+         end loop;
+         Used := Most_Words;
+         return;
+      end if;
+      declare
+         Bits : constant Positive := Bits_For (K);
+         Per  : constant Positive := 16 / Bits;          --  places to a word
+         Base : constant Positive := At_W + 1 + K;
+      begin
+         Pool (At_W) := Interfaces.Unsigned_16 (K);
+         for I in 1 .. K loop
+            Pool (At_W + I) := To_Word (Seen (I));
+         end loop;
+         for W in 0 .. 4 * Bits - 1 loop
+            Pool (Base + W) := 0;
+         end loop;
+         for P in Which'Range loop
+            Pool (Base + P / Per) :=
+              Pool (Base + P / Per) or Interfaces.Shift_Left (Interfaces.Unsigned_16 (Which (P)), Bits * (P mod Per));
+         end loop;
+         Used := Words_For (K);
+      end;
+   end Write_Fine;
+
+   --  The block at place P (X + 4 Y + 16 Z) of the fine brick whose record begins at Pool (W).
+   function Read_Fine (Pool : Word_Pool; W : Positive; P : Natural) return Block is
+      K : constant Natural := Natural (Pool (W));
+   begin
+      if K = 0 then
+         return To_Block (Pool (W + 1 + P));
+      elsif K <= 2 then
+         return To_Block (Pool (W + 1 + Natural (Interfaces.Shift_Right (Pool (W + 1 + K + P / 16), P mod 16) and 1)));
+      elsif K <= 4 then
+         return To_Block
+           (Pool (W + 1 + Natural (Interfaces.Shift_Right (Pool (W + 1 + K + P / 8), 2 * (P mod 8)) and 3)));
+      else
+         return To_Block
+           (Pool (W + 1 + Natural (Interfaces.Shift_Right (Pool (W + 1 + K + P / 4), 4 * (P mod 4)) and 15)));
+      end if;
+   end Read_Fine;
+
+   function Fine_At (C : Chunk; I, J, K : Brick_Index) return Fine_Brick is
+      W : constant Positive := Positive (C.Refs (I, J, K));
+      F : Fine_Brick;
+   begin
+      for Z in 0 .. 3 loop
+         for Y in 0 .. 3 loop
+            for X in 0 .. 3 loop
+               F (X, Y, Z) := Read_Fine (C.Fine.all, W, X + 4 * Y + 16 * Z);
+            end loop;
+         end loop;
+      end loop;
+      return F;
+   end Fine_At;
    procedure Free_Work   is new Ada.Unchecked_Deallocation (Stack_Work, Stack_Work_Access);
 
    --------------
@@ -172,6 +286,37 @@ package body Castle.Chunks is
    -- Pack --
    ----------
 
+   --  Every fine brick of a chunk just packed reads back, place by place,
+   --  the blocks it was made of.
+   procedure Check_Packed (C : Chunk; Work : Stack_Work; CZ : Integer) is
+   begin
+      if C.Refs = null then
+         return;
+      end if;
+      for I in Brick_Index loop
+         for J in Brick_Index loop
+            for K in Brick_Index loop
+               if C.Refs (I, J, K) /= 0 then
+                  declare
+                     F : constant Fine_Brick := Fine_At (C, I, J, K);
+                  begin
+                     for X in 0 .. 3 loop
+                        for Y in 0 .. 3 loop
+                           for Z in 0 .. 3 loop
+                              if F (X, Y, Z) /= Work.G (4 * I + X, 4 * J + Y, 4 * (CZ * Bricks_Per_Chunk + K) + Z) then
+                                 raise Program_Error with "Castle.Chunks: a fine brick kept small reads back other blocks"
+                                   & " than it was made of (chunk" & CZ'Image & ", brick" & I'Image & J'Image & K'Image & ")";
+                              end if;
+                           end loop;
+                        end loop;
+                     end loop;
+                  end;
+               end if;
+            end loop;
+         end loop;
+      end loop;
+   end Check_Packed;
+
    procedure Pack (Work : Stack_Work; S : out Chunk_Stack) is
    begin
       for CZ in Chunk_Stack'Range loop
@@ -181,8 +326,9 @@ package body Castle.Chunks is
          declare
             Bricks : Brick_Grid;
             Refs   : Ref_Grid := (others => (others => (others => 0)));
-            Pool   : Fine_Pool (1 .. Bricks_Per_Chunk ** 3);
-            Count  : Natural := 0;
+            Pool   : Word_Pool (1 .. Most_Words * Bricks_Per_Chunk ** 3);
+            Count  : Natural := 0;            --  fine bricks
+            Words  : Natural := 0;            --  words of Pool written
          begin
             for I in Brick_Index loop
                for J in Brick_Index loop
@@ -220,16 +366,22 @@ package body Castle.Chunks is
                                     end if;
                                  end loop;
                                  Count := Count + 1;
-                                 for X in 0 .. 3 loop
-                                    for Y in 0 .. 3 loop
-                                       for Z in 0 .. 3 loop
-                                          Pool (Count) (X, Y, Z) :=
-                                            Work.G (4 * I + X, 4 * J + Y, 4 * Mz + Z);
+                                 declare
+                                    F    : Fine_Brick;
+                                    Used : Positive;
+                                 begin
+                                    for X in 0 .. 3 loop
+                                       for Y in 0 .. 3 loop
+                                          for Z in 0 .. 3 loop
+                                             F (X, Y, Z) := Work.G (4 * I + X, 4 * J + Y, 4 * Mz + Z);
+                                          end loop;
                                        end loop;
                                     end loop;
-                                 end loop;
+                                    Write_Fine (F, Pool, Words + 1, Used);
+                                    Refs (I, J, K) := Interfaces.Unsigned_16 (Words + 1);
+                                    Words := Words + Used;
+                                 end;
                                  Bricks (I, J, K) := Plain (Major);   --  representative, for LOD
-                                 Refs (I, J, K)   := Interfaces.Unsigned_16 (Count);
                               end if;
                            end;
                         end if;
@@ -262,7 +414,9 @@ package body Castle.Chunks is
                              Bricks  => new Brick_Grid'(Bricks),
                              Refs    => (if Count = 0 then null else new Ref_Grid'(Refs)),
                              Fine    => (if Count = 0 then null
-                                         else new Fine_Pool'(Pool (1 .. Count))));
+                                         else new Word_Pool'(Pool (1 .. Words))));
+                  --  (assertions on: every fine brick kept reads back the blocks it was made of)
+                  pragma Debug (Check_Packed (S (CZ), Work, CZ));
                end if;
             end;
          end;
@@ -277,11 +431,82 @@ package body Castle.Chunks is
       end if;
       return Brick_Grid'Size / 8
         + (if C.Refs = null then 0 else Ref_Grid'Size / 8)
-        + (if C.Fine = null then 0 else C.Fine'Length * (Fine_Brick'Size / 8));
+        + (if C.Fine = null then 0 else C.Fine'Length * 2);
    end Bytes;
 
    function Fine_Count (C : Chunk) return Natural is
-     (if C.Fine = null then 0 else C.Fine'Length);
+      N : Natural := 0;
+   begin
+      if C.Refs /= null then
+         for R of C.Refs.all loop
+            if R /= 0 then
+               N := N + 1;
+            end if;
+         end loop;
+      end if;
+      return N;
+   end Fine_Count;
+
+   function Kind_Of (F : Fine_Brick) return Brick_Kind is
+      Has_Air, Has_Built, Has_Tree, Has_Plant, Has_Wet, Has_Boulder : Boolean := False;
+   begin
+      for X in 0 .. 3 loop
+         for Y in 0 .. 3 loop
+            for Z in 0 .. 3 loop
+               case F (X, Y, Z).Mat is
+                  when Air => Has_Air := True;
+                  when Plank | Shingle | Footpath | Thatch | Daub | Fieldstone => Has_Built := True;
+                  when Trunk | Crown => Has_Tree := True;
+                  when Berry_Bush | Bare_Bush | Tall_Grass | Wild_Grain | Wild_Vegetables => Has_Plant := True;
+                  when Water => Has_Wet := True;
+                  when Boulder => Has_Boulder := True;
+                  when others => null;
+               end case;
+            end loop;
+         end loop;
+      end loop;
+      return (if Has_Built then Holds_Built elsif Has_Tree then Holds_Tree elsif Has_Plant then Holds_Plant
+              elsif Has_Wet then Holds_Water elsif Has_Boulder then Holds_Boulder
+              elsif Has_Air then Holds_Surface else Holds_Buried);
+   end Kind_Of;
+
+   function Sizes_Of (S : Chunk_Stack) return Stack_Sizes is
+      R : Stack_Sizes;
+   begin
+      R.Bytes_Array := Chunk_Stack'Object_Size / 8;
+      R.Allocations := 1;
+      for C of S loop
+         if not C.Uniform then
+            R.Chunks_Fine := R.Chunks_Fine + 1;
+            R.Bytes_Grids := R.Bytes_Grids + Brick_Grid'Object_Size / 8;
+            R.Allocations := R.Allocations + 1;
+            if C.Refs /= null then
+               R.Bytes_Grids := R.Bytes_Grids + Ref_Grid'Object_Size / 8;
+               R.Allocations := R.Allocations + 1;
+            end if;
+            if C.Fine /= null then
+               R.Bytes_Fine := R.Bytes_Fine + C.Fine'Length * 2 + 8;   --  (and its bounds)
+               R.Allocations := R.Allocations + 1;
+               for I in Brick_Index loop
+                  for J in Brick_Index loop
+                     for K in Brick_Index loop
+                        if C.Refs (I, J, K) /= 0 then
+                           declare
+                              Kd : constant Brick_Kind := Kind_Of (Fine_At (C, I, J, K));
+                           begin
+                              R.Fine (Kd) := R.Fine (Kd) + 1;
+                              R.Fine_Bytes (Kd) := R.Fine_Bytes (Kd)
+                                + 2 * Words_For (Natural (C.Fine (Positive (C.Refs (I, J, K)))));
+                           end;
+                        end if;
+                     end loop;
+                  end loop;
+               end loop;
+            end if;
+         end if;
+      end loop;
+      return R;
+   end Sizes_Of;
 
    function Block_In (S : Chunk_Stack; X, Y, Z : Integer) return Block is
       C : Chunk renames S (Z / Chunk_B);
@@ -298,7 +523,7 @@ package body Castle.Chunks is
          if C.Refs = null or else Interfaces."=" (C.Refs (I, J, K), 0) then
             return (Mat => C.Bricks (I, J, K).Mat, State => 0);
          end if;
-         return C.Fine (Positive (C.Refs (I, J, K))) (X mod 4, Y mod 4, Z mod 4);
+         return Read_Fine (C.Fine.all, Positive (C.Refs (I, J, K)), X mod 4 + 4 * (Y mod 4) + 16 * (Z mod 4));
       end;
    end Block_In;
 

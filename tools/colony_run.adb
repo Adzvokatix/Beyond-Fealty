@@ -23,6 +23,24 @@
 --  So a run here and the same start in the game agree in kind, not to the
 --  unit.
 --
+--  Measuring what the ground costs to keep (2026-11-14):
+--  --ground-stacks N brings in the ground within N stacks of the stake
+--  (8 m each; 400 is the whole map) in place of the colony's own reach, in
+--  batches.  The colony is told its own ground all the same (the stacks
+--  within its reach and five more of the stake's: Set_Ground_Stacks) and
+--  reads nothing beyond it, so a run with the whole map in ends in the very
+--  state of a run on the colony's own ground (tools/stress.sh holds it to
+--  that: it stands in for the game, which holds the whole map).  Before
+--  2026-11-14 it was another run: the colony read whatever was loaded, and
+--  with the whole map in its routes looked the whole map over (the band's
+--  41 days took 85 s for 5.5).  --mem says, once the ground is in, what
+--  is kept of every stack that is in, counted by part, and what the process
+--  holds.  --no-mesh has the workers make no meshes (the runner throws them
+--  away anyway: the run is the same and the ground comes in sooner).
+--  --full-summaries keeps each stack's ground summary whole, as it was
+--  before it was kept small: the run must be the same (tools/stress.sh).
+--  --whole-bricks writes every fine brick whole, likewise.
+--
 --  A run loaded from a save carries on exactly as the run that wrote it
 --  would have, but only from a save taken on a rebuild: its length a whole
 --  number of Rebuild_S colony seconds (1/48 of a game day).  The rebuilds
@@ -38,6 +56,7 @@ with Ada.Unchecked_Deallocation;
 with Interfaces;            use Interfaces;
 with System.Multiprocessors;
 with Castle.Blocks;         use Castle.Blocks;
+with Castle.Chunks;
 with Castle.Climate;
 with Castle.Colony;
 with Castle.Dims;           use Castle.Dims;
@@ -64,7 +83,11 @@ procedure Colony_Run is
    Rebuild_S : constant := 30;      --  colony seconds between rebuilds of edited stacks
    --  the game's colony ground: as far as the colony's reach, which is its
    --  work radius until the band looks further afield
-   function Ground_R return Integer is (Integer (Castle.Colony.Ground_Reach_M / 8.0) + 5);
+   Ground_Stacks : Natural := 0;    --  --ground-stacks N (measuring): this much ground in, whatever the colony reaches
+   --  the colony's own ground, which it is told of (Castle.Colony.Set_Ground_Stacks) and reads nothing beyond
+   function Own_R return Integer is (Integer (Castle.Colony.Ground_Reach_M / 8.0) + 5);
+   Own_Was : Integer := 0;          --  the most it has been
+   function Ground_R return Integer is (if Ground_Stacks > 0 then Integer'Max (Ground_Stacks, Own_R) else Own_R);
    Ground_Was : Integer := 0;       --  what it was when the ground was last brought in
 
    W         : Castle.Maps.World;
@@ -74,6 +97,7 @@ procedure Colony_Run is
    Start_Hour : Float := 15.0;
    Days      : Float := 1.0;
    Log_Hours : Float := 0.0;
+   Who       : Boolean := False;   --  --who: with each of those lines, what each of the band is doing
    Workers   : Positive := Positive'Max (1, Positive (System.Multiprocessors.Number_Of_CPUs) - 1);
    Load_Path, Save_Path, Expect : Unbounded_String;
    Hours     : Long_Float := 0.0;
@@ -168,11 +192,94 @@ procedure Colony_Run is
             then
                States (SX + Dx, SY + Dy) := Asked;
                Ask (SX + Dx, SY + Dy);
+               --  (in batches still.  A great deal of ground asked for all at once never
+               --  came in: the streaming's queue held 32,768 jobs and dropped the rest, its
+               --  ring of results 8,192, both silently, and this waited for ever.  Mended
+               --  2026-11-14, Castle.Streaming: every stack at once comes in in 8 s)
+               if Ground_Stacks > 0 and then Waiting >= 512 then
+                  Take_All;
+               end if;
             end if;
          end loop;
       end loop;
       Take_All;
+      Own_Was := Integer'Max (Own_Was, Own_R);
+      Castle.Colony.Set_Ground_Stacks (Own_Was);
    end Load_Ground;
+
+   --  --mem: what is kept of the stacks that are in, by part, and what the
+   --  process holds (Linux: /proc/self/status).
+   procedure Put_Mem is
+      Z : constant Castle.World_Blocks.Kept_Sizes := Castle.World_Blocks.Sizes;
+      N : constant Long_Integer := Long_Integer'Max (1, Long_Integer (Z.Stacks));
+      All_Bytes : constant Long_Integer := Z.Summaries + Z.Arrays + Z.Grids + Z.Fine + Z.Notes + Z.Records;
+      Fine_N : Long_Integer := 0;
+      Cols : Long_Integer := 0;
+      function KB (B : Long_Integer) return String is (Img (Float (B) / 1024.0, 1) & " KB");
+      function MB (B : Long_Integer) return String is (Img (Float (B) / 1_048_576.0, 0) & " MB");
+      function Share (A, Of_All : Long_Integer) return String is
+        (Img (100.0 * Float (A) / Float (Long_Integer'Max (1, Of_All)), 1) & " %");
+   begin
+      for K in Z.Fine_By'Range loop
+         Fine_N := Fine_N + Z.Fine_By (K);
+      end loop;
+      for K in Z.Columns'Range loop
+         Cols := Cols + Z.Columns (K);
+      end loop;
+      Put_Line ("mem:" & Z.Stacks'Image & " stacks in; kept of them " & MB (All_Bytes) & ", " & KB (All_Bytes / N)
+                & " a stack, in" & Z.Allocations'Image & " allocations");
+      Put_Line ("mem: a stack: the water summary " & KB (Z.Summaries / N) & " (" & Share (Z.Summaries, All_Bytes)
+                & "); fine bricks " & KB (Z.Fine / N) & " (" & Share (Z.Fine, All_Bytes) & "), "
+                & Img (Float (Fine_N) / Float (N), 0) & " of them; brick and ref grids " & KB (Z.Grids / N) & " ("
+                & Share (Z.Grids, All_Bytes) & "), " & Img (Float (Z.Chunks_Fine) / Float (N), 1)
+                & " chunks not uniform; the array of chunks " & KB (Z.Arrays / N) & "; edit notes " & KB (Z.Notes / N)
+                & "; its record" & Long_Integer'Image (Z.Records / N) & " bytes");
+      Put ("mem: fine bricks by what they hold:");
+      for K in Z.Fine_By'Range loop
+         Put (" " & (case K is
+                        when Castle.Chunks.Holds_Built   => "something built",
+                        when Castle.Chunks.Holds_Tree    => "trees",
+                        when Castle.Chunks.Holds_Plant   => "plants",
+                        when Castle.Chunks.Holds_Water   => "water",
+                        when Castle.Chunks.Holds_Boulder => "boulders",
+                        when Castle.Chunks.Holds_Surface => "open surface",
+                        when Castle.Chunks.Holds_Buried  => "ground with no air in it")
+              & " " & Share (Z.Fine_By (K), Fine_N) & " ("
+              & KB (Z.Fine_Bytes_By (K) / N) & " a stack)"
+              & (if K in Castle.Chunks.Holds_Buried then "" else ","));
+      end loop;
+      New_Line;
+      Put_Line ("mem: a stack's blocks (array, grids, fine bricks): least " & KB (Long_Integer (Z.Least)) & ", a tenth under "
+                & KB (Long_Integer (Z.Tenth)) & ", half under " & KB (Long_Integer (Z.Median)) & ", nine tenths under "
+                & KB (Long_Integer (Z.Ninetieth)) & ", most " & KB (Long_Integer (Z.Most)) & " (stack"
+                & Z.Heaviest_CX'Image & Z.Heaviest_CY'Image & ")");
+      if Cols > 0 then
+         Put_Line ("mem: block columns by their stretches of open space: one " & Share (Z.Columns (1), Cols) & ", two "
+                   & Share (Z.Columns (2), Cols) & ", three " & Share (Z.Columns (3), Cols) & ", four "
+                   & Share (Z.Columns (4), Cols) & ", none " & Share (Z.Columns (0), Cols) & "; with water "
+                   & Share (Z.Columns_Wet, Cols) & "; one stretch, open to the sky and dry "
+                   & Share (Z.Columns_Plain, Cols));
+      end if;
+      declare
+         F : Ada.Text_IO.File_Type;
+      begin
+         Open (F, In_File, "/proc/self/status");
+         while not End_Of_File (F) loop
+            declare
+               L : constant String := Get_Line (F);
+            begin
+               if L'Length > 6 and then L (L'First .. L'First + 5) = "VmRSS:" then
+                  Put_Line ("mem: the process holds now (resident): " & L (L'First + 6 .. L'Last));
+               elsif L'Length > 6 and then L (L'First .. L'First + 5) = "VmHWM:" then
+                  Put_Line ("mem: and at most so far: " & L (L'First + 6 .. L'Last));
+               end if;
+            end;
+         end loop;
+         Close (F);
+      exception
+         when others => null;            --  (no such file: not Linux)
+      end;
+   end Put_Mem;
 
    procedure Rebuild_Dirty is
    begin
@@ -233,12 +340,60 @@ procedure Colony_Run is
    --  in, and its herd's node).
    Track_Path : Unbounded_String;
    Nav_Stats  : Boolean := False;        --  --nav-stats: what the walking map and the routes cost, at the end
+   Try_Plan   : Boolean := False;        --  --try-plan X0 Y0 Z0 X1 Y1 Z1 WADE: at the end, a herd's way asked of the ground
+   Try_From, Try_To : Vec3 := (0.0, 0.0, 0.0);
+   Try_Wade   : Natural := 0;
+   Try_Budget : Positive := Castle.Herds.Herd_Budget;   --  --try-budget N: floors that plan may look at
+   Try_Within : Castle.Nav.Region := Castle.Nav.Everywhere;   --  --try-within X Y R: the ground it keeps to
+   Try_Refuse : Boolean := False;        --  --try-refuse: not made for at all if the pieces say out of reach
+   Nav_Log    : Unbounded_String;        --  --nav-log FILE: every plan that ran out of budget, as it happens
+   Nav_Log_F  : Ada.Text_IO.File_Type;
+   Clock_Now  : Long_Float := 0.0;       --  (the game clock, for that log's lines)
    No_Memos   : Boolean := False;        --  --no-memos (with --no-mending: the two that must change no run)
+   Mem        : Boolean := False;        --  --mem: what is kept of the ground, counted, once it is in
    Step_Sum   : Long_Float := 0.0;       --  seconds in Castle.Colony.Advance, in all
    Step_Max   : Float := 0.0;            --  the longest colony second (twenty steps)
    Step_Slow  : Natural := 0;            --  colony seconds that took 10 ms or more
    Track_File : Ada.Text_IO.File_Type;
    Track_Open : Boolean := False;
+
+   --  --nav-log: a line for each plan that ran out of budget, when it did.
+   procedure Log_Spent (P : Castle.Nav.Spent_Plan) is
+      D : constant Natural := Natural (Long_Float'Floor (Clock_Now / 24.0));
+   begin
+      Put_Line (Nav_Log_F,
+                "day" & D'Image & " " & Img (Float (Clock_Now - Long_Float (D) * 24.0), 2) & " h: from "
+                & Img (P.From.X, 1) & " " & Img (P.From.Y, 1) & " " & Img (P.From.Z, 1) & " to "
+                & Img (P.To.X, 1) & " " & Img (P.To.Y, 1) & " " & Img (P.To.Z, 1) & "; budget" & P.Budget'Image
+                & ", wade" & P.Wade'Image & ", the pieces said " & P.Answer'Image & ", " & P.Result'Image
+                & ", ended " & Img (P.Reached_M, 1) & " m short, " & Img (P.Seconds * 1000.0, 1) & " ms");
+      --  who of the band is nearest where it began (a herd's way begins at its node: who is frightening it)
+      declare
+         Best : Natural := 0;
+         Dm   : Float := Float'Last;
+      begin
+         for I in 1 .. Castle.Colony.Members loop
+            if not Castle.Colony.Dead (I) then
+               declare
+                  W : constant Vec3 := Castle.Colony.Where (I);
+                  D : constant Float :=
+                    Ada.Numerics.Elementary_Functions.Sqrt ((W.X - P.From.X) ** 2 + (W.Y - P.From.Y) ** 2);
+               begin
+                  if D < Dm then
+                     Dm := D;
+                     Best := I;
+                  end if;
+               end;
+            end if;
+         end loop;
+         if Best > 0 then
+            Put_Line (Nav_Log_F, "    nearest of the band: " & Castle.Colony.Name_Of (Best) & " (" & Best'Image & " ), "
+                      & Img (Dm, 1) & " m off at " & Img (Castle.Colony.Where (Best).X, 1) & " "
+                      & Img (Castle.Colony.Where (Best).Y, 1) & ", " & Castle.Colony.Job_Of (Best)'Image & ": "
+                      & Castle.Colony.Status (Best));
+         end if;
+      end;
+   end Log_Spent;
 
    procedure Track_Deer (Second : Natural) is
       use Castle.Herds;
@@ -293,6 +448,8 @@ begin
             Days := Float'Value (Argument (I + 1)); I := I + 2;
          elsif A = "--log-hours" then
             Log_Hours := Float'Value (Argument (I + 1)); I := I + 2;
+         elsif A = "--who" then
+            Who := True; I := I + 1;
          elsif A = "--workers" then
             Workers := Positive'Value (Argument (I + 1)); I := I + 2;
          elsif A = "--load" then
@@ -305,6 +462,34 @@ begin
             Track_Path := To_Unbounded_String (Argument (I + 1)); I := I + 2;
          elsif A = "--nav-stats" then
             Nav_Stats := True; I := I + 1;
+         elsif A = "--ground-stacks" then
+            Ground_Stacks := Natural'Value (Argument (I + 1)); I := I + 2;
+         elsif A = "--mem" then
+            Mem := True; I := I + 1;
+         elsif A = "--full-summaries" then      --  each stack's ground summary kept whole, as it always was
+            Castle.World_Blocks.Small_Summaries := False; I := I + 1;
+         elsif A = "--whole-bricks" then        --  each fine brick written whole, as it always was
+            Castle.Chunks.Small_Bricks := False; I := I + 1;
+         elsif A = "--no-mesh" then
+            Castle.Streaming.Build_Meshes := False; I := I + 1;
+         elsif A = "--nav-log" then
+            Nav_Log := To_Unbounded_String (Argument (I + 1)); I := I + 2;
+         elsif A = "--try-plan" then
+            Try_Plan := True;
+            Try_From := (Float'Value (Argument (I + 1)), Float'Value (Argument (I + 2)), Float'Value (Argument (I + 3)));
+            Try_To := (Float'Value (Argument (I + 4)), Float'Value (Argument (I + 5)), Float'Value (Argument (I + 6)));
+            Try_Wade := Natural'Value (Argument (I + 7));
+            I := I + 8;
+         elsif A = "--try-budget" then
+            Try_Budget := Positive'Value (Argument (I + 1)); I := I + 2;
+         elsif A = "--try-within" then
+            Try_Within := Castle.Nav.Within_M (Float'Value (Argument (I + 1)), Float'Value (Argument (I + 2)),
+                                               Float'Value (Argument (I + 3)));
+            I := I + 4;
+         elsif A = "--try-refuse" then
+            Try_Refuse := True; I := I + 1;
+         elsif A = "--prove-dry" then           --  every dry way called out of reach searched for whole (slow)
+            Castle.Nav.Prove_Dry := True; I := I + 1;
          elsif A = "--no-mending" then          --  every changed stack of the walking map read whole
             Castle.Nav.Mending := False; I := I + 1;
          elsif A = "--no-memos" then            --  every search for a source reads the ground again (and nothing of housing is kept)
@@ -339,6 +524,7 @@ begin
                             Castle.World_Blocks.Ground_Version'Access);
    Castle.Colony.Set_Source_Memos (not No_Memos);
    Castle.Colony.Set_House_Memos (not No_Memos);
+   Castle.Nav.Set_Spent_Memos (not No_Memos);
    Castle.Colony.Set_Trees (Colony_Tree'Unrestricted_Access, Colony_Tree_Shape'Unrestricted_Access);
    Castle.Streaming.Start (W, Workers);
    Hours := Long_Float (Start_Day) * 24.0 + Long_Float (Start_Hour);
@@ -376,6 +562,9 @@ begin
       return;
    end if;
    Put_Line ("world" & Seed'Image & ", ground in, " & Img (Float (To_Duration (Clock - T0)), 1) & " s");
+   if Mem then
+      Put_Mem;
+   end if;
    Castle.Scenario.Put_Report;
 
    declare
@@ -387,9 +576,14 @@ begin
       for I in 1 .. Castle.Colony.Members loop
          Told (I) := Castle.Colony.Dead (I);
       end loop;
+      if Nav_Log /= Null_Unbounded_String then
+         Create (Nav_Log_F, Out_File, To_String (Nav_Log));
+         Castle.Nav.On_Spent (Log_Spent'Unrestricted_Access);
+      end if;
       for S in 1 .. Seconds loop
          Hours := Hours + 1.0 / 60.0;
-         if Ground_R > Ground_Was then                 --  the colony reaches further: that ground in first, as the game waits for it
+         Clock_Now := Hours;
+         if Ground_R > Ground_Was or else Own_R > Own_Was then   --  the colony reaches further: that ground in first, as the game waits for it
             Load_Ground (Castle.Colony.Stake.X, Castle.Colony.Stake.Y);
             Wider := Wider + 1;
          end if;
@@ -420,6 +614,43 @@ begin
          if Log_Hours > 0.0 and then Long_Float'Floor (Hours / Long_Float (Log_Hours)) /= Logged then
             Logged := Long_Float'Floor (Hours / Long_Float (Log_Hours));
             Put_Line (Castle.Scenario.Food_Line (Hours));
+            if Who then
+               Castle.Scenario.Put_Who;
+               --  and each herd: where, and who of the band is nearest its node
+               for H in 1 .. Castle.Herds.Herd_Count loop
+                  if Castle.Herds.In_Herd (H) > 0 then
+                     declare
+                        Nd   : constant Vec3 := Castle.Herds.Node (H);
+                        Best : Natural := 0;
+                        Dm   : Float := Float'Last;
+                     begin
+                        for I in 1 .. Castle.Colony.Members loop
+                           if not Castle.Colony.Dead (I) then
+                              declare
+                                 W : constant Vec3 := Castle.Colony.Where (I);
+                                 D : constant Float :=
+                                   Ada.Numerics.Elementary_Functions.Sqrt ((W.X - Nd.X) ** 2 + (W.Y - Nd.Y) ** 2);
+                              begin
+                                 if D < Dm then
+                                    Dm := D;
+                                    Best := I;
+                                 end if;
+                              end;
+                           end if;
+                        end loop;
+                        Put_Line ("    herd" & H'Image & ":" & Castle.Herds.In_Herd (H)'Image & " deer, its node at "
+                                  & Img (Nd.X, 1) & " " & Img (Nd.Y, 1)
+                                  & (if Castle.Herds.Panicked (H) then ", in flight" else "")
+                                  & (if Best > 0
+                                     then "; nearest of the band " & Castle.Colony.Name_Of (Best) & ", "
+                                          & Img (Dm, 1) & " m off at " & Img (Castle.Colony.Where (Best).X, 1) & " "
+                                          & Img (Castle.Colony.Where (Best).Y, 1) & ", "
+                                          & Castle.Colony.Job_Of (Best)'Image & ": " & Castle.Colony.Status (Best)
+                                     else ""));
+                     end;
+                  end if;
+               end loop;
+            end if;
          end if;
       end loop;
       Rebuild_Dirty;
@@ -427,6 +658,26 @@ begin
       Put_Line ("ran " & Img (Days, 2) & " game days in " & Img (Float (To_Duration (Clock - T1)), 1) & " s;"
                 & Rebuilt'Image & " stack rebuilds," & Castle.Edits.Count'Image & " edits"
                 & (if Wider > 0 then "; the ground widened" & Wider'Image & " times" else ""));
+      if Try_Plan then
+         declare
+            Before : constant Castle.Nav.Answer_Counts := Castle.Nav.Spent_By;
+            R  : constant Castle.Nav.Route :=
+              Castle.Nav.Plan (Try_From, Try_To, Budget => Try_Budget, Wade => Try_Wade,
+                               Within => Try_Within, Refuse => Try_Refuse);
+            After : constant Castle.Nav.Answer_Counts := Castle.Nav.Spent_By;
+         begin
+            Put ("try-plan: " & R.Result'Image & "," & Castle.Nav.Last_Stats.Looked_At'Image & " floors, "
+                 & Img (Castle.Nav.Last_Stats.Seconds * 1000.0, 1) & " ms, a way of "
+                 & Img (Castle.Nav.Length (R), 1) & " m"
+                 & (if Castle.Nav.Last_Stats.Out_Of_Reach then "; the pieces of ground said out of reach" else ""));
+            for A in After'Range loop
+               if After (A) > Before (A) then
+                  Put ("; it ran out of budget, the pieces having said " & A'Image);
+               end if;
+            end loop;
+            New_Line;
+         end;
+      end if;
       if Nav_Stats then
          declare
             N : constant Castle.Nav.Totals_Rec := Castle.Nav.Totals;
@@ -435,7 +686,8 @@ begin
                       & Img (Step_Max * 1000.0, 1) & " ms;" & Step_Slow'Image & " took 10 ms or more");
             Put_Line ("nav: the ground's version moved" & Castle.World_Blocks.Stamps_By_Edit'Image
                       & " times for an edited column," & Castle.World_Blocks.Stamps_By_Stack'Image
-                      & " for a stack kept anew");
+                      & " for a stack kept anew; a stack's small summary was packed again"
+                      & Castle.World_Blocks.Summary_Repacks'Image & " times");
             Put_Line ("nav: the map read anew:" & N.Stacks_Built'Image & " stacks whole," & N.Stacks_Mended'Image
                       & " mended," & N.Cells_Built'Image & " cells in all," & N.Labellings'Image & " labellings, "
                       & Img (Float (N.Map_Seconds), 2) & " s");
@@ -446,7 +698,29 @@ begin
             Put_Line ("nav:" & N.Slow_Plans'Image & " plans of 5 ms or more took "
                       & Img (Float (N.Slow_Seconds), 2) & " s;" & N.Spent_Plans'Image & " ran out of budget,"
                       & N.Short_Plans'Image & " ended short of the goal," & N.Unreached'Image
-                      & " were known out of reach with no search");
+                      & " were known out of reach with no search," & N.Remembered'Image
+                      & " were answered from the memory of one that ran out of budget");
+            Put_Line ("nav: the herds were frightened" & Castle.Herds.Frights'Image & " times");
+            Put_Line ("nav: dry going:" & N.Refused'Image & " ways refused as out of reach ("
+                      & Img (Float (N.Refused_Seconds) * 1000.0, 1) & " ms in all);"
+                      & N.Dry_Labellings'Image & " times a stack's dry pieces were worked out"
+                      & (if Castle.Nav.Prove_Dry
+                         then ";" & N.Proved'Image & " answers of out of reach searched for whole and borne out,"
+                              & N.Unproved'Image & " not searched whole"
+                         else ""));
+            if N.Spent_Plans > 0 then
+               declare
+                  By : constant Castle.Nav.Answer_Counts := Castle.Nav.Spent_By;
+               begin
+                  Put ("nav: of those that ran out of budget, the pieces of ground had said:");
+                  for A in By'Range loop
+                     if By (A) > 0 then
+                        Put (By (A)'Image & " " & A'Image);
+                     end if;
+                  end loop;
+                  New_Line;
+               end;
+            end if;
             for P of Castle.Nav.Slowest loop
                exit when P.Seconds <= 0.0;
                Put_Line ("nav:   " & Img (P.Seconds * 1000.0, 1) & " ms," & P.Looked_At'Image & " floors, "

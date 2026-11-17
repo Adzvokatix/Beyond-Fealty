@@ -85,10 +85,29 @@ package body Castle.Buildings is
       U_Lo : constant Integer := (if H.Shared_Left then 0 else -1);       --  no eave over a neighbour
       U_Hi : constant Integer := (if H.Shared_Right then H.W - 1 else H.W);
 
-      procedure Emit (U, V, Z : Integer; M : Material; S : Stage) is
+      procedure Emit (U, V, Z : Integer; M : Material; S : Stage; State : Natural := 0) is
       begin
-         Put (Cell_X (H, U, V), Cell_Y (H, U, V), Z, M, S);
+         Put (Cell_X (H, U, V), Cell_Y (H, U, V), Z, M, S, State);
       end Emit;
+
+      --  How a dressed block of the roof lies: Toward_V, its slope runs along
+      --  V (the ridge along U), else along U; Up, it falls toward the higher
+      --  V (or U); Eave, Cap: the lowest of its slope, a ridge's one middle
+      --  block; End_Lo, End_Hi: it is the first of its row, or the last.
+      function Lies (Toward_V, Up, Eave, Cap, End_Lo, End_Hi : Boolean) return Natural is
+         --  the way it falls, and the way its row runs, on the block grid
+         Fx : constant Integer := (if Toward_V then H.Vx else H.Ux) * (if Up then 1 else -1);
+         Fy : constant Integer := (if Toward_V then H.Vy else H.Uy) * (if Up then 1 else -1);
+         Rx : constant Integer := (if Toward_V then H.Ux else H.Vx);
+         Ry : constant Integer := (if Toward_V then H.Uy else H.Vy);
+         Row_Up : constant Boolean := Rx + Ry > 0;      --  its row's first block is at the low end of that axis
+      begin
+         return Dressed
+           + (if Fx > 0 then 0 elsif Fx < 0 then 1 elsif Fy > 0 then 2 else 3)
+           + (if Eave then At_Eave else 0) + (if Cap then At_Ridge else 0)
+           + (if (End_Lo and then Row_Up) or else (End_Hi and then not Row_Up) then Verge_Lo else 0)
+           + (if (End_Hi and then Row_Up) or else (End_Lo and then not Row_Up) then Verge_Hi else 0);
+      end Lies;
 
       function Opening_At (U, V, Z : Integer) return Boolean is
       begin
@@ -302,6 +321,36 @@ package body Castle.Buildings is
                end loop;
             end;
          end loop;
+         for V in -1 .. H.D loop                --  trimmed, the same way
+            declare
+               D : constant Integer := Integer'Min (V + 1, H.D - V);
+            begin
+               for K in 0 .. U_Hi - U_Lo loop
+                  declare
+                     U : constant Integer := (if V mod 2 = 0 then U_Lo + K else U_Hi - K);
+                  begin
+                     Emit (U, V, Top - 1 + D, Thatch, Dress,
+                           Lies (Toward_V => True, Up => V + 1 > H.D - V, Eave => D = 0, Cap => V + 1 = H.D - V,
+                                 End_Lo => U = U_Lo and then not H.Shared_Left,
+                                 End_Hi => U = U_Hi and then not H.Shared_Right));
+                     --  (past a gable its underside too, where it is two blocks thick and falls one way;
+                     --  and over the gable, with the top of the gable's daub under it)
+                     if (U < 0 or else U > H.W - 1) and then D > 0 and then V + 1 /= H.D - V then
+                        Emit (U, V, Top - 2 + D, Thatch, Dress,
+                              Under + Lies (Toward_V => True, Up => V + 1 > H.D - V, Eave => False, Cap => False,
+                                            End_Lo => U = U_Lo, End_Hi => U = U_Hi));
+                     elsif (U = 0 or else U = H.W - 1) and then D >= 3 and then V + 1 /= H.D - V then
+                        Emit (U, V, Top - 2 + D, Thatch, Dress,
+                              Under + Lies (Toward_V => True, Up => V + 1 > H.D - V, Eave => False, Cap => False,
+                                            End_Lo => False, End_Hi => False));
+                        Emit (U, V, Top - 3 + D, Daub, Dress,
+                              Lies (Toward_V => True, Up => V + 1 > H.D - V, Eave => False, Cap => False,
+                                    End_Lo => False, End_Hi => False));
+                     end if;
+                  end;
+               end loop;
+            end;
+         end loop;
       else
          for V_End in 0 .. 1 loop
             for U in 1 .. H.W - 2 loop
@@ -316,6 +365,33 @@ package body Castle.Buildings is
             begin
                for K in 0 .. H.D + 1 loop
                   Roof_Blocks (U, (if U mod 2 = 0 then K - 1 else H.D - K), Top - 1 + D, D);
+               end loop;
+            end;
+         end loop;
+         for U in U_Lo .. U_Hi loop             --  trimmed, the same way
+            declare
+               D : constant Integer := Integer'Min (U + 1, H.W - U);
+            begin
+               for K in 0 .. H.D + 1 loop
+                  declare
+                     V : constant Integer := (if U mod 2 = 0 then K - 1 else H.D - K);
+                  begin
+                     Emit (U, V, Top - 1 + D, Thatch, Dress,
+                           Lies (Toward_V => False, Up => U + 1 > H.W - U, Eave => D = 0, Cap => U + 1 = H.W - U,
+                                 End_Lo => V = -1, End_Hi => V = H.D));
+                     if (V < 0 or else V > H.D - 1) and then D > 0 and then U + 1 /= H.W - U then
+                        Emit (U, V, Top - 2 + D, Thatch, Dress,
+                              Under + Lies (Toward_V => False, Up => U + 1 > H.W - U, Eave => False, Cap => False,
+                                            End_Lo => V = -1, End_Hi => V = H.D));
+                     elsif (V = 0 or else V = H.D - 1) and then D >= 3 and then U + 1 /= H.W - U then
+                        Emit (U, V, Top - 2 + D, Thatch, Dress,
+                              Under + Lies (Toward_V => False, Up => U + 1 > H.W - U, Eave => False, Cap => False,
+                                            End_Lo => False, End_Hi => False));
+                        Emit (U, V, Top - 3 + D, Daub, Dress,
+                              Lies (Toward_V => False, Up => U + 1 > H.W - U, Eave => False, Cap => False,
+                                    End_Lo => False, End_Hi => False));
+                     end if;
+                  end;
                end loop;
             end;
          end loop;

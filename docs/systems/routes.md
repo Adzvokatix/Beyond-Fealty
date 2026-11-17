@@ -72,12 +72,13 @@ in.
 * **A way that keeps dry** (2026-11-11, for the herds: `deer.md`).
   `Castle.Nav.Plan (..., Wade => N)` takes no step onto a floor under more
   than N rows of water (a serf wades two, half a metre, which is the
-  default and the most). The pieces of ground are a serf's whatever plan
-  is being made (`Step_Free` in the body: they are made as stacks are
-  first mapped, which may be in the middle of a dry plan), so a goal that
-  only wading reaches is not known to be out of reach: it is searched for
-  to the budget, and the route ends where it comes nearest. Give such a
-  plan a budget (the herds' is 40,000 floors, `Castle.Herds.Herd_Budget`).
+  default and the most). **Since 2026-11-13 the pieces of ground asked
+  are those of the plan's own going** ("A herd is told that water blocks
+  it", below): until then they were a serf's whatever plan was being
+  made, a goal that only wading reaches was not known to be out of
+  reach, and it was searched for to the budget every time. Such a plan
+  still has a budget (the herds' is 40,000 floors,
+  `Castle.Herds.Herd_Budget`), for a way that is there but long.
 * **Pulled straight.** The cells found are pulled into straight lines
   wherever a straight line can be walked and is no slower, first over the
   cells, then over those lines. A route is a line of points with the time
@@ -187,7 +188,8 @@ What that said of the note's four:
   the one change here that moves where anyone walks.
 - **(1) and (4) are not built.** After the rest, planning is 2.0 s of the
   six's 5.9 s, its slowest plan 17 ms (a herd's dry way running out of
-  its own budget of 40,000 floors: 54 of those are 0.85 s of it), and
+  its own budget of 40,000 floors: 54 of those are 0.85 s of it; known
+  out of reach and refused since 2026-11-13, below), and
   4.7 s of the forty-eight's 9.1 s, its slowest 28 ms (a way of 99 m
   through the forest, 61,000 floors looked at: 175 plans of 5 ms or more
   are 1.9 s). Those long ways are what a coarse graph would take to a
@@ -198,6 +200,148 @@ What that said of the note's four:
   it. The pieces of ground and the borders between stacks are its start,
   and they are always current now. It is for when there are zones to
   anchor to, or dozens of people.
+
+**A plan that ran out of budget is remembered** (2026-11-13; John, of the
+stress runner's crowd taking 22 s for 12 with the lord's cart pulled: "then
+the stress test for the cart issues";
+`docs/handoffs/Handoff_2026_11_13_herds_search.md`). What was found, with
+`colony_run --nav-log FILE` (every plan that runs out of budget as it
+happens: when, from where to where, its budget and wade, what the pieces
+of ground had said, and who of the band stood nearest):
+
+- 737 plans ran out of budget in the crowd's sixty days with the pull, none
+  without; 721 of them were one question, a herd's flight from (1200,
+  1030) to a place 30 m off, asked every three seconds for some forty-two
+  hours (from six in the morning of day 24 to the midnight after day 25),
+  each a search of 40,000 floors (14 to 16 ms): 10.7 s of the run's 23.
+- The pieces of ground said the place could be got to every time (`MET`:
+  a serf's, who wades), and the search, kept out of water deeper than a
+  quarter metre, could not get there: the known limit above, a herd's dry
+  way running out of its own budget.
+- It was asked again and again because a forester stood 8.8 m from the
+  herd's node all that time, a log in its arms and "nowhere to put
+  wood" (twenty of the forty-eight stand so from the second day, with the
+  pull or without, eleven with berries, six with wood and three with
+  vegetables at the fifth midnight: the stockpile is full): whoever is within 15 m of a
+  deer startles the herd again every three seconds (`Settle_S`), and a
+  herd with no dry way out stays where it is. (The herds' flight was
+  changed the same day, at his word: `deer.md`. On that band's history
+  the crowd's sixty days have 40 such plans, none asked twice, and take
+  13.8 s with the memory or without; the figures here are the commit
+  before it.)
+- The ground does not answer otherwise for the pull: the same way asked
+  of the ground without the pull, with it, and with the reference band an
+  hour old runs out of budget the same (`colony_run --try-plan`). With
+  the pull the crowd is only left standing in other places. Why one of
+  them is by that herd in each of the eight starts tried with the pull,
+  and in none without, is not found.
+
+What was built keeps work and changes nothing: `Castle.Nav.Plan` remembers
+a plan that ran out of budget (its route, by where it was from and to, its
+budget, weight and wade, and by the version of every stack in a box round
+everything it read: the cells it looked at and the pieces of ground it
+went by, a stack more each way; sixteen at most; not one the pieces of
+ground called out of reach, whose other goal is picked from stacks far
+round), and answers the same question from memory while none of that
+ground has moved. **It mends the herd that cannot move at all, which is
+what the herds did when it was measured** (17bde03): the crowd's sixty
+days took 13.3 s for 23.6 (706 of the 737 from memory), the same state;
+from half past six, twenty days, 9.9 s for 19.1 (659 of 935), the same
+state. **With the herds' flight in a chain (the same day, at his word) it
+answers nothing in the five starts tried**: 5, 0, 25, 502 and 7 plans run
+out of budget, none asked twice to the decimetre. From half past eight a
+forester stands 9 to 14 m from a herd through days 28 to 30 with nowhere
+to put its wood, and the herd flees a short way and is back every four or
+five game minutes, each flight's first way a search to its budget from a
+place a hand's breadth from the last: 7 s of that run's 13. The stress
+runner's own crowd (from seven) takes 13.7 s on that build because its
+history has no herd so placed, not because anything was remembered. What
+ended the cost is his answer to the calls, built the next day ("A herd is
+told that water blocks it", below): the memory has answered nothing
+since. `Set_Spent_Memos` (`colony_run --no-memos`) switches it off,
+`tools/stress.sh runner` runs the crowd both ways and compares the
+states, and `path_check` has it on a made-up river with a ford further
+off than the plan's budget (asked again: from memory, the same way point
+for point; asked as a serf goes, to be refused, kept to a region, or the
+ground moved: searched again). `--nav-stats` says how many plans were answered so and,
+of those that ran out of budget, what the pieces had said.
+
+**A herd is told that water blocks it** (2026-11-13; John, answering the
+calls above: "Ok, lets do a mix, a person standing still doesn't frighten
+a herd, and let them know that water blocks them, when we get to the
+stockpile mechanics we will reserve a portion of the stockpile for
+overflow"). The second of the three, in `Castle.Nav`:
+
+- **Pieces of ground by the going.** A stack keeps a serf's pieces as it
+  always has (worked out with its floors), and beside them, when a plan
+  first asks, the pieces that can be gone over no deeper than no water at
+  all and no deeper than a quarter metre (`Set_Of`, `Label`: a floor
+  under more water than the going allows is of no piece). They are
+  worked out again when the stack's floors have changed (`Shape`, which
+  the borders between stacks already went by) and not before; 7
+  millionths of a second a stack. A plan asks the pieces of its own
+  going: a serf's plans read what they read before, to the bit (the six
+  reference logs with the herds as they were are line for line).
+- **A plan can be kept to a region** (`Plan (..., Within => (X, Y, R))`:
+  the stacks any part of which lies within R metres of a point). What is
+  outside is no ground to it: not stepped on (`Cell_At`), not looked over
+  (`Gather`), and a goal its pieces do not join inside the region is out
+  of reach whatever lies beyond. The herds' is 76 m round the stake
+  (`Castle.Herds.Dry_Reach_M`): every such stack is ground the colony
+  keeps loaded wherever the camera is (the game keeps the stacks within
+  eleven of the stake's), so a herd is answered the same whether its
+  ground is looked at or not, and the looking over is of some three
+  hundred stacks at most however much is in view.
+- **A plan can be refused** (`Refuse => True`): out of reach by its
+  pieces, it is not made for at all: no search, no route. A herd's ways
+  are asked so (`Castle.Herds.Go`), and its flight and its grazing try
+  their next direction. (Not refused, such a plan ends at the floor
+  nearest its goal that can be got to, as a serf's does.)
+- **Measured** (seed 1, against the commit before): the cornered herd's
+  own question, asked of the crowd's ground at its twenty-ninth day
+  (`colony_run --try-plan`), is truly out of reach: searched for with no
+  budget it runs out of ground at 114,643 floors (55 ms) and ends at the
+  bank. Refused, it costs 0.08 ms. The crowd of forty-eight, twenty days
+  from five starts (half past six to nine): plans out of budget 5, 0, 25,
+  502 and 7 before, **none in any of them now**; 7, 8, 9, 546 and 240
+  ways refused (44 ms for the 546); the run from half past eight takes
+  6.4 s for 13.1, the others as they did. The stress runner's sixty days:
+  none for 40, 12.9 s for 13.7. The reference band's forty-one days: none
+  for 16 (they were its slowest plans), 37 refused; 15 deer with 45
+  arrows where it was 16 with 37, all six living either way. The memory
+  of spent plans answered nothing in any of these runs: it has had
+  nothing to remember since.
+- **Proved on the real world.** `colony_run --prove-dry` (`Castle.Nav.
+  Prove_Dry`; slow) searches for every dry way the pieces call out of
+  reach with the pieces off and no budget, over all the ground the plan
+  may go on, and stops the run if one is found; and works a stack's dry
+  pieces out again beside the kept ones each time they are used. Run
+  through the crowd's twenty days from half past eight and from nine and
+  the reference band's forty-one: 546, 240 and 50 answers, each borne
+  out, and the states the same as without it. `path_check` has the made-up
+  river (a serf's way by a ford; a hand of water: there too; dry: out of
+  reach at once, 40 floors looked at; refused: none; a causeway laid and
+  taken away; a region with the ford in it and without; a nearer crossing
+  outside the region not taken), and `colony_check` a herd on one bank of
+  a river with someone walking up behind it. `tools/stress.sh runner` runs
+  the crowd's sixty days with the proving on and wants the same state
+  (`crowd_prove_dry`): the made-up worlds of the checks read every changed
+  stack whole, so only a run on the real world tries kept pieces on mended
+  stacks.
+- **What is left.** A way that is there dry but longer than the herd's
+  budget is still searched for to the budget (the pieces say it can be
+  got to): none in the runs above. A herd whose every way is refused is
+  asked again each time it is frightened, 29 refusals at most, some 2 ms.
+
+Not built, and his to say: a herd that found no way out being let be for
+a while (he took up two of the others, and it is no longer what costs).
+One who stands still frightening a herd: his answer above, built in the
+commit after this (`deer.md`: the crowd's herds are then frightened 13 to
+24 times in twenty days where it was 612 to 4,462, and the stress
+runner's sixty days take 9.1 s where they took 12.9 and, before either
+rule, 13.7). A serf with nowhere to put its load standing where it
+is for days: the stockpile's, of which he has said one thing ("we will
+reserve a portion of the stockpile for overflow").
 
 What else the profile showed, none of it routing, all of it fixed without
 moving a step of any run (the states of the runs are the same with each

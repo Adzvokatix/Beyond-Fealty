@@ -17,8 +17,14 @@ function Go_Forage (I : Positive; Only : Item_Kind := Nothing; Asked_Only : Bool
       else Float'Max (0.0, 1.0 - Float (Veg_Have) / Float (Reserves (Vegetables))));
    Pull     : constant Float := Veg_Pull * (1.0 + 0.5 * Demand) * (1.0 + Short);
    Reach    : constant Float := Float'Min (Forage_Reach_M, Work_Radius_M + 10.0 * Demand + 10.0 * Short);
+   --  Fending for itself it goes for whatever there is to eat nearest to
+   --  where it stands: no kind pulls it further than another, vegetables
+   --  are not sought alone, and how far off the stake is counts for nothing
+   --  (John, 2026-11-12: "serfs would go long distances to fend for
+   --  themselves to eat vegetables when furit and berries were near by").
+   Nearest  : constant Boolean := M.Fends;
    function Score (P : Vec3; Pl : Float) return Float is
-     ((Flat_Dist (M.Pos, P) + 0.5 * Flat_Dist (Stake_At, P)) / Pl);
+     (if Nearest then Flat_Dist (M.Pos, P) else (Flat_Dist (M.Pos, P) + 0.5 * Flat_Dist (Stake_At, P)) / Pl);
    S_Bush, S_Veg, S_Apple : Float := Float'Last;
    Veg_P  : Block_Pos;
    Found  : Boolean := False;
@@ -38,8 +44,8 @@ begin
          S_Veg := Score (Centre_Of (Veg_P), Pull);
       end if;
    end if;
-   --  none in store: vegetables alone, while there are any
-   if not (Found and then Veg_Have = 0 and then Reserves (Vegetables) > 0) then
+   --  none in store: vegetables alone, while there are any (a gatherer's rule: not for one that fends)
+   if Nearest or else not (Found and then Veg_Have = 0 and then Reserves (Vegetables) > 0) then
       if Open (Berries) then
          Bush_K := Best_Bush (I);
          if Bush_K > 0 then

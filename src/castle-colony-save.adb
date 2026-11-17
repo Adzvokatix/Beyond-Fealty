@@ -377,7 +377,7 @@ begin
       Put (Unsigned_64 (Demand (K)), 2);
       Put (Unsigned_64 (Reserves (K)), 2);
    end loop;
-   --  version 19: housing.  The houses (each one's zone, seed, place, the
+   --  version 20: housing.  The houses (each one's zone, seed, place, the
    --  way it faces, its pad's level, its door's way to the path, whose it is, how far it is built, what
    --  has been carried to it and what of that is not yet laid: its size and
    --  openings are its seed's, and what it takes is counted from its
@@ -396,7 +396,16 @@ begin
          Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Pad)), 2);
          Put (Unsigned_64 (Hs.F.Door_Run), 1);
          Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Door_Row)), 2);
+         for U in Hs.F.Front'Range loop           --  (its front yard, as it was placed)
+            Put (Unsigned_64 (Hs.F.Front (U)), 1);
+         end loop;
+         Put (Unsigned_64 (Hs.F.Reach_L), 1);       --  (and how far its ground reaches to a neighbour's)
+         Put (Unsigned_64 (Hs.F.Reach_R), 1);
+         Put (Unsigned_64 (Hs.Got (Stone)), 2);
+         Put (Unsigned_64 (Hs.Lying (Stone)), 2);
+         Put (Unsigned_64 (Hs.Stone_Left), 2);
          Put (Unsigned_64 (Hs.Owner), 1);
+         Put_B (Hs.Bed);
          Put_B (Hs.Pad_Done);
          Put_B (Hs.Built);
          Put (Unsigned_64 (Hs.Placed), 2);
@@ -408,8 +417,85 @@ begin
    end loop;
    for I in 1 .. N_Members loop
       Put (Unsigned_64 (Band (I).Site), 1);
-      Put (Unsigned_64 (Band (I).Site_Patch), 1);
+      Put (Unsigned_64 (Band (I).Site_Patch), 2);
    end loop;
+   --  beds: whether the band makes them, the straw in them all, and each
+   --  member's own at the camp
+   Put_F (Pace_Now);                     --  (and the band's pace)
+   Put_B (Beds_On);
+   Put (Unsigned_64 (Bed_Sheaves), 2);
+   for I in 1 .. N_Members loop
+      Put_B (Band (I).Bed);
+      Put_V (Band (I).Bed_At);
+      Put (Unsigned_64 (Band (I).Bed_Has), 1);
+      Put_B (Band (I).Placed);
+      Put_F (Band (I).Bed_Dir);
+      Put (Unsigned_64 (Band (I).Bed_Lo + 1), 2);
+      Put (Unsigned_64 (Band (I).Bed_Hi + 1), 2);
+   end loop;
+   --  the lots laid out for the houses still to begin (each one's house is
+   --  the design of its serial's seed)
+   Put (Unsigned_64 (N_Lots), 1);
+   Put_B (Lots_Are_Short);
+   for K in 1 .. N_Lots loop
+      declare
+         F : Castle.Buildings.House renames Lots (K).F;
+      begin
+         Put (Unsigned_64 (Lots (K).Zone), 2);
+         Put (Unsigned_64 (Unsigned_16'Mod (F.Fx)), 2);
+         Put (Unsigned_64 (Unsigned_16'Mod (F.Fy)), 2);
+         Put ((if F.Vx > 0 then 0 elsif F.Vx < 0 then 1 elsif F.Vy > 0 then 2 else 3), 1);
+         Put (Unsigned_64 (Unsigned_16'Mod (F.Pad)), 2);
+         Put (Unsigned_64 (F.Door_Run), 1);
+         Put (Unsigned_64 (Unsigned_16'Mod (F.Door_Row)), 2);
+         for U in F.Front'Range loop
+            Put (Unsigned_64 (F.Front (U)), 1);
+         end loop;
+      end;
+   end loop;
+   --  the pass's fourth round (23): whether the cook keeps a pot's fill;
+   --  curing, the lord's cart and its salt, what salting has kept and lost;
+   --  what is asked and kept of the kinds added with it
+   Put_B (Hold_On);
+   Put_B (Curing_On);
+   Put_B (Cart_Set);
+   Put_B (Cart_Tried);
+   Put_V (Cart_P);
+   Put_B (Cart_X);
+   Put (Unsigned_64 (Cart_Salt_N), 2);
+   Put (Unsigned_64 (N_Salted), 4);
+   Put (Unsigned_64 (N_Unsalted), 4);
+   Put (Unsigned_64 (N_Meat_Lost), 4);
+   for K in V23_Kinds loop
+      Put (Unsigned_64 (Demand (K)), 2);
+      Put (Unsigned_64 (Reserves (K)), 2);
+   end loop;
+   --  ladders: whether roofs are thatched from them, those made and lost,
+   --  the one standing at each house, the one each member is going for
+   Put_B (Ladders_On);
+   Put (Unsigned_64 (N_Ladders), 2);
+   Put (Unsigned_64 (N_Ladders_Lost), 2);
+   for H in 1 .. N_Houses loop
+      Put (Unsigned_64 (Houses (H).Ladder), 1);
+      Put_V (Houses (H).Ladder_P);
+      Put (Unsigned_64 (Houses (H).Ladder_Fells), 1);
+   end loop;
+   for I in 1 .. N_Members loop
+      Put (Unsigned_64 (Band (I).Ladder_Of), 1);
+   end loop;
+   --  the fifth round (24): whether a hole under a path is filled as it is laid
+   Put_B (Holes_On);
+   --  the lord's cart pulled into a stockpile (25): whether it is, the way it
+   --  points, whether it is in tow and by whom, the place held for it, where
+   --  it was lifted from
+   Put_B (Pull_On);
+   Put_F (Cart_Turn);
+   Put_B (Cart_Towed);
+   Put (Unsigned_64 (Cart_By), 1);
+   Put_B (Cart_Bound);
+   Put_V (Goal_P);
+   Put_F (Goal_Turn);
+   Put_V (Cart_From);
    declare
       Result : constant Bytes := Buf (0 .. Size - 1);
    begin

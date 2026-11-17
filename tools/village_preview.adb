@@ -207,9 +207,10 @@ begin
             Set (Bx, By, New_Top - 1, Dirt);
          end Earth;
 
-         procedure Place (Bx, By, Bz : Integer; M : Material; S : Stage) is
+         procedure Place (Bx, By, Bz : Integer; M : Material; S : Stage; State : Natural) is
+            pragma Unreferenced (State);
          begin
-            if M /= Air then
+            if M /= Air and then S /= Dress then
                Blocks := Blocks + 1;
                if S = Trim then
                   Trim_Blocks := Trim_Blocks + 1;

@@ -3,19 +3,41 @@ procedure Think (I : Positive) is
    M : Member renames Band (I);
    Gathers : constant Boolean := M.Job = Gatherer or else (M.Job = Cook and then M.Use_For = For_Store);
    --  a part load of what its job brings in: get more before going home
+   --  A load in its arms is taken where it was going first, and then it
+   --  eats (John, 2026-11-13: "people carrying items to the stockpile will
+   --  stop and eat instead of completing their task and then eating, this
+   --  creates an oddity where foresters carrying logs back to the stockpile
+   --  have a log on their sholder while they are eating"): not when it
+   --  fends (what it carries is its meal), nor when it is down to its last
+   --  (Very_Hungry: what it carries has had hours to go where it was
+   --  going), nor with nowhere in the stockpiles to put it; and food of its
+   --  own gathering it eats from where it is, as before, when there is no
+   --  stew to be had.  (Taken home first, that food went to the stores,
+   --  where the cook keeps a pot's fill: on a first day with nothing cooked
+   --  yet the band went hungry beside it, fended, and the cook with them,
+   --  and nothing was cooked until the next morning.)
+   function Load_First return Boolean is
+     (Needs_On and then M.Carried > 0 and then not M.Fends and then M.Fed >= Very_Hungry
+      and then (M.Use_For /= For_Store or else Can_Store (M))
+      and then not (Raw_Food (M.Carry) > 0 and then M.Use_For = For_Store
+                    and then (Stew_Free = 0 or else Failed (M, Camp_Id))));
+
+   --  (not when night has come, nor when it is hungry with a load to take home first)
    Topping_Up : constant Boolean :=
      M.Carried > 0 and then M.Carried < Carry_Limit (M.Carry)
      and then ((Gathers and then M.Carry in Berries | Vegetables | Apples)
                or else (M.Job = Porter and then M.Carry in Straw | Stone | Water and then M.Carry = M.Fetch))
-     and then not Bedtime (M);
+     and then not Bedtime (M)
+     and then not (M.Fed < Hungry_At and then Load_First);
 
    --  Needs first: eat if hungry (stew, else what it carries, else from
    --  the stockpile), and at night, once its hands are free, to bed.
    --  True: it is seeing to one of them.
    function Sees_To_Needs return Boolean is
       Wants_Food : constant Boolean := M.Fed < (if Bedtime (M) then Supper_At else Hungry_At);
+      Loaded     : constant Boolean := Load_First;
    begin
-      if Wants_Food then
+      if Wants_Food and then not Loaded then
          if Go_Eat_Stew (I) or else Eat_Carried (M) then
             return True;
          end if;
@@ -58,11 +80,44 @@ begin
          Drop_Carcass (M);
       elsif Go_Butcher (I) then
          return;
+      elsif Needs_On and then (M.Fed < Hungry_At or else Bedtime (M)) then
+         --  nowhere to butcher it, and it is hungry or night has come: it
+         --  puts its kill down and sees to itself (a serf won't let itself
+         --  starve: it stood with the deer in its arms until there was room,
+         --  which at the pace of 2026-11-12 the reference band's one
+         --  stockpile ran out of); the kill lies there until there is room
+         Drop_Carcass (M);
+         if Sees_To_Needs then
+            return;
+         end if;
       else
          M.Wait := 5.0;
          M.State := Idle;
          return;
       end if;
+   end if;
+   --  its place by the fire, the first time it thinks once the camp stands
+   if Beds_On and then not M.Placed and then Camp_Built and then not (N_Houses > 0 and then Housed (I)) then
+      Place_Bed (I);
+   end if;
+   --  its bed, once the camp stands (and again when a house is its own):
+   --  straw for it, and to where it sleeps with that.  Before the band's
+   --  building as before its job (John, 2026-11-12: "basic needs take
+   --  priority"); what it has in its hands for the camp is seen to first.
+   if (Beds_On or else M.Use_For = For_Bed) and then Think_Bed (I) then
+      Drop_Stretch (M);
+      return;
+   end if;
+   --  a log taken to make a ladder of: made where it stands with it, at the
+   --  stockpile (taken for that and come to nothing: no errand any more)
+   if M.Use_For = For_Ladder then
+      if M.Carry = Wood and then M.Carried >= Ladder_Wood then
+         M.State := Making;
+         M.Work := 0.0;
+         M.Spot := M.Pos + (0.0, 0.0, 0.6);
+         return;
+      end if;
+      M.Use_For := For_Store;
    end if;
    --  the band builds what is marked (its camp, then the paths) before
    --  anyone goes about its job (and anyone left holding something meant
@@ -72,7 +127,8 @@ begin
                 and then (not Zones (Camp_Zone_N).Built or else Seats_Laid < Seat_Logs))
                or else Paths_Left_M > 0
                or else (M.Carry = Earth and then M.Carried > 0)
-               or else (M.Job /= Cook and then M.Use_For not in For_Store | For_House))
+               or else Cart_To_Pull
+               or else (M.Job /= Cook and then M.Use_For not in For_Store | For_House | For_Bed | For_Ladder))
    then
       if Think_Build (I) then
          return;
@@ -129,7 +185,7 @@ begin
          end if;
          --  (what it says it waits for is its house's: straw, whatever kept it
          --  from felling meanwhile; wood, when the stores have enough for all but building)
-         if Waits = No_Thatch or else (Waits = No_Timber and then M.Why = Enough_Wood) then
+         if Waits in No_Thatch | No_Stone or else (Waits = No_Timber and then M.Why = Enough_Wood) then
             M.Why := Waits;
             Rest (I);
             return;
@@ -194,7 +250,12 @@ begin
       return;
    end if;
    if M.Job = Hunter then
-      if Go_Carcass (I) then                     --  a kill lying out there first
+      --  salt for its kills first, a sackful from the lord's cart when the stores are low of it
+      if Go_Cart (I) then
+         return;
+      end if;
+      --  a kill lying out there first (while there is somewhere to butcher it)
+      if (not Needs_On or else (Room_For (Meat) and then Room_For (Hide))) and then Go_Carcass (I) then
          return;
       end if;
       if Deer_Safe then

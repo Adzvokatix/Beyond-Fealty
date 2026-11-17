@@ -1,6 +1,4 @@
 with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
-with Castle.Math; use Castle.Math;
-with Castle.Nav;
 
 package body Castle.Zone_Marks is
 
@@ -124,55 +122,79 @@ package body Castle.Zone_Marks is
       end if;
    end Show_Plan;
 
-   procedure Show_Paths (C : Castle.Marks.Colour := Path_Plan) is
-      Half : constant Float := Path_Width_M / 2.0;
+   --  A path's ground, as lines of block columns that lie level: column X
+   --  of blocks, rows Y0 .. Y1 of it, their tops at row Zr.
+   type Col_Line is record
+      X, Y0, Y1, Zr : Integer;
+   end record;
+   type Col_Lines is array (Positive range <>) of Col_Line;
+   Max_Lines : constant := 16_384;
+
+   --  (what For_Path_Left and For_Path_Line visit comes west to east and
+   --  south to north in each column of blocks: a block that carries on the
+   --  line before it is added to it)
+   procedure Add (L : in out Col_Lines; N : in out Natural; X, Y, Zr : Integer) is
    begin
-      if Paths_To_Lay = 0 then
-         return;
+      if N > 0 and then L (N).X = X and then L (N).Y1 + 1 = Y and then L (N).Zr = Zr then
+         L (N).Y1 := Y;
+      elsif N < L'Last then
+         N := N + 1;
+         L (N) := (X, Y, Y, Zr);
       end if;
-      for K in 1 .. Path_Count loop
+   end Add;
+
+   procedure Show_Lines (L : Col_Lines; C : Castle.Marks.Colour; Of_Ground : Boolean) is
+   begin
+      for K of L loop
          declare
-            A : constant Vec3 := Path_End (K, Second => False);
-            B : constant Vec3 := Path_End (K, Second => True);
-            L : constant Float := Sqrt ((B.X - A.X) ** 2 + (B.Y - A.Y) ** 2);
-            N : constant Natural := Natural (Float'Ceiling (L));
-
-            --  the point D metres along it, on the ground
-            function Along (D : Float) return Vec3 is
-               T : constant Float := (if L > 0.0 then D / L else 0.0);
-               X : constant Float := A.X + (B.X - A.X) * T;
-               Y : constant Float := A.Y + (B.Y - A.Y) * T;
-               Z : constant Float := Castle.Nav.Surface_Z (X, Y);
-            begin
-               return (X, Y, (if Z >= 0.0 then Z else A.Z + (B.Z - A.Z) * T) + Lift_Edge);
-            end Along;
-
-            M : Positive := 1;
+            X : constant Float := (Float (K.X) + 0.5) * 0.25;
+            Z : constant Float := Float (K.Zr + 1) * 0.25 + Lift_Edge;
          begin
-            while M <= N loop
-               if Path_Todo (K, M) then
-                  declare
-                     M0 : constant Positive := M;
-                  begin
-                     while M < N and then Path_Todo (K, M + 1) loop
-                        M := M + 1;
-                     end loop;
-                     declare
-                        D0 : constant Float := Float (M0 - 1);
-                        D1 : constant Float := Float'Min (L, Float (M));
-                        Mid : constant Float := (D0 + D1) / 2.0;
-                     begin
-                        --  (a strip's ends run on half its width: drawn that much short)
-                        Castle.Marks.Strip (Along (Float'Min (Mid, D0 + Half)), Along (Float'Max (Mid, D1 - Half)),
-                                            Path_Width_M, C, Of_Ground => True);
-                     end;
-                  end;
-               end if;
-               M := M + 1;
-            end loop;
+            Castle.Marks.Strip ((X, (Float (K.Y0) + 0.5) * 0.25, Z), (X, (Float (K.Y1) + 0.5) * 0.25, Z), 0.25, C, Of_Ground);
          end;
       end loop;
+   end Show_Lines;
+
+   Kept     : Col_Lines (1 .. Max_Lines);
+   Kept_N   : Natural := 0;
+   Kept_Key : Integer := -1;
+   Kept_Age : Natural := 0;        --  calls since it was read
+   Read_Every : constant := 30;
+
+   procedure Show_Paths (C : Castle.Marks.Colour := Path_Plan) is
+      procedure Each (X, Y, Zr : Integer) is
+      begin
+         Add (Kept, Kept_N, X, Y, Zr);
+      end Each;
+   begin
+      if Paths_To_Lay = 0 then
+         Kept_N := 0;
+         Kept_Key := -1;
+         return;
+      end if;
+      Kept_Age := Kept_Age + 1;
+      if Kept_Key /= Paths_Left_Key or else Kept_Age >= Read_Every then
+         Kept_N := 0;
+         Kept_Key := Paths_Left_Key;
+         Kept_Age := 0;
+         for K in 1 .. Path_Count loop
+            For_Path_Left (K, Each'Access);
+         end loop;
+      end if;
+      Show_Lines (Kept (1 .. Kept_N), C, Of_Ground => True);
    end Show_Paths;
+
+   procedure Show_Path_Line (From, To : Vec3; C : Castle.Marks.Colour) is
+      Line : Col_Lines (1 .. 4_096);
+      N    : Natural := 0;
+      procedure Each (X, Y, Zr : Integer) is
+      begin
+         Add (Line, N, X, Y, Zr);
+      end Each;
+   begin
+      For_Path_Line (From, To, Each'Access);
+      Show_Lines (Line (1 .. N), C, Of_Ground => False);
+   end Show_Path_Line;
 
    procedure Show_Lot (Corner : Lot_Corners; Z : Float; C : Castle.Marks.Colour; Width : Float := 0.08) is
    begin

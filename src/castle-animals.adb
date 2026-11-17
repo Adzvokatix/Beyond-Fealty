@@ -225,7 +225,11 @@ package body Castle.Animals is
          return;
       end if;
       if R.N < 2 then
-         R := Castle.Nav.Plan (A.Target, (if A.To_B then A.B else A.A));
+         --  (kept to the ground round its two ends, as a walking serf's is: Castle.Serfs.Plan_Route)
+         R := Castle.Nav.Plan (A.Target, (if A.To_B then A.B else A.A),
+                               Within => Castle.Nav.Within_M ((A.A.X + A.B.X) / 2.0, (A.A.Y + A.B.Y) / 2.0,
+                                                              Sqrt ((A.A.X - A.B.X) ** 2 + (A.A.Y - A.B.Y) ** 2) / 2.0
+                                                              + Castle.Serfs.Walker_Round_M));
          A.Leg_I := 1;
          A.Along := 0.0;
          if R.N < 2 then

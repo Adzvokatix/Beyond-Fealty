@@ -1,7 +1,7 @@
 # Rendering
 
-- Packages: Castle.Streaming, Mesher, Textures, Render, Camera, Colors, Currents (and, of the figures'
-  layer, Castle.Fire, which is described here with the light it gives)
+- Packages: Castle.Streaming, Mesher, Textures, Render, Camera, Colors, Currents, Cutaway, Lod, Far (and, of
+  the figures' layer, Castle.Fire, which is described here with the light it gives)
 - Check: camera_check (needs a window); `tools/shadow_still.sh` measures whether the shadows hold still
 - Saves: nothing saved but the camera
 - Stage: phase A; the palette on 2026-11-08 (Handoff_2026_11_08_world_look.md); shadows and
@@ -12,10 +12,23 @@ How the view works: worker tasks generate each 8 x 8 m stack and greedy-mesh
 it into packed 8-byte quads, nearest stacks first.  The main thread uploads
 at most 48 meshes a frame into one 256 MB quad buffer and draws everything
 with two multi-draw-indirect calls (solid, then water), pulling vertices
-from the buffer in the shader.  Stacks that leave the view radius are freed
-(two stacks of hysteresis), except the colony's ground, which stays loaded
-and is simply not drawn past the haze.  Textures are 5 x 5 texels per face, four
-variants per material, generated at start-up.
+from the buffer in the shader.  The meshes of stacks that leave the view
+radius are freed (two stacks of hysteresis; their blocks are held, since
+2026-11-14: `world.md`, "The whole map held"), except the colony's ground,
+whose meshes stay loaded and are simply not drawn past the view's edge.
+Past that edge the land is drawn from tiles of coarser blocks, to the map's
+edge ("The far view" below).
+Textures are 5 x 5 texels per
+face, four variants per material, generated at start-up.
+
+What is kept by place for the stacks in view must allow for stacks kept
+loaded outside it. The colony's ground is never unloaded, so anything
+addressed by a stack's place modulo a size (the water's surface texture is:
+`water.md`, "Drawing") can be shared by a kept stack and a far one: such a
+thing has one owner at a time, the stack inside the window round the
+camera, and is written again when the window comes back
+(`Castle.Render.Set_Surface_Focus`). `--pan DX DY --pan-back` is the
+scripted there-and-back that shows it.
 
 Colours come from the designer's palette (`color_palette.txt` beside the
 game folder), kept in `Castle.Colors` as named hex codes: `Ash_Stone`,
@@ -38,7 +51,8 @@ Light and sky, kept cheap on purpose:
   and the moon, and the clouds over them, drifting on the wind (see "The
   sky" below). Distant ground fades into the sky's own colour for that
   direction, so the edge of the loaded world meets the horizon instead of
-  a wall of fog.
+  a wall of fog. (With `--far` it is 45 % haze there and all haze 1,100 m
+  from the focus: "The far land" below, off unless asked for.)
 - Shadows from the sun: see "Shadows" below. Grass casts none; a quarter
   of the leaf blocks let light through for dappled shade. The same clouds
   also cast drifting shadows on the ground.
@@ -228,6 +242,455 @@ anywhere but where its phase puts it (it has no orbit of its own); a
 Milky Way, planets, shooting stars; cloud kinds other than the heaps (a
 high thin layer, a storm's anvil); clouds the eye can fly through (the
 eye is always under them); light shafts.
+
+## The far view (2026-11-15; accepted and on `main`; a second round on his answer, 2026-11-16)
+
+John, having tried the far land and set it aside (whole in
+`docs/handoffs/Handoff_2026_11_15_far_view.md`): "the LOD levels pop, so we
+have to fix that ... if we are going to rework rendering let's go all the
+way, let's figure out how to get everything in view", with a list of
+techniques from his research: "I don't know what combination of those works
+or not, and what we can use for our project so consider them, and let's see
+if we cannot crack this." The handoff answers his list item by item. What
+is built is the part of it that fits this renderer best and that the counts
+bore out: **the world itself at coarser blocks, in rings, cross-faded.**
+First values of mine throughout. He tried it and accepted it the same day
+("ok looking good, great performance, we are headed in the right direction
+... Merge it, and on by default"), and with the acceptance asked for more
+by name: the white dots at the rings, the sun's shadows and the water's
+mirror past the view's edge, a haze on the ground and at the map's rim, the
+old far land out. Those are the bullets below that quote him
+(`docs/handoffs/Handoff_2026_11_16_far_view_haze_and_shadows.md` has his
+message whole, and the three things he left to me, none of them built, with
+what was measured of each).
+
+**Measured first** (`./bin/lod_stats`, kept): a tile of the world at cells
+of 0.5, 1, 2 and 4 m comes to about 2,100 quads at the first three levels
+and 1,400 at the fourth (a stack at full detail is 3,800, and a tile of
+level 1 covers four), and a worker makes one in 4, 14, 56 and 223 ms. The
+whole world in rings about the reference stake: 6.1 million quads beside
+the view's own 4.7 million.
+
+- **`Castle.Lod`** makes a tile: at level L a cell is 2^L blocks a side and
+  a tile 32 x 32 cells (16, 32, 64, 128 m). Its stacks are generated as the
+  game generates them, the edits laid on, and reduced by halves, eight
+  cells to one: water on top stays water; half full is something, named by
+  what is on top; two of a thing thin by nature (a trunk, a wall, a roof)
+  keep it, so a tree keeps its trunk and a hovel its walls; grass, grain
+  and wild vegetables are nothing. Then meshed, greedy, into the mesher's
+  own 8-byte quads with its corner occlusion. A tile does not know its
+  neighbours: past its edge the ground stands as the generator has it, and
+  the top three cells of every edge column show their outward face (a
+  skirt, for where two levels meet). **So the far view is the world: its
+  own trees, and whatever has been dug or built.**
+- **The renderer draws a tile with the land's own shader**: the per-draw
+  origin's fourth number is the level and the vertex is placed at 2^level
+  times the size; nothing else of the vertex pulling changed. Tiles are in
+  no water's surface texture (and were in no light's depth map until the
+  far shadows, below).
+- **Rings about the focus**: the stacks' own meshes to the fog distance
+  (the view radius), level 1 to twice that, each level after to twice as
+  far again, level 4 to the map's edge. A cell so keeps about the size on
+  the screen that a block has at the view's edge (2.3 pixels down to 1.2
+  across each ring at 720 lines, 3.5 to 1.8 at 1,080).
+- **Which level a pixel shows is decided in the fragment shader** (the top
+  of the land's `main`): the level whose ring the place is in, or, while
+  that is not loaded there, the finest coarser one that is, so nothing is a
+  hole while tiles come in. What is loaded where is a texture of 128 x 128
+  texels (one for every 16 m, a byte a level) and the stacks' own flags.
+- **No line where the detail steps**: over the last `Far_Fade` of a ring
+  (0.15 of a doubling: 144 to 160 m, 288 to 320 ...) both levels are drawn
+  and each pixel takes one or the other by a fixed 4 x 4 pattern, the share
+  going over; and a tile that has just come in takes its pixels over
+  `Far_Arrive_Frames` (20) by the same pattern. The pattern is by the pixel
+  and never by the frame: a still view is still (measured: once the far
+  view is whole, 0.01 % of pixels step by more than 6 levels from frame to
+  frame, as on `main`; from the very first frame, never more than 0.23 %
+  after the thirteenth).
+- **No pixel given up by both levels** (John, 2026-11-15, having tried it:
+  "the white dot dithering for the LOD rings, if we can do something about
+  the white dot dithering, even just making them dark grey would be cool
+  too"). The dots were holes: 108 pixels of the sky's own colour along the
+  first ring in one forest view. The two levels' surfaces do not lie in one
+  place (a cell is as high as its upper half is full), so the two fragments
+  of one pixel stand a little apart on the ground and read the cross-fade a
+  little apart, and here and there both gave the pixel up. Now the coarser
+  level has all its pixels `Far_Lap` (0.075 of a doubling) before the finer
+  has given up its last, and where both keep one the nearer is seen: 108
+  became 3, and those 3 are not the far view's (cracks a pixel wide between
+  two quads of one mesh, which `main` has too and the old haze hid by being
+  the sky's colour).
+- **A floor under the land** (`Ground_Floor`; `--no-floor`): where the land
+  leaves a pixel open below the horizon, over the map, the sky's pass draws
+  dark ground (Charcoal, lit by the day) with the air between, not the sky:
+  the line of sight is walked across the map in 24 even strides until it is
+  3 m under the land's level thereabouts (the mean over 80 m that the mist
+  lies on), so a line that leaves the map over the land is still the sky's. It is what shows through those cracks,
+  and through the gaps beside a coarse tile standing in for ground that has
+  not come in (on a slope, in a fast pan, up to 1 % of the picture for half
+  a second: counted with the floor off, 9,338 pixels at worst in a pan of
+  360 m; none of the sky's colour once everything is in, still or moving).
+- **The sun's shadows past the view's edge** (`Far_Shadows`;
+  `--no-far-shadows`; John, 2026-11-15: "Keep the shadows pst the view's
+  edge it doesn't seem too expensive and it keeps other issues from arising
+  with visuals, sometimes you can see shadows when you can't see what is
+  making them and then shaddows start popping"). Two things:
+  - *Two more depth maps*, one for each held direction of the sun, over the
+    whole map (4,096 texels a side, 0.72 m each, 16 bits: 64 MB of the
+    card's memory, made when first wanted). Into them go the stacks' own
+    meshes and every tile of the far view that lies in its own ring (the
+    ring's rule with no cross-fade, `Cast_Tiles` in `Draw`: one place for
+    it). A map is drawn again when its direction moves (as the near maps
+    are: every two seconds or so at the game's pace), and otherwise not more
+    often than every 20 frames while tiles come and go (a third of a second
+    at sixty a second: as long as a tile takes to come in), 300 for a change to
+    the stacks alone; one far map in a frame at most. Ground past the fog
+    distance reads them alone, four filtered taps each, an edge 2 m wide (with
+    one tap the edge crept as the sun went from one held direction to the
+    next, the two maps' texels not lying alike on the ground:
+    `tools/shadow_still.sh` at twenty times the clock read 0.94 % and 1.11 %,
+    and 0.00 % three times running with four; it no longer asks the
+    near maps anything, which it used to do only to be told it was outside
+    them); ground inside 0.85 of it the near maps, as ever; between, the one
+    goes over to the other, by the place and never by the level, so the
+    rings' cross-fade does not speckle it.
+  - *The near maps hold more*: they reach as far up the light as the map
+    goes (1,470 m each way; it was 500) and the tiles that stand in the
+    light's way are drawn into them with the stacks. So a mountain past the
+    view's edge shades the meadow in the view, and a shadow no longer comes
+    into being as what casts it comes into the view. (They are drawn again
+    for that when tiles have come or gone, not more often than every 20
+    frames; and a tile is left out of them whose top is too low to shade
+    the view from where it stands, by the light's slope: at noon next to
+    none past the view's edge is drawn into them.)
+  - Measured: little a frame in dry weather (meadow 2.10 ms for 2.07
+    without, the lake 2.03 for 2.02, the forest from 140 m back 5.66 for
+    5.54: what far ground pays for its taps it mostly saves on the near
+    maps'), **0.18 ms in rain and storm** (meadow 2.55 for 2.37; the wet
+    weather's program pays more for the far taps than the dry one does: why
+    was not found, and asking them of every pixel with no branch was dearer
+    in both); a frame that draws a far map is 2 to 2.5 ms
+    longer (8.7 ms for 6.8 at the heaviest view tried). `tools/shadow_still.sh`
+    reads 0.00 % at its three settings, and pulled back to 200 m what steps
+    (0.18 %: the river's ripples) is the same with the far shadows and
+    without. The first version read the far maps on every pixel of the view
+    as well, to find what casts from beyond the near maps: 0.4 to 0.9 ms a
+    frame; drawing those casters into the near maps does it for nothing.
+- **Far water mirrors the world** (`Far_Reflections`; `--no-far-mirror`;
+  John, of the shadows: "If we can do the same with the water mirror that
+  would be nice"): the walk through the picture that water in the view
+  makes, in strides as many times longer as the tile's cells are larger
+  than a block (so it reaches as many cells as it does blocks close by: 900
+  m at level 1). Looking across a mountain lake that lies part in the view
+  and part past it, the far part was a pale band of sky and is now the
+  mountain, as the near part is. Cost at that view: none measured (4.72 ms
+  for 4.76 without).
+- **A tile's faces that look away from the eye are not sent** (its quads
+  come face by face; of his list, back-face chunk culling): about half the
+  quads. It saves 0.00 to 0.06 ms: the cost is not in the vertices
+  (`--no-far-cull` sends all).
+- **The game streams the tiles** (`Far_Stream` in `game/castle_game.adb`):
+  the last level over the whole map, always, so that something is under
+  everything from the first seconds; the others by their rings, asked for a
+  little before they show (1.1 and 0.9 of the ring) and kept a little after
+  (1.3 and 0.75), the nearest first. The workers make them after all the
+  view asks and before what is only held (`Castle.Streaming.Request_Far`).
+  A tile whose stacks are edited is made again once it shows, not more
+  often than every 2, 4, 8 and 16 s by its level.
+- **The haze**: with the far view the land has no haze within the view and
+  is all haze 3,600 m from the focus (`Far_Haze_M`); it was all haze at the
+  view's edge. The camera's far plane is 4,800 m (it was 1,600; a variable
+  now, `Castle.Render.Far_Plane`, handed to `Castle.Camera.View_Proj` and
+  to the water's mirror as a uniform).
+- **The ground haze** (`Ground_Haze`; `--no-ground-haze`, `--haze X`,
+  `--rim M`; John, 2026-11-15: "Haze, let's cover the ground around the
+  camera in a haze 1m or so the trees poke above, transparent but enough to
+  cover loading at a distance and the white dot dithering for the LOD rings
+  ... Let's do an opaque boundary haze so the edges of the map, ramping
+  from the transparent to the opaque in a 12m ring around the map, can we
+  have the haze follow the terrain of the mountains so the tops are still
+  visible but look natural, like the mist is climbing the mountains with
+  fingers between the saddles and ridges?"). First values but for his two
+  figures (1 m, 12 m). In `air`, the one routine for what lies between the
+  eye and a thing, so the land, the people, the water and the floor all
+  take it:
+  - *How deep it lies* is worked out once, from the generator's map, a
+    number for every 2 m (a texture of 1,024 x 1,024, 2 MB): 1 m on level
+    ground and on open water; less the steeper the land thereabouts is (its
+    mean over 65 m: all of it up to a rise of 0.20 in one, none from 0.55);
+    and **none in the mountains** (the generator's mountain mask: all of it
+    under 0.1, none from 0.2, the foot of the mountains as the boulders
+    have it), open water excepted. (The third round, John, 2026-11-16, his
+    words whole in the handoff: "let's remove the fingers and haze off the
+    mountains". The first build filled every gully to the land's mean round
+    it, 8 m deep at most, so it ran up the mountains in white fingers; that
+    filling is gone, and the mountains are clear.)
+  - *A thing is in it* by how far it stands over the land as it was made
+    (the height texture the land's shader already had): a trunk's foot is,
+    its crown is not; a house stands in it as a tree does; a pit is no
+    deeper in it than its rim. A tile of the far view is forgiven half its
+    cell (its tops stand up to that much over the ground they stand for:
+    without it far land was striped, a band to every cell of height, and
+    the rings' cross-fade speckled).
+  - *How thick it is* goes by the ground distance from the focus, or from
+    under the eye if that is nearer: a metre of it is 2.9 % haze at the
+    focus, 21.5 % at 0.85 of the fog distance (before the grass ends and
+    the first ring's cross-fade begins) and 38.4 % from three fog distances
+    on (`--haze X` scales all three); deeper haze hides more by the same
+    rule. Those are what the water's was in the second round (a third of a
+    metre deep at 8 %, 50 % and 75 % a metre: John, 2026-11-16, "the 85% as
+    as snow, the subtle mist above the far water was better"): far land now
+    lies under the mist far water had, and the water is as it was (the
+    lake, pixel for pixel against the second round: unchanged but at the
+    shore, where the texture of 2 m mixes the two). It is not thicker for being looked
+    along, so a low camera still sees the ground at its feet.
+  - *The map's rim*: over the last 12 m (his figure; `--rim M`) everything
+    goes into the haze, the ground and what stands on it, and past the edge
+    the sky's pass has the same colour.
+  - It takes the sky's colour at the horizon, as the old haze did. The
+    haze by distance (none in the view, all at 3,600 m) is as it was, over
+    it.
+  - Cost: +0.03 to +0.08 ms at the usual views, +0.20 at the heaviest tried
+    (the forest from 140 m back, 5.5 ms): two taps and an exponential on
+    every pixel. Off, nothing measured.
+- **The sun and the moon go down behind the map's edge** (`Low_Horizon`;
+  `--no-low-horizon`; the third round, John, 2026-11-16: "let's lower the
+  line of the horizon below the edge of the map, so it it's harsh edge with
+  the sun and moon can't be seen as easily from a high view angle or
+  vantage point"). From high up the map's edge lies under eye level (from
+  440 m back over the middle of the map, about 4 degrees under it); the
+  sky's pass draws the haze between the two, and the sun and the moon were
+  cut off on it by a straight line at eye level, well over the land. Under
+  eye level the sky is still the haze (the land and its rim go into that
+  colour, and it stays where it was), but the sun and the moon are drawn on
+  it down to where the map's edge is in that direction (the land's height
+  where the line of sight leaves the map, less 10 m, `Horizon_Under_M`, so
+  the land's own edge stands over it), fading out over the last 0.03 under
+  eye level (`Sun_Gone`, the 1.7 degrees under the horizon over which the
+  sun's light on the land goes and the moon's takes over). **So from low
+  down the land cuts the sun off** (200 m back at the lowest tilt, the eye
+  some 25 m up: the sun goes down behind the trees at the map's edge, where
+  it was sliced off in mid-air over them); **from high up it fades out in
+  the haze above the land** (440 m back the edge is 4 degrees down and the
+  fade is done by 1.7), with no line, and the last of it is seen for its
+  own breadth after its light has left the land (a sun low over land in
+  dusk, as from a mountain). Over eye level nothing is changed: a view with neither in it is the same to the
+  pixel with it on and off (0 of 518,400 pixels; looking into the sunset,
+  261 under the sun). Only the pixels within 0.03 under eye level look up
+  the map's edge, one tap each.
+- `--no-lod` (`Castle.Render.Far_View` off): none of it; **the picture is
+  `main`'s to the pixel** (two still views with `--no-whole-map`, 0 of
+  518,400 pixels differ) and costs what `main`'s does.
+
+**What it costs** (`tools/look_cost.sh --hold-wait --far-wait --settle
+2500`: the twelve views, averaged over 2,500 frames after everything is
+in; 1,280 x 720, multisampled):
+
+| view | `--no-lod` | far view | |
+|---|---|---|---|
+| meadow, camp, rain (looking down) | 1.82, 2.04, 2.34 ms | 1.97, 2.17, 2.50 | +0.13 to +0.16 |
+| forest (close, steep) | 0.51 | 0.51 | +0.00 |
+| horizon (day, dusk, night), overcast, rain low | 1.00 to 1.47 | 1.50 to 1.97 | +0.47 to +0.50 |
+| snow low | 0.96 | 1.35 | +0.39 |
+| the lake, looking across to the mountains | 0.86 | 1.92 | +1.06 |
+
+The cost is in the fragments, not the vertices: at the lake 916 tiles are
+drawn and 1.1 million quads sent, and without multisampling the far view's
++1.06 ms is +0.52. Memory: 8.1 million quads, 62 MB of the 256 MB quad
+buffer; the process holds 22 MB more (1,510 MB for 1,488). The main thread:
+0.34 ms a frame for 0.19 once settled.
+
+**With the second round** (the far shadows, the far mirror, the ground
+haze, the floor; the build before it and after, back to back, 2026-11-16):
+
+| view | no far view | far view before the round | now |
+|---|---|---|---|
+| meadow | 1.82 ms | 1.96 | 2.11 |
+| forest (close, steep) | 0.52 | 0.51 | 0.55 |
+| camp by day, by night | 2.05, 2.17 | 2.18, 2.28 | 2.32, 2.42 |
+| horizon by day, at dusk, by night | 1.31, 0.99, 1.25 | 1.80, 1.50, 1.74 | 1.86, 1.53, 1.79 |
+| the lake, looking across | 0.86 | 1.93 | 2.01 |
+| rain, rain from low | 2.31, 1.45 | 2.53, 1.97 | 2.78, 2.17 |
+| snow from low | 0.96 | 1.35 | 1.39 |
+| overcast (storm) | 1.40 | 1.92 | 2.08 |
+
+The round is +0.03 to +0.25 ms (the most in wet weather, where the far
+shadows cost 0.18 of it), and the far view with all of it +0.03 to +1.15
+over no far view. **A cheaper shader for the far levels would not buy
+much**: with every far fragment drawn one flat colour the lake's frame is
+1.70 ms for 1.99 (of the far view's 1.13 there, 0.83 is not shading), the
+horizon's 1.76 for 1.84. Drawing the far tiles nearest first: nothing.
+
+**How long it takes to come in** (the default view, from the first frame):
+on this machine's 31 workers the far view is whole in 6.6 s, coarsest
+first, and the whole map is held in 18.3 s (12.0 without the far view: it
+comes after). On three workers (a machine of four cores, emulated with
+`--workers 3`): 46.6 s and 67.6 s (23.8 without). The tiles cost 193 s of
+worker time in all, nearly all of it generating stacks a second time
+(0.75 ms each): making them from the same pass that holds the map would
+halve the whole.
+
+**Limits, and his to say** (the handoff has them as his calls):
+
+- The rings go by the focus, not by the eye: with the camera pulled far
+  back and low, the ground by the eye is cells of 1 or 2 m seen from 100 m.
+- Grass, grain and wild vegetables are not in the far view: a meadow's
+  yellow patches end at the view's edge, under half haze in the second
+  round (John: "The vegetation is solved by the haze") and a fifth since
+  the third. Thin things are kept fat:
+  a bare winter forest far off is trunks as thick as its cells.
+- The ground haze goes by the land as it was made: what is dug or levelled
+  does not move it (a pit is no deeper in it than its rim; a floor raised a
+  metre stands out of it). There is none of it, and no far shadow, without
+  the far view.
+- A far shadow is soft (an edge 2 m wide), and the shadow of a tile that
+  has just come in comes up to a third of a second after it at sixty frames
+  a second. In rain and storm the far shadows cost 0.18 ms where in dry
+  weather they cost 0.01 to 0.03: cause not found.
+- While a fast pan comes in, the floor shows as dark wedges beside coarse
+  tiles standing in on slopes.
+- A stack's own mesh that comes late does not fade in as a tile does (the
+  tile standing in for it gives way at once).
+- An edit shows far off 2 to 16 s after it is made; live water (a lake let
+  out) not at all: a tile has the water the world was made with.
+- Depth: the far plane is three times further with the same 24-bit buffer.
+  Nothing was seen to flicker in the stills; reversed depth is the mend if
+  it shows.
+
+## The far land (2026-11-14; out of the game since 2026-11-15)
+
+**Out of the game.** John, with the far view accepted (2026-11-15): "remove
+the old far land, but keep the functionality just comment it out or
+something, just in case". So: the game's `--far` is commented out (two
+lines in `game/castle_game.adb`, marked, which bring it back), and nothing
+of the far land is made at the start unless `Castle.Render.Far_Land` is set
+before `Init` (its program, its two textures, a fifth of a second). All of
+its code is still there and still compiled, and `edit_check` still proves
+`Castle.Far`, which is what keeps it from going stale as text commented out
+would. Brought back in a scratch copy on the day it was taken out, with
+`--no-lod`: it draws as it did. It was never tried together with the far
+view. Everything below is as it was written while `--far` worked.
+
+**John tried it and set it aside** (2026-11-15, his words whole in
+`docs/handoffs/Handoff_2026_11_15_whole_map.md`): "we got what we came for,
+the whole map is loaded, let's bring back the haze, --no-far the default",
+and: "far is ugly with the flat terrain and popping assets, the fog works
+better in that state." So `Castle.Render.Far_Land` is off, the picture and
+the haze are what they were, and `--far` draws what is described below. It
+is kept as the first try at a far view and as a place to measure from; what
+is to replace it is his sidetrack of the same day ("let's figure out how to
+get everything in view": the far-view work, on a branch of its own). What
+he named: the terrain is flat (a forest is coloured cells), and things pop
+where a stack's mesh takes over from the sheet. Below, "is drawn" means
+with `--far`.
+
+John, with the whole map held: "what would it cost to cover the entire
+world with one mesh and draw locally over it, like a dark grey, if we load
+the whole map, then far mountains need a texture, they don't need detail,
+but something has to be there?", and then: "ok build it".
+
+**The whole world is drawn as one coarse sheet, seen wherever no stack's
+own mesh is drawn**: past the edge of what is streamed in, and under a
+view that is still coming in. Built from his message with first values of
+mine.
+
+- **`Castle.Far`** (pure, no window) works it out once from the
+  generator's map, no stack made: a height for every corner of a grid of 4
+  m cells, and for every cell what is seen on it: the average colour of the
+  ground block at its middle (the block textures' own third level), and
+  whether it is bare, turf, a broadleaf's crown, an aspen's, a conifer's,
+  or open water. A cell is one of the generator's tree cells, so a cell
+  with a tree in it is that tree's crown: 99,220 of the 262,144 cells on
+  seed 1, and a forest comes out as its own trees. 0.23 s on one thread at
+  start-up (1.2 s on the debug build).
+- **The sheet lies under the land as it was made, everywhere on dry
+  ground.** A corner stands half a metre under the lowest of the map's
+  heights (or open water's levels) that any block column of the four cells
+  meeting at it is made from, so the flat triangles between corners are
+  under every block column they span: by 0.31 m at the least over 957,440
+  block columns of 3,740 dry cells (`edit_check`, 36 checks now: the
+  corners, the columns between them, the cells by what is on them, the
+  time; with a corner looking only at the two metres round it, as the
+  first build had it, the sheet stands 0.75 m over the land between
+  corners and the check fails).
+- **So a stack's own mesh hides it, and no hole is cut in it for one.**
+  The renderer (`castle-render.adb`, `Far_Program`) draws the grid with no
+  buffer: six vertices a cell, the corner's height from a texture (513 x
+  513), the cell from another (512 x 512); a third (256 x 256) says of each
+  stack whether a mesh of its own is loaded and whether the stack has been
+  edited (`Upload (..., Edited)`: the game says, from the edits'
+  generation), kept by `Upload` and `Unload`. A fragment is dropped only
+  under a mesh that is drawn (the test `Draw` makes of each stack) **and**
+  where the land is no longer as it was made (an edited stack: a pit would
+  show the sheet) or the cell stands at open water's level (a cell that is
+  wet: the water's own surface is drawn over its bed, and the sheet would
+  lie between). **The first build cut the sheet out wherever a mesh was
+  drawn**, and from outside the view, looking in over steep ground, the sky
+  showed under the mesh's edge (a mesh has no side where its stack ends):
+  white patches on a mountainside, seen in the frames of a pan.
+- Toward the map's edge the sheet goes into the haze over its last 200 m
+  (`Far_Rim_M`), so that the world's end is not a straight line against
+  the sky.
+- **It takes the day as the land does, at a tap or two**: the lamp's light
+  and the sky's by the lie of the land (the map's height field, as the
+  land's own far lighting), the clouds' shadows, snow by height on what
+  looks up, the autumn (a broadleaf's crown turns and is gone tree by tree,
+  and the ground shows under its boughs), a meadow's drifts and its drying,
+  the wet, ice on water, and the air (haze, murk, mist). Water is its hue
+  and the sky in it. **It casts no shadow and takes none, has no place in
+  the sun's maps (`Draw_Casters`), and is drawn after the land and the
+  people and before the picture the water mirrors**, so far hills stand in
+  a lake.
+- **The haze has two legs** (`air` in the shared sky source, `u_far`): the
+  land is `Far_Haze` (0.45) haze at the edge of what is streamed in, where
+  it was all haze, and all haze `Far_Whole_M` (1,100 m) from the focus.
+  That is the one change to a picture he had accepted: the last trees of
+  the view no longer dissolve whole. **1,100 m is inside the camera's far
+  plane (`Castle.Math.Far_M`, 1,600 m) from as far out as the camera zooms
+  (450 m): change the one with the other.** The stacks past the fog
+  distance are still not drawn, the sun's maps and the lights are still
+  sized by it: `Fog_Distance` itself is untouched.
+- Without `--far` (`Castle.Render.Far_Land` off, the default): nothing
+  drawn past the loaded land and the haze whole at its edge. (`--no-far`
+  is still taken.)
+
+**What it costs** (`tools/look_cost.sh`, the twelve views, main built
+beside it and run back to back, the whole map's coming-in out of the way):
+0.00 to 0.07 ms of GPU a frame (the lake most; forest and horizon 0.03);
+1.57 million vertices a frame, drawn whatever the view (not culled to the
+view: not needed at this cost). Memory: 3 MB of textures. Once the whole
+map is held a frame costs what `main`'s does to a hundredth (0.50 for
+0.50, 0.84 for 0.85, 1.28 for 1.29 ms without the far land); while it is
+coming in, the first twelve seconds, the GPU's time reads 0.03 to 0.35 ms
+more (the workers have the processors).
+
+**Without it, and with `--no-whole-map`, the picture is `main`'s to the
+pixel** (a still view recorded with the clock stopped and no shadows: 0 of
+518,400 pixels differ), and the haze's new sum with nothing far is the old
+line to the pixel too (built both ways: 0 differ). With the whole map held the
+picture differs from `main`'s in some 870 scattered pixels, most by under
+5 levels; **`main` differs from itself by the same pixels when the
+processors are busy in its first seconds** (run beside 28 busy processes:
+870 differ from `main` on a quiet machine, 2 from this build): the game's
+own dependence on how long its first frames take, older than this and not
+looked into. The shadows hold still as they did (`tools/shadow_still.sh`:
+0.00 % with the clock running, fast, at dusk; nothing at all with it
+stopped).
+
+**Limits, his to say**: it shows the world as it was made, so nothing
+dug, laid or built (a village seen from a kilometre off is its meadow; the
+colony's own ground, loaded but past the view's edge, is drawn so too). It
+is flat: a forest is coloured cells, not trees, and the hand-over at the
+view's edge shows (detail to none, at 45 % haze). Seen close, in front of
+a camera pulled far back, a cell is a 4 m square. An edited stack in view
+has no sheet under it: at the view's edge, from outside, the sky can still
+show under its mesh on steep ground (the colony's own ground is such
+stacks). The far plane cuts the sheet 1,600 m from the eye, where it is
+all haze or nearly. Nothing of it is streamed or refreshed. **Seen and not
+mended**: in a fast pan a few white slivers show for a frame or two at
+brooks, where stacks are still coming in (cause not found; without the far
+land the same frames show whole white squares there, the sky through
+ground not yet meshed).
 
 ## Mist
 
@@ -581,6 +1044,233 @@ the gaps filled, below.) First values, at the top of `castle-render.ads`.
 Not there: leaves that stir in the wind (the shadows would have to stir
 with them); trunks drawn round (a trunk is a square column one or two
 blocks wide); a bush shaped anew (it is the lump it was).
+
+## Boulders drawn round
+
+John, 2026-11-16 (the far view's third round, his words whole in
+`Handoff_2026_11_16_haze_horizon_boulders.md`): "Let's smooth the
+boulders." A boulder is the lump of blocks the generator makes it
+(`world.md`, "Boulders"), stepped like everything else; it is drawn round
+on the soft quads foliage is drawn on (`Castle.Mesher.Round_Boulders`,
+`Castle.Render.Boulder_Cut`; `--no-round-boulders`: in steps, as it was).
+First values.
+
+- A boulder's face along an edge or at a corner of it is a quad of its
+  own, and the vertex shader moves its corners half a block along each
+  axis (`Boulder_Cut`, 0.5): an edge or corner open on two axes or three
+  is drawn in, and a hollow in the rock itself (a corner with rock on five
+  sides or more and nothing else) drawn out toward the open, so a step of
+  one block becomes one slope and a notch is filled to one. No straying
+  (foliage strays; rock is not to look ragged). The light at a moved
+  corner goes by the way out of the rock there, the same for every face
+  that meets it, so the rock is lit as a round thing and not by its
+  facets.
+- Its body is what is solid about it: grass round its foot, or a bush,
+  is not counted. Ground is: so where it sits in the ground its foot stays
+  where it was and no gap opens there.
+- **On a stack's edge** (foliage's corners stay put there) a boulder's
+  corners are moved as well, by what the stacks on both sides of it work
+  out alike from the generator alone: the ground as it was made and the
+  boulders' shapes as they were made (`Castle.Flora.In_Rock`, the test
+  the generator draws one by). So the two stacks never disagree and no
+  slit opens between them; an edit there is not seen (a corner may lean
+  toward a stone taken away). 2,386 of the map's 4,477 boulders cross a
+  stack's edge. (These two came first, for steps a close still showed on
+  a boulder across a stack's edge; they changed it little. What took the
+  steps away was the hollows drawn out, which came after: the steps were
+  the rock's own notches, not the edge or the grass.)
+- A face of anything solid that looks at a block of boulder is meshed,
+  though the boulder hides it while it is whole: a corner drawn in would
+  otherwise leave a slit where the ground under it should show (the
+  ground's own corners stay where they are). Five close views and a low
+  pan of 240 frames over the boulders by the stake, with no floor and no
+  ground haze: no pixel of sky through, rounding on or off. The sun's
+  shadows hold still as before (`tools/shadow_still.sh --timescale 0.05`,
+  three runs: 0.00 %).
+- What the boulders are made of is untouched: the flora's hash is as it
+  was, and a serf prises off the same stone. Quads in a view +0.4 %; a
+  stack's meshing as long as it was; no frame cost seen (the view of a
+  meadow strewn with them 1.77 and 1.79 ms, on and off; close up 0.53 and
+  0.54). The far view's tiles draw boulders as they were, in their own
+  coarse cells.
+
+Not there: a boulder's own shape made rounder in the making (its crags
+are the generator's noise: a rounder rock is a change of the world, the
+stone counts and the reference logs with it); a stone a serf is carrying
+or has laid (fieldstone) drawn round.
+
+## A dressed roof
+
+John, 2026-11-12: "the roofs, are to be smoothed, but not rendered smooth
+instantly, the builders smooth the roofs so they don't step, rounded edges
+around the peremeter". A roof is laid in steps of thatch and then trimmed
+by its builder, block by block (`habitation.md`, "The roof trimmed"). What
+is drawn smooth is each block that has been trimmed, no sooner:
+
+* **A block says it is dressed in its state** (`Castle.Blocks.Dressed`,
+  with the way its top falls and whether it is at the eave, the ridge's
+  one middle block, the end of its row, or the lower of two): the first
+  use of a block's state byte. It is saved with the block, as every edit
+  is.
+* **The mesher** gives each face of a dressed block that shows a quad of
+  its own, as it does a soft quad of foliage, marked with bit 31 as well
+  (`Castle.Mesher`, "A dressed roof"; `Slope_Code`). The quad's corner
+  bits then say exactly how far each corner is moved: the top edge on the
+  side the block falls to a whole block down (so the steps of a roof are
+  one slope), half a block at the eave (a blunt edge) and to either side
+  of a ridge's middle block (a low cap), a quarter in at the roof's two
+  ends. Where the roof hangs out past a gable or lies on one, the lower
+  block's underside and the top of the gable's daub under it are brought
+  up to the same slope, so a gable end is a clean triangle under a band of
+  thatch.
+* **The moves are the block's own, by its state alone**: nothing of them
+  depends on what stands beside it, so a roof across a stack's edge is
+  whole (foliage's corners on a stack's edge are left alone because they
+  go by their neighbours; these do not). A face of anything that looks
+  along a roof's row at a dressed block is shown, so a roof half trimmed
+  has no hole where the trimmed part ends (within a stack: across a
+  stack's edge the mesher does not know its neighbour's state, and a
+  triangle may be open there until the row is trimmed through).
+* **One shader decodes quads** (`Vertex_Source`, shared by the land's two
+  programs and the sun's depth pass), so the shadow of a trimmed roof is a
+  trimmed roof's. The light goes by the face as it lies: the vertex shader
+  works out the moved face's normal and hands the turn to the fragment
+  shader in `v_bend`, which foliage and tufts already use for theirs.
+  Texels and the block a fragment belongs to still come from `v_grid`,
+  where the vertex was on the block grid.
+* What it costs is in `habitation.md`, "What it costs": the two branches
+  are in the land's shaders whether or not a roof is in the view (0.02 to
+  0.05 ms at the fixed views with the most land in them), and a dressed
+  roof is a quad to a block face (7,300 quads a hovel against 6,000).
+  `tools/shadow_still.sh` reads 0.00 % as before.
+
+Not there: the roof's underside inside the house (in steps still); a
+pitch other than one to one; a ray that meets the slope and not the block
+it was.
+
+## A roof cleared on the camera's ray
+
+John, 2026-11-13: "ok I guess it is time, and we should have planned for
+this and i forgot, semi-transparent roofs on the ray of the camera, It
+would be nice to have a tapering transparency with full transparency in
+the middle and semi-trasnparency along the edges wher the roof meets the
+walls". Built with first values of mine (`Castle.Cutaway`, at the top of
+`castle-cutaway.ads`); drawing and pointing only: the roof is still there
+(it casts its shadow, a sleeper is under it), nothing of it is saved and
+the colony knows nothing of it. `--no-cutaway` is the roofs as they were.
+His answer to the first build, the same day: "For the roof let's run it to
+the mouse and the camera, along with an option to have all roofs
+transparent, we can do the same with multi-level buildings, instead of
+slicing the environment by elevation, you can add feedback on that if you
+have a better idea." So the pointer's ray clears a roof as the camera's
+line does, and one key clears every roof (below); of buildings of more
+than one floor nothing is built (there are none yet: the handoff has what
+was said back).
+
+* **Which roof**: a house that the line from the eye to the focus (the
+  point the camera circles), run on `Past_M` (1.5 m) past it, passes
+  through; **and a house the pointer's ray passes through** on its way to
+  whatever it lands on (the game's `Follow_Roofs`: where the ray landed a
+  frame ago and 0.3 m on, so the answer is the same with the roof whole,
+  the ray on its thatch, and cleared, the ray gone on to the floor or out
+  by the door). "Through" is `Crosses`: under the roof's two slopes (a
+  ridge along the longer walls, pitched one to one from the ridge's height,
+  half a metre over them still counting), within the walls and eaves, from
+  the floor up. Not the box round the house: a ray that only passes over
+  the ridge to the ground behind clears nothing. The whole house, not the
+  roof alone: at the default tilt the line to a hovel's middle comes in
+  through its near wall under the eave. While the pointer is on the
+  interface, or a menu is open, the house it last pointed at stays cleared
+  (a roof does not close over what its menu is about). Only houses with
+  thatch on them are offered (roofing, trimming, standing).
+* **Three views** (John, 2026-11-13: "We can have the H k toggle through,
+  dynamic transparency, full trasnparency, or no transparency"):
+  `Castle.Cutaway.View` is `Dynamic` (the houses the eye's line and the
+  pointer's ray cross), `Full` (every house offered) or `None`. The H key
+  (`Open_Roofs` in `Castle.Input.Bindings`, a row of the help panel) goes
+  through them in that order and says which in a note (the first and the
+  last look alike until something is pointed at); `--all-roofs` and
+  `--no-cutaway` are the second and the third for a scripted run. A load
+  leaves the view as it is. Forty-eight houses at once at most
+  (`Max_Roofs`, every house a colony can have: the shader's arrays are
+  that long).
+* **The walls on the eye's side** (John, the same message, asked whether
+  walls should be cut down and light let in: "Let's cut down the walls
+  in-line with the camera too, the transparency is there so the player can
+  just see through them, as far as the game is concerned the walls are
+  still there to block light"): of a house whose roof is cleared, a wall
+  whose outward side faces the eye is cleared with it, whole of it: panel,
+  timber and gable. **By its place, never by what it is made of** (the
+  frame's timber is a trunk's material): within `Wall_M` (0.27 m) of the
+  walls' outer line, above the floor; the shader asks it only of what a
+  wall can be made of (`u_walls`: daub, timber) inside one box round every
+  cleared house. How squarely a wall faces the eye is the cosine, level,
+  between its outward side and the way to the eye: whole edge-on
+  (`Face_Lo`, 0.05), clear from `Face_Hi` (0.30), a smoothstep between,
+  dithered by the pixel as the roof is. The walls beyond stand and are
+  seen from inside. `wall_cover` in the shader is the same sum as
+  `Castle.Cutaway.Wall_Cover`. Light is as it was: the sun's maps are not
+  touched, the walls and the roof cast their shadows, and the inside is in
+  them.
+* **The ground a wall stands on is drawn** (`Castle.Mesher`,
+  `Under_Wall`): the top of the ground under daub or timber, which the
+  wall hides, would be a slit into nothing under a cleared one. It is
+  under every tree's trunk as well (the same timber): 2,274 quads more of
+  5.0 million at the forest's fixed view, 1,847 at the camp's.
+* **How much of it**: drawn at `Edge_Cover` (half) over its walls and its
+  eaves, thinning inward to nothing over `Taper_M` (1.25 m, a smoothstep):
+  its middle is open, its outline stays. It clears over `Fade_S` (a quarter
+  of a second of drawn time) and comes back the same way when the line has
+  left the house; a roof no longer offered is whole at once, and a load
+  makes every roof whole. Of the roof only thatch is cleared (the walls
+  on the eye's side: below).
+* **Drawn in the land's shader**, both programs (with and without the wet
+  look): a thatch fragment inside a cleared house's box asks `roof_cover`
+  (the same sum as `Castle.Cutaway.Cover`) and, under multisampling, covers
+  that share of the pixel's samples through alpha to coverage, dithered
+  between whole samples by a 4 x 4 pattern fixed to the pixel (four samples
+  are five steps; never by the frame). With `--msaa 0` it is a dithered
+  discard: a screen door. The sun's maps are drawn as before
+  (`Draw_Casters` is untouched): the roof's shadow stays on what is under
+  it.
+* **The faces a roof hid are drawn** (`Castle.Mesher`, `Under_Roof`): a
+  face of a wall, a gable or the frame that thatch lies on, which a whole
+  roof hides, would leave the wall's top open under a cleared one; it is
+  meshed (with no occlusion of its own) and hidden by depth while the roof
+  is whole. Six hovels gain 86 quads all told.
+* **The pointer goes through what is not drawn**: `Castle.Rays.Stops`
+  passes a roof's thatch where it is drawn at less than half, and
+  whatever stands in a cleared wall's place (`interface.md`, "Pointing at
+  things").
+* What it costs: with no house in the view nothing measurable (the camp's
+  fixed view 2.03, 2.01 and 2.04 ms against 2.01, 2.00 and 1.99 for the
+  branch before it, back to back; the meadow 1.79 against 1.77); six
+  hovels close up with one cleared 0.41 ms, with `--no-cutaway` 0.41, the
+  build before it 0.40. With the pointer's ray and every roof (three
+  streets, 26 hovels and a band of forty in view, 1280 x 720, twice each
+  way): 1.45 and 1.47 ms of GPU and 0.63 of CPU as it stands, 1.44 and 1.48
+  and 0.63 to 0.64 with every roof cleared, 1.43 and 1.47 switched off,
+  1.45 and 1.46 and 0.63 for the build before: nothing measurable, the
+  house views asked every frame included. With the walls (the same view,
+  twice each way): every house open 1.52 and 1.52 ms against 1.48 and 1.51
+  before the walls; as it stands 1.49 and 1.50; none 1.49; CPU 0.63 to
+  0.64 throughout. The forest's fixed view 0.49 ms against 0.50, the
+  camp's 2.05 and 2.00 against 2.03. `tools/shadow_still.sh` reads 0.00 %
+  (its view has no house in it: it says the land's shader was not
+  disturbed, nothing of a cleared house). Looked at from close and low,
+  under the eaves (tilt 0.15, 6 m off, two sides): the room is seen
+  through the near walls and no slit shows where the roof lay on the
+  cleared beam (the roof over it is cleared too). The fade through
+  edge-on was seen in stills at several turns, not with the camera
+  turning: there is no scripted turn.
+
+Not there: light let in where a house is open (his word: the walls and
+the roof still block it); anything for a building of more than one floor;
+a wait before a house opens under the pointer. With a house open under
+the pointer the dig brush reaches the floor, not the thatch or the near
+wall: the H key's third view (none) is the way to them. Through a cleared roof, the far slope's underside shows (in steps)
+within the taper by the walls, and the top block of each gable shows as a
+small pale square at the ridge's ends.
 
 ## Grass
 

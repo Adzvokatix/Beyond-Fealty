@@ -11,8 +11,12 @@ function Status (I : Positive) return String is
    function Doing_Now return String is
    begin
    case M.State is
+      when Making    => return "making a ladder";
+      when To_Ladder => return "going for the ladder";
       when To_Site   =>
-         return (if M.Carried > 0 and then M.Carry = Wood then "carrying a log to " & Its_House
+         return (if M.Carried > 0 and then M.Carry = Ladder then "carrying the ladder to " & Its_House
+                 elsif M.Carried > 0 and then M.Carry = Wood then "carrying a log to " & Its_House
+                 elsif M.Carried > 0 and then M.Carry = Stone then "carrying stone to " & Its_House
                  elsif M.Carried > 0 then "carrying " & N_Of (M.Carried) & " " & Name (M.Carry) & " to " & Its_House
                  elsif M.Site_Patch > 0 then "going to make the ground ready for " & Its_House
                  else "going to work on " & Its_House);
@@ -24,13 +28,17 @@ function Status (I : Positive) return String is
                  then "raising the frame of " & Its_House
                  elsif M.Site in 1 .. N_Houses and then Houses (M.Site).Placed < Houses (M.Site).Walls_N
                  then "daubing the walls of " & Its_House
-                 else "thatching " & Its_House);
+                 elsif M.Site in 1 .. N_Houses and then Houses (M.Site).Placed < Houses (M.Site).Roof_N
+                 then "thatching " & Its_House
+                 else "trimming the thatch of " & Its_House);
       when To_Bush   => return "going to pick berries";
       when Picking   => return "picking berries (" & N_Of (M.Carried) & ")";
       when To_Store  =>
-         return (if M.Carry = Wood then "carrying a log to the stockpile"
+         return (if M.Carry = Ladder then "carrying the ladder to the stockpile"
+                 elsif M.Carry = Wood then "carrying a log to the stockpile"
                  else "taking " & N_Of (M.Carried) & " " & Name (M.Carry) & " to the stockpile");
-      when Storing   => return (if M.Carry = Wood then "stacking a log" else "putting down " & Name (M.Carry));
+      when Storing   => return (if M.Carry = Wood then "stacking a log" elsif M.Carry = Ladder then "putting the ladder down"
+                                else "putting down " & Name (M.Carry));
       when To_Tree   => return "going to fell a tree";
       when Chopping  => return "felling a tree";
       when To_Pile   => return "going for a log";
@@ -38,7 +46,8 @@ function Status (I : Positive) return String is
       when To_Source =>
          return "going for " & (if M.Fetch = Sticks and then M.Use_For = For_Frame then "deadwood"
                                 else Name (M.Fetch))
-           & (if M.Use_For in For_Ring | For_Frame then " for the hearth" else "");
+           & (if M.Use_For in For_Ring | For_Frame then " for the hearth"
+              elsif M.Use_For = For_Bed then " for its bed" else "");
       when To_Patch  =>
          return (if M.Site_Seg > 0 then "going to lay the path"
                  elsif M.Carry = Earth and then M.Carried > 0
@@ -57,8 +66,12 @@ function Status (I : Positive) return String is
                     when For_Ring => "fetching stone for the hearth",
                     when For_Frame => "fetching a log for the hearth",
                     when For_Floor => "fetching earth for the camp's ground",
-                    when For_House => "fetching " & (if M.Cell > 0 then Name (Cells (M.Cell).Kind) else "what it takes")
+                    when For_House => "fetching "
+                                      & (if M.Cell > 0 and then Cells (M.Cell).Kind = Ladder then "a ladder"
+                                         elsif M.Cell > 0 then Name (Cells (M.Cell).Kind) else "what it takes")
                                       & " for " & Its_House,
+                    when For_Bed => "fetching straw for its bed",
+                    when For_Ladder => "fetching a log to make a ladder of",
                     when For_Store | For_Stoke => "fetching");
       when Taking    => return "taking it from the stockpile";
       when To_Camp   =>
@@ -73,7 +86,8 @@ function Status (I : Positive) return String is
                     when For_Ring => "carrying " & N_Of (M.Carried) & " stone to the hearth",
                     when For_Frame => (if M.Carry = Sticks then "carrying deadwood to the hearth"
                                        else "carrying a log to the hearth"),
-                    when For_Store | For_Stoke | For_Floor | For_House => "carrying");
+                    when For_Bed => "carrying straw to where it sleeps",
+                    when For_Store | For_Stoke | For_Floor | For_House | For_Ladder => "carrying");
       when Putting_In =>
          return (case M.Use_For is
                     when For_Pot  => "putting " & Name (M.Carry) & " in the pot",
@@ -83,20 +97,25 @@ function Status (I : Positive) return String is
                     when For_Seat => "laying a seat log",
                     when For_Ring => "setting stones for the hearth",
                     when For_Frame => "setting up wood for the hearth",
-                    when For_Store | For_Stoke | For_Floor | For_House => "putting it down");
+                    when For_Bed => "making its bed",
+                    when For_Store | For_Stoke | For_Floor | For_House | For_Ladder => "putting it down");
       when Stoking   => return "stoking the fire";
       when Cooking   => return "stirring the stew";
       when To_Seat   => return "taking a bowl of stew to the fire";
       when Stalking  => return (if Sneaking_Now (I) then "stalking a deer" else "going after deer");
       when Aiming    => return "drawing the bow";
       when Recovering => return "letting the deer settle";
+      when To_Cart    => return "going to the lord's cart for salt";
+      when To_Tow     => return "going to pull the lord's cart";
+      when Towing     => return "pulling the lord's cart to the stockpile";
+      when At_Cart    => return "taking salt from the lord's cart";
       when To_Carcass => return "going for the kill";
       when Lifting_Carcass => return "lifting the deer";
       when To_Butcher => return "carrying a deer home";
       when Butchering => return "butchering a deer";
       when Gathering =>
          return (case M.Fetch is
-                    when Straw => "cutting straw (",
+                    when Straw => (if M.Use_For = For_Bed then "cutting straw for its bed (" else "cutting straw ("),
                     when Stone => "gathering stone (",
                     when Vegetables => "pulling vegetables (",
                     when Apples => "picking apples (",
@@ -130,6 +149,7 @@ function Status (I : Positive) return String is
                     when Enough_Food => "enough food in store",
                     when No_Timber => "no wood to build " & Its_House & " with",
                     when No_Thatch => "no straw to build " & Its_House & " with",
+                    when No_Stone => "no stone to wall the ground of " & Its_House & " with",
                     when Nothing_Yet => "looking for work");
       when To_Eat    => return (if M.From_Pot then "going for stew" else "going to eat");
       when Eating    => return (if M.From_Pot then "eating stew" else "eating");

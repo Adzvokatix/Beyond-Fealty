@@ -49,7 +49,7 @@ begin
          begin
             for J in Job_Kind loop
                for W in Boolean loop
-                  Build (G, (J, W), R, Skin_A.all);
+                  Build (G, (J, W, False), R, Skin_A.all);
                   Built := Built + 1;
                   Most_Boxes := Natural'Max (Most_Boxes, R.Count);
                   for K in 1 .. R.Count loop
@@ -103,8 +103,8 @@ begin
       G  : constant Genome := Random_Genome (12345);
       R1, R2 : Rig;
    begin
-      Build (G, (Forester, True), R1, Skin_A.all);
-      Build (G, (Forester, True), R2, Skin_B.all);
+      Build (G, (Forester, True, False), R1, Skin_A.all);
+      Build (G, (Forester, True, False), R2, Skin_B.all);
       Check (R1 = R2 and then Skin_A.all = Skin_B.all, "the same genome builds the same serf, pixel for pixel");
    end;
 
@@ -118,7 +118,7 @@ begin
             G : constant Genome := Random_Genome (Derive (11, U64 (I)));
             R : Rig;
          begin
-            Build (G, (Idle, False), R, Skin_A.all);
+            Build (G, (Idle, False, False), R, Skin_A.all);
             for K in 1 .. R.Count loop
                declare
                   A : constant Box := R.Boxes (K);
@@ -183,7 +183,7 @@ begin
             F : Frames;
             Top, Sole : Float := 0.0;
          begin
-            Build (G, (Idle, False), R, Skin_A.all);
+            Build (G, (Idle, False, False), R, Skin_A.all);
             Solve (R, Standing (R, (100.0, 200.0, 30.0), 0.7), F);
             Sole := 1.0E9;
             for K in 1 .. R.Count loop
@@ -389,7 +389,7 @@ begin
               [Idle, Forester, Hunter, Gatherer, Porter, Lord, Idle, Forester, Hunter, Gatherer, Porter, Lord];
          begin
             for N in 0 .. Cols * 2 - 1 loop
-               Build (Random_Genome (Derive (21, U64 (N)), Child => N = 6), (Jobs (N), N >= Cols), R, Skin_A.all);
+               Build (Random_Genome (Derive (21, U64 (N)), Child => N = 6), (Jobs (N), N >= Cols, False), R, Skin_A.all);
                for Y in 0 .. Skin_H - 1 loop
                   for X in 0 .. Skin_W - 1 loop
                      declare

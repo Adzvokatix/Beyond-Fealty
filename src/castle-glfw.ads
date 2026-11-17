@@ -28,6 +28,7 @@ package Castle.GLFW is
    Key_Equal       : constant int := 61;
    Key_A           : constant int := 65;
    Key_B           : constant int := 66;
+   Key_H           : constant int := 72;
    Key_M           : constant int := 77;
    Key_F1          : constant int := 290;
    Key_F2          : constant int := 291;

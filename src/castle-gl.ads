@@ -54,6 +54,7 @@ package Castle.GL is
    Pack_Alignment        : constant Enum := 16#0D05#;
    Time_Elapsed          : constant Enum := 16#88BF#;
    Texture_2D            : constant Enum := 16#0DE1#;
+   R16F                  : constant Enum := 16#822D#;
    R32F                  : constant Enum := 16#822E#;
    RG16F                 : constant Enum := 16#822F#;
    RGBA32F               : constant Enum := 16#8814#;
@@ -174,6 +175,10 @@ package Castle.GL is
      with Import, Convention => C, External_Name => "glProgramUniform1i";
    procedure Program_Uniform_2ui (Program : UInt; Location : int; X, Y : UInt)
      with Import, Convention => C, External_Name => "glProgramUniform2ui";
+   procedure Program_Uniform_4fv (Program : UInt; Location : int; Count : Sizei; Value : System.Address)
+     with Import, Convention => C, External_Name => "glProgramUniform4fv";
+   procedure Program_Uniform_1fv (Program : UInt; Location : int; Count : Sizei; Value : System.Address)
+     with Import, Convention => C, External_Name => "glProgramUniform1fv";
 
    procedure Create_Buffers (N : Sizei; Buffer : out UInt)
      with Import, Convention => C, External_Name => "glCreateBuffers";

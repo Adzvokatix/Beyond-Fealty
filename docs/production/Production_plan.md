@@ -1,4 +1,4 @@
-# Castle Game production plan (agreed 2026-11-07; stages 0 to 4, 4R, 5a, 5b and 5c done; the water and its look, shadows and the fire, zones, the fire's life and the camp built, and the last pass on models, trees and grass, then the sky and the weather's look, a stress test, the pathing work and falls thrown from the lip, done between 5c and 6 and all accepted; stage 6 opened by John 2026-11-11 and in two parts: 6a habitation built and accepted 2026-11-12, on `main`; then, asked by him in the same message, a pass on building and zoning (retaining walls and stone stairs, roofs smoothed by their builders, housing zones pulled along a path and combined); after it, in his order, sleeping and beds (the campfire to the house) and then the stockpile, neither designed: start from the newest file in docs/handoffs/)
+# Castle Game production plan (agreed 2026-11-07; stages 0 to 4, 4R, 5a, 5b and 5c done; the water and its look, shadows and the fire, zones, the fire's life and the camp built, and the last pass on models, trees and grass, then the sky and the weather's look, a stress test, the pathing work and falls thrown from the lip, done between 5c and 6 and all accepted; stage 6 opened by John 2026-11-11 and in two parts: 6a habitation built and accepted 2026-11-12, on `main`; then, asked by him in the same message, a pass on building and zoning (retaining walls and stone stairs, roofs smoothed by their builders, housing zones pulled along a path and combined), built and put to him, a second round on his answers the same day (lots laid out beforehand, hovels drawn for by lot, the ground between neighbours made one, sleepers on their sides, beds of straw, cloaks), built and put to him again, and a third on what he found trying that (level places by the fire, beds before hovels for straw, a fender to the nearest food, housing inside a round of paths, a path drawn on its ground, no housing across a connecting road, the band half as fast again), built and put to him a third time, and a fourth on what he found trying that (no stone stair where a door is all but level with its path, a ladder for the roofs, the cook's hold on the stores, meat by the pound and the lord's cart of salt, with the first of the story), built and put to him a fourth time, and a fifth on what he found trying that (a load taken home before its carrier eats, a lot levelled with its hollows filled, no grass left in the air, holes under a path filled, a half-built house taken up), and accepted 2026-11-13: on `main`; after it, in his order, the transition from sleeping by the fire to the house, then the stockpile, both his to open and not designed: start from the newest file in docs/handoffs/)
 
 Principle: build the colony "spine" once (state, clock, items, jobs, stockpile, saves), then add each
 resource as a new job + its work animation on a loop that already runs, saves and is tested. Each stage
@@ -366,7 +366,7 @@ designation creates the means -> the search for resources (wood, water, stone, g
 - Demo: colony_stage6a_habitation.mp4 (tools/demo_stage6.sh). Zip: castle_game_stage6a.zip, of the
   branch.
 
-## Building and zoning, a pass after 6a (asked by John 2026-11-12; see the newest handoff)
+## Building and zoning, a pass after 6a, in five rounds (BUILT 2026-11-12 and 13 on branch `housing-pass`; put to John five times; ACCEPTED 2026-11-13, "accepted"; merged into `main`; see docs/handoffs/Handoff_2026_11_12_housing_pass.md)
 - His words, whole, are in Handoff_2026_11_12_stage_6a_habitation.md ("John's words", the fourth). In
   short: where a zone's ground rises and falls, a retaining wall of stone from the stockpile in the
   quarter metre next to the path, stone stairs on the door's path, the earth behind a building dug away
@@ -375,12 +375,178 @@ designation creates the means -> the search for resources (wood, water, stone, g
   zone a fixed distance deep that fits a hovel, pulled along its path to the length wanted, combined
   with any housing zone it overlaps, and reaching no further than seven blocks past the end or the
   turn of a path.
+- Built from that with first values of mine, in three commits and a fourth. Zoning: a strip along the
+  path's straight run (the stretches a path is recorded as are one run), 9.5 m deep, all its free
+  ground taken whether or not a hovel fits, combined with housing it overlaps or touches. Walls: a
+  house's site is a level yard to its path and two blocks behind and beside; where what is beside it
+  stands more than a block over or under, a wall of stone (a new block), each house walling its own;
+  stone treads on the door's stair; stone the third thing carried to a house, the hearth first.
+  Roofs: a last stage of the blueprint, the top thatch laid again with a state that says it is
+  dressed, drawn sloped by the mesher and the land's vertex shader. Colony blob 20 (18 and 19
+  refused). colony_check 475 -> 509; `tools/reference_check.sh` holds the seven logs and the eighth,
+  recorded again.
+- Measured: a hovel in about four game days from one forester; on the hillside east of the stake up
+  to 25 stones a hovel; on ground falling 2 m in 7, 24 on average. The look costs 0.02 to 0.05 ms at
+  the fixed views with the most land. Two faults of mine found by reading who was at home at each
+  midnight of a run built by hand, and mended: a builder starved in the pit of a stair dug out before
+  its stone had come, and one in a yard a metre wide under a wall it could drop down and not climb.
+- **A second round, on his answers** (2026-11-12, his words whole in the same handoff): the walls
+  behind a row extended as one ("they can meet and turn into each other, just take the difference
+  between the two"); no second shader program; "Hovels need to fit within the confines of the zones,
+  if they don't fit the housing deficit stands until the player designates more area"; "Don't let the
+  serfs search for a lot, just assign it to them by lottery, when the construction is complete"; and,
+  on top, "have serfs sleep on their side, when the campground is built have them pull or collect
+  straw for a bed, and can we add cloaks ... When they get assigned a home they can build a new straw
+  bed in their house, we will let the old one decay outside when we add decay later. I think that is
+  enough of this pass before I discuss the stockpile."
+- Built from that in five commits. The lots of the houses still to begin are laid out when housing is
+  zoned or a path laid and kept in the save; the hovel next in turn is never passed over; a house is
+  nobody's until it stands and is then drawn for among the living without one. A house begun beside
+  an earlier one makes the ground between them ready with its own: one terrace, one wall between two,
+  the walls behind them met (not where a tree stands between two lots). Asleep, a serf lies on its
+  side; the dead on their backs. Each makes a bed of two sheaves where it sleeps once the camp
+  stands, from the stockpile if it has straw to spare, else cut by its own hand, and another in its
+  hovel; `--no-beds` is the band as it was, and the seven older reference logs are run with it. Each
+  has a cloak: folded by its bed, worn in winter, over it asleep. A bed and a cloak change nothing but
+  what is seen. Colony blob 21 (18 to 20 refused). colony_check 509 -> 541.
+- Measured: the longest colony second back to 18 to 19 ms (31 with the search for a lot in it); the
+  click that zones about 1 ms; the camp's and the hamlet's frames what they were; on the hillside east
+  of the stake four hovels a side by hand, everyone at home at every midnight; above its path three of
+  the four on one terrace and the fourth apart, a tree between. A first-round fault found and mended:
+  beside a path aslant a stub of wall stood across half a stair's foot.
+- **A third round, on what he found trying the second** (2026-11-12, his words whole in the same
+  handoff): "it would be nice if the serfs found level ground and slept perpendicular to the fire,
+  serfs didn't create a bed when straw was in the stockpile, might have been reserved by the housing,
+  basic needs take priority, serfs would go long distances to fend for themselves to eat vegetables
+  when furit and berries were near by, it would be nice if player had a fill option for closed loop
+  paths, the pathing zone also just forms a stright line by elevation and it is in the air above the
+  ground instead of drawing along it, if a player starts to draw a habitation zone that extends the
+  length of a path and crosses over a path that changes direction a slice of the habitation zone
+  passes over the connecting road, that should be enough for this pass." and, a little after, "also
+  can we increase the work and travel speed of serfs by about 50%".
+- Built from that in four commits. By the fire each of the band chooses a place of its own once the
+  camp stands, across the way to the fire, level under all its length where there is such ground
+  within 5.5 m (else a block or two out of level, else the old ring), and makes its bed there; a bed
+  takes stored straw before a hovel does and comes before the band's paths. One that fends goes for
+  the nearest food. "Housing inside these paths" in the ground's menu takes all the free ground
+  inside a round of paths. A strip's ground is begun from beside its own path alone, so none of it
+  lies across the road off a path's end. A planned path and the Path tool's line are drawn block
+  column by block column on their ground. The band works and walks at a pace of 1.5 (`--pace 1` is
+  the band as it was: the seven older reference runs are held at it). Colony blob 22 (18 to 21
+  refused). colony_check 541 -> 573.
+- Measured: at the new pace the reference band holds 11.8 days of food at its most (5.6) and all six
+  live through the first winter (three did); nothing was retuned. With housing being built it fills
+  its one stockpile of 48 places by the thirty-seventh day: gatherers stand awake with what they
+  cannot store, and a hunter with a deer and nowhere to butcher it starved holding it, which is
+  mended (hungry, it puts the kill down). What a full stockpile should mean is the stockpile's, and
+  his to open; the eighth reference run has a second stockpile meanwhile. The fender's rule moved the
+  first winter of every run in which somebody fends: five reference logs were recorded again for it.
+  I could not make a serf go without a bed with straw stored, in runs of my own.
+- **A fourth round, on what he found trying the third** (2026-11-12, with a picture; whole in the
+  handoff): "a minor tweak with the house pathing and stepping as shown in the image, the stairs were
+  added when the pathway was pretty much already leavel witht he house path, serfs building spend a
+  lot of time walking around the house thatching, can we have them construct a ladder in the
+  stockpile, and use the ladder to thatch roofs, that would be cool, the other thing i noticed is
+  that rather than waiting for the cook to use the stockpile to cook food, the serfs were eating raw
+  directly from the stockpile preventing food from being cooked, can the cook reserve food in the
+  stockpile and only suprlus is availible to eat raw if no stew is present, we need to up the amount
+  of meat a single deer can provide, we are looking at 60lbs of field dressed meat from a deer that
+  should be enough to feed a camp for a couple of days when smoked or cured, we can talk abit about
+  the story now, the player is a minor noble tasked wtih improving the land by their lord, taxes on
+  production would come after a few years, so the lord provides a small workforce a minimum of
+  starting supplies so for now lets just add a cart with salt in it for curing, we can expand the
+  supplies later and work the story in as we get to the players role, but for now that way a single
+  deer can provide for the camp for a couple of days". He did not say he accepts the third round, and
+  took up none of its calls.
+- Built from that in five commits, each new system behind a switch that gives the band as it was. A
+  door's way is a stair of stone only where the path lies more than a block off the floor. The cook
+  keeps a pot's fill of what is stored, and only what is over it is eaten raw (`--no-cook-hold`).
+  Meat is counted in pounds, a doe's sixty being two days' food for six; the band comes with the
+  lord's cart, a thing in the world with 240 lb of salt in it; a hunter keeps a sackful in the
+  stockpile, and a deer is salted as it is butchered and kept whole, or a quarter of it with no salt
+  (`--no-curing`). A builder makes a ladder at the stockpile when its roof is next (felling for the
+  log if it must), stands it under the eave and thatches from it without walking, carries it round
+  for the other slope, and stores it after (`--no-ladders`). Colony blob 23 (18 to 22 refused).
+  colony_check 573 -> 610, pick_check 38 -> 41.
+- Measured (seed 1, the reference band): a first winter costs nothing now and nothing was retuned: 17
+  deer in 41 days where 33, eleven to seventeen days of food in hand where three to twelve, all six living; with no orders
+  given at all, where the band used to starve, all six live, never hungry at a midnight. Over six
+  days at the roofs a builder is 55 game minutes going to its work where it was 398, and none while
+  trimming where it was 310; in the stage 6 run the six hovels stand a day sooner. With the hold 363 berries are eaten
+  raw in 41 days where 637. **What a hungry band waits for on its first day is mostly the pot's
+  filling** (the cook does not stir until the pot is full or nothing more is to be fetched: three
+  hours on the reference band's first day), a stage 4 rule reported to him and not changed.
+- Of the story, his words are recorded (the framework's decisions) and only the cart is built.
+- **A fifth round, on what he found trying the fourth** (2026-11-13, with a picture; whole in the
+  handoff): "Some new things I found on my latest testing, people carrying items to the stockpile will
+  stop and eat instead of completing their task and then eating, this creates an oddity where
+  foresters carrying logs back to the stockpile have a log on their sholder while they are eating, I
+  am sure this can happen while carrying other things too. [Image #17] This screen shot shows dirt
+  having been removed, and the grass stays in the air. It also shows that othewise even ground was dug
+  out entirely becuase it had a couple of holes in it, instead of just filling the holes. It would be
+  nice if there was a way for serfs to fill in holes in the path when they are compacting the
+  ground." And a little after: "Also, I removed the cook from cooking, he started building a house,
+  the build was asigned to him, I then sent him back to cooking mid build and it didn't free up the
+  assignment for the build." He did not say he accepts the third or the fourth round.
+- Each reproduced first, then built in four commits. A load in a serf's arms is taken where it was
+  going before it eats (47 meals begun with one on the reference band in 41 days, now none); a
+  gatherer with no stew to be had still eats from its basket, since taking its food home first
+  starved the housing run's first day (his call). A hovel's lot is levelled as if its holes were
+  filled, and they are (on his kind of lot the ground is ready three hours sooner, and is not dug a
+  block down). A path the band lays fills the holes under it (`--no-path-holes`; colony blob 24, 18 to
+  23 refused). A builder takes up a house left further on than its own (the half-built one waited a
+  day; now under an hour). Grass left over a hole dug under it is mended (the dig takes it, and
+  levelling cuts what is left over a hole); what he saw stay in the air, on a couple of blocks where
+  grass had been gathered, was not found and is left at his word until he sees it again. A hollow is ground closed in by higher ground, at most four square metres. colony_check 610 -> 616; the eight
+  reference logs recorded again for the eating.
+
+## The lord's cart pulled into a stockpile, cloaks of cloth, and roofs cleared on the camera's ray (ACCEPTED 2026-11-13: on `main`; see docs/handoffs/Handoff_2026_11_13_cart_and_cloaks.md)
+- His words (whole in the handoff): "Two last things I want to work on before moving to the next stage, the cart, can they pull it into the closest stockpile zone? I also want to try something, an experiment, can we have the cloaks be dynamic cloth, that they wear at the start, then take off when they make their bed, and then draped over them when they sleep, if we can do it, it would be a very cool touch and would translate well when we get to other wearable items later in production." And of the grass that stayed in the air: "Just leave it for now": left.
+- Built: once there is a stockpile zone, one of the band pulls the cart to two empty places side by side in the zone nearest it and it stands there (`--no-cart-pull`; colony blob 25). Cloaks are cloth, drawn only: worn from the start, taken off when the bed is made, laid over their owners asleep (`--no-cloth`). colony_check 621.
+- His next message (whole in the handoff): "ok I guess it is time, and we should have planned for this and i forgot, semi-transparent roofs on the ray of the camera, It would be nice to have a tapering transparency with full transparency in the middle and semi-trasnparency along the edges wher the roof meets the walls". Built on the same branch: the roof of a house the camera's line passes through is cleared, open in the middle and half drawn over its walls (`Castle.Cutaway`, `--no-cutaway`; drawing and pointing only). pick_check 48. Looking into a hovel through it found a sleeper lying on its cloak: mended (the sheet sticks where it rests).
+- A fault he found the same day (his words whole in the handoff): "water surface stop rendering around the homesteak and some a little distance away ... I simply placed the homesteak, moved the camera around and the surface water no longer rendered near the homesteak." Reproduced (the camera 520 m off and back; a river 512 m from a working band's ground going dry, on `main`'s build too): the surface texture wraps every 512 m and the colony's kept ground shared its texels with far stacks. Mended on the same branch: a slot of the texture is its window stack's alone (`docs/systems/water.md`, "Drawing"). `--pan-back`.
+- His answer to the roofs and the cloth (whole in the handoff): "For the roof let's run it to the mouse and the camera, along with an option to have all roofs transparent ... What was the question about the cloth, it works great, it would be nice if the clipping was less, but it's workable. After those two things we can get to the salt and the stockpile." Built on the same branch: the pointer's ray clears a roof, the H key (`--all-roofs`) clears them all; a basket or a sack no longer comes through a worn cloak. pick_check 54. **The salt and the stockpile are his to open.**
+- His answers to the list of open questions (whole in the handoff): "Let's cut down the walls in-line with the camera too ... as far as the game is concerned the walls are still there to block light. The taper is adequate. We can have the H k toggle through, dynamic transparency, full trasnparency, or no transparency. Move the cart once for now, who pulls works great the way it is ... The cloth is fine ... So that is it for this first pass, then we will track down the cart issues, then the stockpile." Built on the same branch: a cleared house's walls on the camera's side are cleared with its roof (light untouched); H goes through three views. pick_check 59. Asked whether he accepts the branch: "ok commit we are at a good spot right now, then the stress test for the cart issues, and at last we can get to the stockpile". Merged into `main`. **Next, in his order: the cart issues (the herds' time with the pull), then the stockpile, his to open.**
+
+## The herds' searched-out ways, "the cart issues" (ACCEPTED 2026-11-14, on `main`; see docs/handoffs/Handoff_2026_11_13_herds_search.md)
+- His words: "then the stress test for the cart issues, and at last we can get to the stockpile".
+- Found: with the pull the stress runner's crowd took 22 s for 12 because a herd with no dry way out, frightened every three seconds by a forester left standing by it with nowhere to put its log, asked the walking map the same flight 721 times, 40,000 floors each. Kept now (a plan that ran out of budget is remembered by the ground it read): 13.3 s, the same state. Nothing anyone does is changed; three things that would are put to him (standing still frightening a herd; a cornered herd asked again; a full stockpile leaving serfs standing).
+- Then, at his word while it was being closed ("Let's change direction for the deer herd, instead of panic running them in different directions, lock them to the node and they run with the node, from the closest to the hunter in a chain reaction"): a herd's flight goes down it in a chain from the deer nearest the danger, a quarter of a second a link, the deer locked to the node; none bolts by itself. colony_check 623; the two reference logs with the herds fleeing together recorded again.
+- His answer to the finding's calls (2026-11-13, whole: "Ok, lets do a mix, a person standing still doesn't frighten a herd, and let them know that water blocks them, when we get to the stockpile mechanics we will reserve a portion of the stockpile for overflow"). Built on the same branch, a commit each: the walking map keeps pieces of ground for dry going and a herd's ways are refused where water blocks them (plans out of budget in the crowd's five starts 5, 0, 25, 502, 7: none now; every refusal of six runs searched for whole and borne out); one of the band who has not moved in a step frightens no herd (the crowd's herds frightened 13 to 24 times in twenty days where it was 612 to 4,462). path_check 69, colony_check 635; the two reference logs with the herds fleeing together recorded again, twice.
+- **Accepted 2026-11-14** (whole: "Well when we add the entire ecosystem we are going to have to seperate the deer from the stake and the entire map gets populated, keep that in mind. The rest of the conditons are acceptable keep them. When we do that we can solve the cornered herd problem by letting them travel farther, are we capable of realizing this? My testing otherwise shows acceptable results so I think we can merge clean-up and continue, if you concur."): `herds-search` fast-forwarded into `main`. The conditions put to him stand as built.
+- **For a later stage, his word in the same message: the deer apart from the stake, the whole map populated** ("keep that in mind"); the cornered herd is left to it. Not designed, not built: `docs/systems/deer.md`, "To come: the herds apart from the stake", has what leans on the stake today and what was counted. Asked whether it can be done: yes (the handoff has from what).
+- The sidetrack before the stockpile, how to get everything in view: built, accepted and merged (the entry "The far view" below).
+- **LIVE (2026-11-16): the stockpile, by his word ("Then the stockpile"), his to open.** Before it, the same day, a third round of the far view on his answer (branch `haze-horizon-boulders`, gated, not merged: `Handoff_2026_11_16_haze_horizon_boulders.md`); he did not answer the stockpile's questions with it. Nothing of it is built or designed. He has said one thing of it: a portion reserved for overflow. Four things asked of him and still open, each with a default he can take in a word (`Handoff_2026_11_16_far_view_haze_and_shadows.md`, "Next"): the defaults are offers, not leave to build on silence.
+
+## What the ground costs to keep (ACCEPTED 2026-11-14, on `main`: "I accept ground-memory"; see docs/handoffs/Handoff_2026_11_14_ground_memory.md)
+- His words: "the inhabitants don't care what texture the objects are only the player does, so let's find out what the 68kb is, 4.7 GB isn't going to be acceptable, so we need to be smart about this"; then "Sure build the compact summary ... we want to be comfortable on 8gb of ram, that means consuming 4gb is our ceiling, I propose we scale back boulders on mountainous terrain by about 80%, let's compensate with increasing boulders on open terrain by 30% ... Let's see if we can cut the burried skin down to 4kb a stack, and see what that buys us."
+- Counted over the whole map, what is kept of a stack for the simulation was 68 KB: the ground summary 32, fine bricks 28, grids 7. Built, storage only (the eight logs line for line, the stress states those of `main`): the summary kept small (3.7 KB), the fine bricks kept small (3.9 KB; the buried ground 0.9 where it was 8.0). A stack 15.5 KB; the whole map kept 992 MB where it was 4,355; the game at its default view 62 MB lighter (measured).
+- The generator's skin at 1 m was tried for his 4 KB and not taken (it changes what a reader below the skin is told).
+- Boulders: a fifth on the mountains, three in ten more on open land, by the generator's mask (9,935 -> 4,477 over the map). Generator 14; all eight logs recorded again. For the eye; nothing in memory.
+- **His ceiling: 4 GB for the game.** In the framework's decisions.
+- The whole map held for the simulation with only the mesh streamed was put to him as the other thing that could come next, beside the stockpile; he chose it (the next entry).
+
+## The whole map held (ACCEPTED 2026-11-15, on `main`: "let's merge what we have now, let's keep the whole-map, we paid for it"; see docs/handoffs/Handoff_2026_11_15_whole_map.md)
+- His words: "ok build it with the whole map solid we can do that now before the stockpile", after asking what it would cost to cover the world with one mesh ("far mountains need a texture, they don't need detail, but something has to be there").
+- Measured first: with every stack loaded the band's 41 days took 85 s for 5.5 (what was loaded had bounded the colony). Built: the colony reads its own ground and nothing beyond; what the player plans is read from the ground that is held; the game keeps every stack's blocks and streams the meshes alone (1.5 to 1.6 GB held where it was 0.55; the whole map in 12 s after the first frame); the streaming's two silent limits removed. The eight logs line for line, none recorded again; the stress states those of `main`.
+- The far land (the world as one coarse sheet past the view, a thinner haze): built, tried by him, and **off unless asked for** (`--far`): "far is ugly with the flat terrain and popping assets, the fog works better in that state."
+- Calls not spoken of, standing as built: the game's colony ground two stacks wider; a stockpile or the camp past the work radius widens the band's ground; released water runs as at a wide view whatever the view.
+- **Next, his word of 2026-11-15: "if we are going to rework rendering let's go all the way, let's figure out how to get everything in view ... Let's sidetrack, and try and solve this to the full extent that we can" (his list of techniques is whole in the handoff) "... consider them, and let's see if we cannot crack this."** On a branch of its own; measured before it is built; behind a switch.
+
+## The far view (ACCEPTED 2026-11-15, on `main`: "ok looking good, great performance ... Merge it, and on by default"; a second round on his answer built, gated and merged with it 2026-11-16; see docs/handoffs/Handoff_2026_11_15_far_view.md and Handoff_2026_11_16_far_view_haze_and_shadows.md)
+- His words: "if we are going to rework rendering let's go all the way, let's figure out how to get everything in view ... consider them, and let's see if we cannot crack this" (some twenty techniques; the handoff answers each).
+- Measured first (`lod_stats`): the whole world as its own blocks at 0.5 to 4 m, in rings, is 6 to 8 million quads beside the view's 4.7.
+- Built: `Castle.Lod` (a tile of the world reduced and meshed), drawn by the land's shader in rings about the focus to the map's edge, cross-faded by a fixed pattern, tiles fading in as they come, made again when edited; the haze from the view's edge to 3,600 m. `--no-lod` is `main`'s picture to the pixel.
+- Costs 0.0 to 0.5 ms a frame as a rule (1.06 at the lake), 62 MB of the quad buffer, whole in 6.6 s on 31 workers (47 s on three).
+- His calls: the haze; how far each level lasts; rings by the focus or the eye; no sun's shadows past the view; far water; grass ending at the view's edge; on by default and merged or not; the far land out or kept; what next of his list.
+- **His answer (2026-11-15), and the round built on it**: "the white dot dithering for the LOD rings" found to be holes and closed (108 pixels of sky in one view to none; a dark floor under the land for what is left); "Keep the shadows pst the view's edge" (two depth maps over the whole map, and what stands past the view cast into the view's own maps); "If we can do the same with the water mirror" (far water walks the picture as near water does); "a haze 1m or so the trees poke above ... an opaque boundary haze ... a 12m ring around the map ... fingers between the saddles and ridges" (a haze on the ground, its depth from the generator's map, thin at the focus and three quarters far off; the rim all haze over 12 m); "remove the old far land, but keep the functionality" (out of the game, its code compiled and checked). Costs +0.03 to +0.25 ms a frame at the twelve views. Of the three he left to me (a cheaper shader, rings by the eye, the tiles made with the map's holding) none built: the first measured (a quarter at best, not half), the second with the on-foot view, the third would make what he sees come later.
 
 ## After that pass, in John's order (2026-11-12; NOT DESIGNED, his to open)
 - "That we can do for this pass, then we will have an intermediate sleeping, beds, campfire to house transition. After that we will get to the stockpile, and how the player manages this."
 - So what the brief called 6b comes third: sleeping and beds first.
 
 ## Stage 6b: stockpile mechanics (NOT DESIGNED: asked of John; behind sleeping and beds by his word of 2026-11-12)
+- **John, 2026-11-13, of serfs left standing with a load when a stockpile is full: "when we get to the stockpile mechanics we will reserve a portion of the stockpile for overflow".** His, and the one thing of 6b that is: how much, for what kinds, and what a serf does when that too is full are still to ask.
 - The plan's line for stage 6 was: Habitation zone along paths, demand per homeless serf, hovel
   blueprints (village prototype + the procedural generation spec), builders from foresters building
   block by block from wood and straw, residency.

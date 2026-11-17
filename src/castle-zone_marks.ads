@@ -1,12 +1,14 @@
 with Castle.Colony;
 with Castle.Marks;
+with Castle.Math; use Castle.Math;
 
 --  Zones shown on the ground: each one's ground filled in, see-through,
 --  with a line round its edge, so a zone reads as the shape it has (along
 --  a path, round a tree, stopping at another zone) and not as a box.  Laid
 --  as Castle.Marks strips from the strips of block columns Castle.Colony
---  keeps a zone's ground as, every frame; nothing is kept here.  Main
---  thread only, after Castle.Marks.Begin_Frame.
+--  keeps a zone's ground as, every frame; nothing is kept here but the
+--  planned paths' ground between two readings of it.  Main thread only,
+--  after Castle.Marks.Begin_Frame.
 package Castle.Zone_Marks is
 
    type Style is record
@@ -34,8 +36,14 @@ package Castle.Zone_Marks is
 
    procedure Show_Paths (C : Castle.Marks.Colour := Path_Plan);
    --  Every stretch of path that is planned and not yet laid, as far as it
-   --  is still to lay: a strip as wide as the path, on the ground (it dims
-   --  with the daylight, as a zone does).
+   --  is still to lay: the block columns it will turn, each on its own
+   --  ground (it dims with the daylight, as a zone does).  What it shows is
+   --  kept from call to call and read from the colony again when what is
+   --  left to lay changes, and every half second or so besides.
+
+   procedure Show_Path_Line (From, To : Vec3; C : Castle.Marks.Colour);
+   --  A path as it is being drawn, From .. To: the block columns it would
+   --  turn, each on its own ground.
 
    procedure Show_Houses (C : Castle.Marks.Colour := House_Plan);
    --  Every house begun and not yet standing: the line its walls will

@@ -1,7 +1,7 @@
 # The interface
 
 - Packages: Castle.Font, UI, HUD, Input, Views, Pick, Rays, Settings
-- Check: ui_check (112 checks, under a second), pick_check (38 checks, under a second)
+- Check: ui_check (112 checks, under a second), pick_check (41 checks, under a second)
 - Saves: nothing in a game's save; the interface's scale in `saves/settings.txt`
 - Stage: phase A (Handoff_2026_11_07_ui.md); stage 5a, the scaffold (Handoff_2026_11_10_stage_5a_scaffold.md); the Skills tab, stage 5b
 
@@ -123,7 +123,25 @@ house, or else the block. The ray is the cursor's in the view from above and wil
 a reticle's on foot; whoever casts it walks it into the blocks first
 (`Castle.Rays.Walk`, the Amanatides-Woo walk the edit cursor always used,
 now a generic so a check's made-up world can be walked too) and hands that
-hit over.
+hit over. What stops it is one test both worlds share, `Castle.Rays.Stops`:
+solid blocks, foliage and bushes, but not a roof's thatch where a roof
+cleared on the camera's ray (`rendering.md`, "A roof cleared on the
+camera's ray") is drawn at less than half: through the open middle of a
+cleared roof the pointer finds what is inside (a sleeper, the floor: the
+house), and at its edge, drawn at half, the thatch. So the dig brush, too,
+reaches the floor through a cleared roof. **Pointing at a house opens its
+roof** (John, 2026-11-13: "let's run it to the mouse and the camera"): the
+house the pointer's ray passes through is cleared as the one on the
+camera's line is, and stays cleared while the pointer is on the interface
+or a menu is open. With the roof go the walls on the eye's side, and the
+pointer's ray goes through those too, on to what is inside (checked to
+the floor in `pick_check`; a sleeper picked through a wall was not tried
+in the game). The H key goes through three views (John, 2026-11-13:
+"dynamic transparency, full trasnparency, or no transparency"): houses
+open where the eye and the pointer are, every house open, none; each
+press says which in a note (`Castle.HUD.Say`). `--all-roofs` and
+`--no-cutaway` are the second and the third for a scripted run. `Castle.World_Blocks.Cast` is the
+pointer's alone: nothing the colony decides may use it.
 
 * A person or a deer the ray passes through, in front of the ground, comes
   first (the nearest of several), and never one behind a wall or a hill.
@@ -205,12 +223,64 @@ first (hide every panel with F4 and it all still works):
   on the ground (a person, a deer) or outlined (a zone, along the edge of
   its ground). Every zone is shown filled in, see-through, with a line
   round its edge (`Castle.Zone_Marks`), and the stockpile and camp tools
-  show the lot the next click would take, as it would be taken. A path
-  planned and not yet laid is a pale strip, as far as it is still to lay
-  (`Show_Paths`). The camp's sheet has a row for its floor while it is
+  show the lot the next click would take, as it would be taken. **The
+  housing tool is pulled, not cornered** (since 2026-11-12;
+  `habitation.md`, "What the player does"): a click beside a path, then
+  the strip is shown along that path as far as the cursor has been pulled
+  along it, and the second click takes it; its hint says "click beside a
+  path, then pull along it", and its note "housing zoned: room for 3
+  hovels", "housing extended: room for 4 hovels now" where it was combined
+  with housing it met, or "room for no hovel yet: the next in turn does
+  not fit on it (pull it further, or mark more elsewhere)". The number is
+  the lots laid out on that zone for hovels not yet begun, so a zone with
+  one hovel being built and "room for 2" holds three. What is shown each
+  frame is the strip's ground alone (`Plan_Housing (..., Count =>
+  False)`): the lots are laid out at the click, about a millisecond. The
+  zone's sheet has "Room for: 2 more hovels"; a hovel being built says
+  "For: whoever draws it when it stands"; a person's sheet has "Home: a
+  hovel of its own, drawn by lot" and "Bed: of straw, by the fire" (or
+  "in its hovel", or "none yet"). **"Housing inside these paths"** in the
+  ground's menu (wherever a path has been marked) takes all the ground
+  inside the round of paths the point lies in, at once and with no
+  preview (`Fill_Housing`; `habitation.md`): the note is the strip's, or
+  "no housing there: the paths round that ground do not close (or it is
+  more than 50 m from there to them)". A path
+  planned and not yet laid is shown as the block columns it will turn,
+  each on its own ground, as far as it is still to lay (`Show_Paths`:
+  read from the colony when what is left changes, and every thirty
+  frames besides), and the line being drawn with the Path tool the same
+  way (`Show_Path_Line`, `Castle.Colony.For_Path_Line`: piece by piece as
+  `Lay_Path` would record it). Until 2026-11-12 each was one strip from
+  end to end, straight in height from the ground at one end to the
+  ground at the other: over a hollow it hung in the air and through a
+  rise it was buried (John: "the pathing zone also just forms a stright
+  line by elevation and it is in the air above the ground instead of
+  drawing along it"). The camp's sheet has a row for its floor while it is
   being built ("Floor: 78 blocks of earth to dig off, 106 to fill", then
   "level"), and a stockpile's lists earth with the rest of what it holds;
-  earth in store is drawn as a heap of clods (`Castle.Props.Clod`).
+  earth in store is drawn as a heap of clods (`Castle.Props.Clod`). Once
+  its hearth stands the camp's sheet says what the cook keeps in the
+  stores for the next pot ("Kept for the pot: 57 vegetables, 30 berries":
+  `needs.md`, "What the cook keeps"; no row when nothing is).
+* **The lord's cart** can be pointed at (`Castle.Pick`: `A_Cart`, where
+  the ray lands on its bed or on the ground under it and a block's width
+  round it; it is outlined as a house's lot is) and its tooltip is its
+  sheet (`Castle.Views.Cart`): "Salt: 220 lb", "In the stores: 14 lb",
+  "Cures: 10 lb of meat to the pound", and once deer have been butchered
+  "Deer salted: 3 of 3" and, if any was lost, "Meat lost unsalted". A
+  right click on it opens the ground's menu: nothing can be done to it
+  yet. It is drawn by `Castle.Props.Put_Cart` (several looks of a few
+  boxes each, since one skin of 128 by 64 texels will not hold a cart's
+  boards: `Many_Boxes` now says so instead of writing past the skin), a
+  sack in it for every forty pounds of salt left; a sack to twenty pounds
+  in a stockpile's place, and one on the shoulder of whoever carries it.
+* **A ladder** is drawn against the eave of a house that has one standing
+  at it (`Castle.Colony.Ladder_At`, `Castle.Props.Put_Ladder`), over the
+  shoulder of whoever carries one, and stood against a pole in a stockpile's place; a
+  house's sheet has a row for it ("Ladder: against its eave", or "left
+  against its eave" once the house stands) and a stockpile's lists it ("a
+  ladder"). Its builder is drawn up on its rungs while it thatches
+  (`Castle.Colony.Shown_At`, `Castle.Serfs.Perch`).
 * **Esc** cancels what is on the go (the menu, the path line, the
   stockpile half drawn); with nothing to cancel it quits.
 * A left click on a person or a deer does nothing (it does not dig the

@@ -88,15 +88,31 @@ plans routes.
   submerging themselves in water". Someone walking within 15 m of a deer,
   a hunter stalking within 7 m, or an arrow loosed at the herd startles
   it, and the node flees about 30 m straight away from the danger, as
-  before. What the deer do is new (first rules and values of mine, his to
+  before. **One who stands still frightens no herd** (John, 2026-11-13:
+  "a person standing still doesn't frighten a herd"): however near and
+  for however long, the herd is not startled, and a herd in flight is not
+  turned. Who stands still is the colony's to say, each step, of each of
+  the band: one whose place on the ground has not moved in that step
+  (`Castle.Herds.Person.Still`, set in `Castle.Colony.Advance`), so one
+  at work on the spot (picking, felling, a hunter drawing its bow) stands
+  still, and one who stops walking is at once no danger. (Until then
+  anyone within 15 m frightened a herd, walking or not, again every three
+  seconds for as long as they stood there.) What the deer do is new (first rules and values of mine, his to
   tune; the numbers are at the top of `castle-herds.ads`):
-  1. A deer starts on a heading of its own for about 0.6 to 0.9 s
-     (`Startle_S`), between away from the danger and the way the herd is
-     going; then it runs with the herd, for its own place round the node,
-     as fast as it needs to keep that place and no faster than it can run
+  1. A deer runs with the node, locked to its own place round it, as
+     fast as it needs to keep that place and no faster than it can run
      (6 to 7.5 m/s; a fawn 5 to 6.5). Ahead of its place it runs on
      slower (`Flight_Slow`) and is caught up; it never runs back toward
-     the danger to find its place.
+     the danger to find its place. **The flight goes down the herd in a
+     chain from the deer nearest the danger** (John, 2026-11-13: "Let's
+     change direction for the deer herd, instead of panic running them in
+     different directions, lock them to the node and they run with the
+     node, from the closest to the hunter in a chain reaction"): that one
+     turns the way the node goes and sets off with it at once; each next
+     nearest stands, head up, and turns and sets off a quarter of a second
+     after the one before (`Chain_S`). (Until then a deer started on a
+     heading of its own for 0.6 to 0.9 s, between away from the danger and
+     the way the herd was going.)
   2. The node runs at 5 m/s (`Flee_Pace`; it was 4, and the deer outran
      it). A deer's flight is over when the node has stopped and it has
      come within 2.5 m of its place (or after 30 s, whatever happens).
@@ -106,8 +122,9 @@ plans routes.
      stopped is not startled within 3 s of the last time.
   4. At the edge of its range, the danger inside it, the node tries
      shorter flights (18 m, 10 m) and ways round past the danger before it
-     gives up; with nowhere at all to go, each deer bolts a second or two
-     by itself and comes back.
+     gives up; with nowhere at all to go, the herd stays with its node,
+     heads up: none bolts by itself (each did, a second or two, before his
+     words of 2026-11-13 above).
   5. A deer turns at no more than 2.5 rad/s (4.5 in flight), and the way
      it turned aside round something is the way it then faces, so it does
      not flick from heading to heading step by step. With no way on
@@ -124,6 +141,14 @@ plans routes.
      stands in and, calm, makes for the node until it is out. The node's
      ways are planned dry the same (`Castle.Nav.Plan`'s `Wade`), it never
      stops in water, and herds are placed on dry ground.
+  8. **Water blocks a herd, and it knows** (John, 2026-11-13: "let them
+     know that water blocks them"). A place the node cannot get to that
+     dry, on the ground within 76 m of the stake (`Dry_Reach_M`), is not
+     fled to or grazed to at all: the next direction is tried. (It was
+     made for as far as the water's edge, after a search of 40,000
+     floors, and deer stood in the shallows there.) The walking map
+     keeps pieces of ground for dry going for it (`routes.md`, "A herd
+     is told that water blocks it").
 * **The herds as they were** (`Castle.Herds.Set_Scatter`, `--deer-scatter`;
   saved): each deer bounding off on a heading of its own for 3 to 6 s and
   then trotting back to the node wherever it had got to, startled again
@@ -141,6 +166,56 @@ plans routes.
   | further than 15 m from its node | 3,942 s; furthest 146 m | 1 s; furthest 16 m |
   | walked in the 20 s after a panic | 28.0 m | 3.7 m |
   | heading turned over 120 degrees from one second to the next, on the move | 295 times | 32 times |
+
+  With the chain (2026-11-13; the same four days on the world and the
+  band as they are that day, so not to be read against the table above):
+  90 deer set off in a flight where 120 did; 5 deer-seconds on a wet floor
+  where there were 106; a deer further than 15 m from its node 2 s (4);
+  a heading turned over 120 degrees from one second to the next, on the
+  move, 107 times (135). In today's reference band's 41 days the two
+  hunters bring down 16 deer with 37 arrows (14 with 45). (With the two
+  rules of his answer the same day, standing still and water: below.)
+  `colony_check` watches a flight step by step: the five of a herd set off in steps 1, 6,
+  11, 16 and 21 (a quarter of a second apart), the nearest to the danger
+  first, and none takes a step toward it; penned in with the danger a
+  metre from the node, none moves. `tools/demo_herd_chain.sh` records one.
+
+  (Generator 14, 2026-11-14, the boulders thinned: the band's 41 days
+  take 15 deer with 38 arrows, the herds frightened 83 times, no plan out
+  of budget. The table below is of generator 13. The two demo scripts
+  were pointed at moments of the new world's days.)
+
+  With the two rules of his answer of 2026-11-13 ("a person standing
+  still doesn't frighten a herd, and let them know that water blocks
+  them"), each measured against the commit before it (seed 1; the
+  reference band with its standing orders, and the stress runner's crowd
+  of forty-eight):
+
+  | | the chain | and water blocks them | and one who stands still |
+  |---|---|---|---|
+  | the band's 41 days: deer brought down, arrows | 16, 37 | 15, 45 | 15, 36 |
+  | the herds frightened in them | not counted | 89 times | 82 |
+  | a herd's plans out of budget in them | 16 | none (37 refused) | none (54 refused) |
+  | the crowd's twenty days from five starts: the herds frightened | not counted | 1,487, 612, 4,462, 2,421, 729 times | 14, 16, 13, 18, 24 |
+  | plans out of budget in them | 5, 0, 25, 502, 7 | none | none |
+
+  All six of the band live in each. The crowd's herds were frightened
+  almost only by those left standing with nowhere to put a load (twenty
+  of the forty-eight from the second day). Sixteen days of tracks
+  (`--deer-track`), the chain against both rules: 189 deer set off in a
+  flight where 210 did; no deer-second on a wet floor where there were
+  8; in flight, a heading turned over 120 degrees in a second 23 times
+  where it was 56. Calm, it was 748 times where it was 373, and a deer
+  further than 15 m from its node 78 s where it was 21: partly by where
+  the herds were (70 % of their time north of the stake, on a hillside,
+  where it was 26 %: "Not there yet", below), and for the rest not
+  explained. `colony_check` has a herd on one bank of a
+  river with someone walking up behind it (the ways over refused, each
+  searched for whole and not there; the herd off along its own bank; no
+  deer over the river or in it), someone standing 9 m from a deer for
+  half a minute and then walking, and a gatherer of the band picking at
+  a bush 9 m from a penned herd (frightened as it walks up and away,
+  never in the 44 seconds it stands).
 
   Over the 41 days of the reference run the two hunters bring down 32
   deer with 74 arrows (30 with 73 as the herds were; measured again
@@ -177,8 +252,57 @@ trotting back afterwards), a pool across the way (no deer in it, calm or
 startled), a save taken in a flight, and a version 16 blob with a herd
 mid-bolt; its older herd section runs with the herds as they were.
 
+## To come: the herds apart from the stake
+
+John, 2026-11-14, accepting the herds' search: "Well when we add the entire ecosystem we are going to have to seperate the deer from the stake and the entire map gets populated, keep that in mind. The rest of the conditons are acceptable keep them. When we do that we can solve the cornered herd problem by letting them travel farther, are we capable of realizing this? My testing otherwise shows acceptable results so I think we can merge clean-up and continue, if you concur."
+
+Read as a direction for a later stage (the ecosystem), not a request:
+nothing is built, and the conditions that are the stake's are kept until
+then. **Nothing new should lean on the stake as a herd's centre.** What
+leans on it today (from the code):
+
+- `Castle.Herds.Stake_At`, set by `Found (Stake, Seed)` from the colony's
+  `Place_Stake` and `Load`, and saved in the herds' blob;
+- where herds are put: 30 to 55 m round it (`Place_Herds`);
+- `In_Range` (`Range_M` 70, `Near_Stake_M` 32): the target of every
+  flight and of every grazing move, and every step of every deer;
+- `Dry_Reach_M` 76: the ground a herd's ways are looked for on (added
+  2026-11-14, because that ground is loaded wherever the camera is;
+  `colony_check` holds it against the game's kept stacks);
+- the hunters: `Go_Hunt` takes only deer within `Range_M` of the stake;
+- the herds are stepped by `Castle.Colony.Advance`, reset with the
+  colony and saved inside its blob; eight herds and sixty-four deer at
+  most (`Max_Herds`, `Max_Deer`); two deer wander in to a thin herd
+  every three days, from nowhere;
+- a deer walks only the walking map, which has floors only where blocks
+  are loaded.
+
+What letting them travel farther would change, counted for his question
+(a scratch build, nothing committed; seed 1): of 485 startles in two
+runs (the band's 240 days, the crowd's 60) none found no way at all, 119
+fled straight away from the danger the full 30 m, and of 1,700
+directions turned down 1,594 were past the 70 m, 14 too near the stake,
+37 under water or with no floor, 55 out of reach dry. The cornered herd
+(a herd that found no way let be for a while: not built) is left to that
+stage, by his word.
+
 Not there yet: the tail's flag when alarmed, ears turning, deer lying down,
 deer dying of age. A herd keeps within 70 m of the stake, so one pressed
 against that edge can still be cornered (rule 4). Deer cross no water
 deeper than a quarter metre: a herd on one bank of a stream stays there
-unless there is a dry way round.
+unless there is a dry way round, and its ways are looked for only within
+76 m of the stake (rule 8). **Work on the spot is standing still**: a
+forester felling 5 m from a deer, axe going, frightens nobody (his to
+say whether noise should). **A deer comes as near as it likes to one who
+stands**: nothing keeps it off. **On steep ground a calm deer is held up
+by the ground**: in sixteen tracked days with the two rules of
+2026-11-13 the herds spent 70 % of their time on the hillside north of
+the reference stake (26 % before), where a calm deer on the move turns
+sharply more often than south of it (0.27 times a hundred seconds
+against 0.16 in the run before), and three times one stood pacing 15 to
+20 m behind its node for a quarter to half a minute before it found its
+way down. **Calm deer turn sharply twice as often in the run with the
+two rules, and where the herds were accounts for only part of that**:
+north of the stake the rate itself is 0.49 where it was 0.27. Neither
+rule touches a calm deer's stepping; why the rate rose, and why the
+herds moved north, are not found (not looked into further).

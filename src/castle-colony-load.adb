@@ -28,8 +28,8 @@ begin
    Reset;
    Ok := False;
    Version := Natural (Get (2));
-   if Version not in 1 .. Save_Version or else Version = 18 then
-      return;                       --  (18: housing's first layout, never on main: not read)
+   if Version not in 1 .. Save_Version or else Version in 18 .. 24 then
+      return;                       --  (18, 19: housing before its ground was walled: not read)
    end if;
    Tick_N := Natural (Get (4));
    Left_Over := Get_F;
@@ -572,8 +572,8 @@ begin
          Band (I).Site_Laid := 0;
       end loop;
    end if;
-   --  version 19: housing (a blob of before has no houses)
-   if Version >= 19 then
+   --  version 21: housing (a blob of before has no houses)
+   if Version >= 22 then
       House_Serial := Natural (Get (2));
       N_Houses := Natural (Get (1));
       if N_Houses > Max_Houses then
@@ -604,7 +604,19 @@ begin
             Hs.F.Pad := Get_I16;
             Hs.F.Door_Run := Natural (Get (1));
             Hs.F.Door_Row := Get_I16;
+            for U in Hs.F.Front'Range loop
+               Hs.F.Front (U) := Natural (Get (1));
+            end loop;
+            Hs.F.Reach_L := Natural (Get (1));
+            Hs.F.Reach_R := Natural (Get (1));
+            if Hs.F.Reach_L > Castle.Buildings.Max_Reach_B or else Hs.F.Reach_R > Castle.Buildings.Max_Reach_B then
+               raise Bad_Save;
+            end if;
+            Hs.Got (Stone) := Natural (Get (2));
+            Hs.Lying (Stone) := Natural (Get (2));
+            Hs.Stone_Left := Natural (Get (2));
             Hs.Owner := Natural (Get (1));
+            Hs.Bed := Get_B;
             Hs.Pad_Done := Get_B;
             Hs.Built := Get_B;
             Hs.Placed := Natural (Get (2));
@@ -623,13 +635,127 @@ begin
       end loop;
       for I in 1 .. N_Members loop
          Band (I).Site := Natural (Get (1));
-         Band (I).Site_Patch := Natural (Get (1));
-         if Band (I).Site > N_Houses then
+         Band (I).Site_Patch := Natural (Get (2));
+         if Band (I).Site > N_Houses or else Band (I).Site_Patch > Max_Site_Patches then
             raise Bad_Save;
          end if;
       end loop;
+      Pace_Now := Get_F;
+      if Pace_Now not in 0.1 .. 10.0 then
+         raise Bad_Save;
+      end if;
+      Beds_On := Get_B;
+      Bed_Sheaves := Natural (Get (2));
+      for I in 1 .. N_Members loop
+         Band (I).Bed := Get_B;
+         Band (I).Bed_At := Get_V;
+         Band (I).Bed_Has := Natural (Get (1));
+         Band (I).Placed := Get_B;
+         Band (I).Bed_Dir := Get_F;
+         Band (I).Bed_Lo := Integer (Get (2)) - 1;
+         Band (I).Bed_Hi := Integer (Get (2)) - 1;
+      end loop;
+      N_Lots := Natural (Get (1));
+      Lots_Are_Short := Get_B;
+      if N_Houses + N_Lots > Max_Houses then
+         raise Bad_Save;
+      end if;
+      for K in 1 .. N_Lots loop
+         declare
+            L : Lot_Rec renames Lots (K);
+            function Get_I16 return Integer is
+               V : constant Natural := Natural (Get (2));
+            begin
+               return (if V >= 32_768 then V - 65_536 else V);
+            end Get_I16;
+         begin
+            L.Zone := Natural (Get (2));
+            L.F := Castle.Buildings.Design (House_Seed (House_Serial + K));
+            L.F.Fx := Get_I16;
+            L.F.Fy := Get_I16;
+            case Get (1) is
+               when 0 => L.F.Vx := 1;  L.F.Vy := 0;  L.F.Ux := 0; L.F.Uy := 1;
+               when 1 => L.F.Vx := -1; L.F.Vy := 0;  L.F.Ux := 0; L.F.Uy := 1;
+               when 2 => L.F.Vx := 0;  L.F.Vy := 1;  L.F.Ux := 1; L.F.Uy := 0;
+               when 3 => L.F.Vx := 0;  L.F.Vy := -1; L.F.Ux := 1; L.F.Uy := 0;
+               when others => raise Bad_Save;
+            end case;
+            L.F.Pad := Get_I16;
+            L.F.Door_Run := Natural (Get (1));
+            L.F.Door_Row := Get_I16;
+            for U in L.F.Front'Range loop
+               L.F.Front (U) := Natural (Get (1));
+            end loop;
+            if L.Zone not in 1 .. N_Zones then
+               raise Bad_Save;
+            end if;
+         end;
+      end loop;
+      Hold_On := Get_B;                 --  (23: whether the cook keeps a pot's fill)
+      Curing_On := Get_B;               --  (curing, the lord's cart and its salt)
+      Cart_Set := Get_B;
+      Cart_Tried := Get_B;
+      Cart_P := Get_V;
+      Cart_X := Get_B;
+      Cart_Salt_N := Natural (Get (2));
+      N_Salted := Natural (Get (4));
+      N_Unsalted := Natural (Get (4));
+      N_Meat_Lost := Natural (Get (4));
+      for K in V23_Kinds loop
+         Demand (K) := Natural (Get (2));
+         Reserves (K) := Natural (Get (2));
+      end loop;
+      Ladders_On := Get_B;              --  (ladders)
+      N_Ladders := Natural (Get (2));
+      N_Ladders_Lost := Natural (Get (2));
+      for H in 1 .. N_Houses loop
+         Houses (H).Ladder := Natural (Get (1));
+         Houses (H).Ladder_P := Get_V;
+         Houses (H).Ladder_Fells := Natural (Get (1));
+         if Houses (H).Ladder > 4 then
+            raise Bad_Save;
+         end if;
+      end loop;
+      for I in 1 .. N_Members loop
+         Band (I).Ladder_Of := Natural (Get (1));
+         if Band (I).Ladder_Of > N_Houses then
+            raise Bad_Save;
+         end if;
+      end loop;
+      Holes_On := Get_B;                --  (24: a hole under a path filled as it is laid)
+      Pull_On := Get_B;                 --  (25: the lord's cart pulled into a stockpile)
+      Cart_Turn := Get_F;
+      Cart_Towed := Get_B;
+      Cart_By := Natural (Get (1));
+      Cart_Bound := Get_B;
+      Goal_P := Get_V;
+      Goal_Turn := Get_F;
+      Cart_From := Get_V;
+      if Cart_By > N_Members or else (Cart_Towed and then Cart_By = 0) then
+         raise Bad_Save;
+      end if;
    else
-      --  (a blob of before housing: nobody is building a house)
+      --  (a blob of before housing: nobody is building a house; beds are
+      --  made from now on, as a colony founded now makes them)
+      N_Lots := 0;
+      Lots_Are_Short := False;
+      Pace_Now := 1.0;                  --  (and it works and walks as it did)
+      Hold_On := False;                 --  (and its cook keeps nothing back, as none did)
+      Curing_On := False;               --  (no cart, and its meat in joints)
+      Ladders_On := False;              --  (and its roofs thatched from the ground)
+      Holes_On := False;                --  (and its paths laid down into holes)
+      Pull_On := False;                 --  (and the cart, had it one, left where it stood)
+      Cart_Towed := False;
+      Cart_Bound := False;
+      Cart_By := 0;
+      Cart_Tried := True;
+      Beds_On := True;
+      Bed_Sheaves := 0;
+      for I in 1 .. N_Members loop
+         Band (I).Bed := False;
+         Band (I).Bed_Has := 0;
+         Band (I).Placed := False;
+      end loop;
       for I in 1 .. N_Members loop
          Band (I).Site := 0;
          Band (I).Site_Patch := 0;

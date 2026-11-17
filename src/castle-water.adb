@@ -1,4 +1,5 @@
 with Ada.Containers.Ordered_Sets;
+with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 with Castle.Blocks; use Castle.Blocks;
 
@@ -1037,6 +1038,151 @@ package body Castle.Water is
          end loop;
       end loop;
    end Summarize;
+
+   ---------------------------------------------------------- the summary kept small
+
+   use type Interfaces.Integer_16;
+   use type Interfaces.Integer_32;
+   use type Interfaces.Unsigned_8;
+   use type Interfaces.Unsigned_32;
+
+   function Is_Plain (C : Short_Column) return Boolean is
+     (C.N = 1 and then Integer (C.S (1).Ceil) = Height_B and then C.S (1).Water = 0 and then C.S (1).Floor >= 0
+      and then not C.Flowing and then C.Rest = 0);
+
+   --  Words a column that is not plain takes in the pool.
+   function Words_Of (C : Short_Column) return Natural is (3 + 3 * Natural (C.N));
+
+   function Low (V : Interfaces.Integer_32) return Interfaces.Integer_16 is
+      function To_I16 is new Ada.Unchecked_Conversion (Interfaces.Unsigned_16, Interfaces.Integer_16);
+      function To_U32 is new Ada.Unchecked_Conversion (Interfaces.Integer_32, Interfaces.Unsigned_32);
+   begin
+      return To_I16 (Interfaces.Unsigned_16 (To_U32 (V) and 16#FFFF#));
+   end Low;
+
+   function High (V : Interfaces.Integer_32) return Interfaces.Integer_16 is
+      function To_I16 is new Ada.Unchecked_Conversion (Interfaces.Unsigned_16, Interfaces.Integer_16);
+      function To_U32 is new Ada.Unchecked_Conversion (Interfaces.Integer_32, Interfaces.Unsigned_32);
+   begin
+      return To_I16 (Interfaces.Unsigned_16 (Interfaces.Shift_Right (To_U32 (V), 16)));
+   end High;
+
+   function Join (Lo, Hi : Interfaces.Integer_16) return Interfaces.Integer_32 is
+      function To_U16 is new Ada.Unchecked_Conversion (Interfaces.Integer_16, Interfaces.Unsigned_16);
+      function To_I32 is new Ada.Unchecked_Conversion (Interfaces.Unsigned_32, Interfaces.Integer_32);
+   begin
+      return To_I32 (Interfaces.Shift_Left (Interfaces.Unsigned_32 (To_U16 (Hi)), 16)
+                     or Interfaces.Unsigned_32 (To_U16 (Lo)));
+   end Join;
+
+   procedure Write (Pool : in out Word_Array; At_W : Positive; C : Short_Column) is
+      W : Positive := At_W;
+   begin
+      Pool (W) := Interfaces.Integer_16 (C.N) + (if C.Flowing then 256 else 0);
+      Pool (W + 1) := Low (C.Rest);
+      Pool (W + 2) := High (C.Rest);
+      W := W + 3;
+      for I in 1 .. Natural (C.N) loop
+         Pool (W) := C.S (I).Floor;
+         Pool (W + 1) := C.S (I).Ceil;
+         Pool (W + 2) := C.S (I).Water;
+         W := W + 3;
+      end loop;
+   end Write;
+
+   function Shrink (S : Ground_Summary) return Small_Access is
+      Words : Natural := 0;
+      R     : Small_Access;
+      Next  : Positive := 1;
+   begin
+      for X in S'Range (1) loop
+         for Y in S'Range (2) loop
+            if not Is_Plain (S (X, Y)) then
+               Words := Words + Words_Of (S (X, Y));
+            end if;
+         end loop;
+      end loop;
+      R := new Small_Summary (Words);
+      for X in S'Range (1) loop
+         for Y in S'Range (2) loop
+            if Is_Plain (S (X, Y)) then
+               R.Place (X, Y) := S (X, Y).S (1).Floor;
+            else
+               R.Place (X, Y) := -Interfaces.Integer_16 (Next);
+               Write (R.Pool, Next, S (X, Y));
+               Next := Next + Words_Of (S (X, Y));
+            end if;
+         end loop;
+      end loop;
+      return R;
+   end Shrink;
+
+   function Column_Of (S : Small_Summary; X, Y : Integer) return Short_Column is
+      P : constant Interfaces.Integer_16 := S.Place (X, Y);
+      C : Short_Column;
+   begin
+      if P >= 0 then
+         C.N := 1;
+         C.S (1) := (Floor => P, Ceil => Interfaces.Integer_16 (Height_B), Water => 0);
+         return C;
+      end if;
+      declare
+         W : Positive := Positive (-Integer (P));
+      begin
+         C.N := Interfaces.Unsigned_8 (S.Pool (W) mod 256);
+         C.Flowing := S.Pool (W) >= 256;
+         C.Rest := Join (S.Pool (W + 1), S.Pool (W + 2));
+         W := W + 3;
+         for I in 1 .. Natural (C.N) loop
+            C.S (I) := (Floor => S.Pool (W), Ceil => S.Pool (W + 1), Water => S.Pool (W + 2));
+            W := W + 3;
+         end loop;
+      end;
+      return C;
+   end Column_Of;
+
+   procedure Expand (S : Small_Summary; Into : out Ground_Summary) is
+   begin
+      for X in Into'Range (1) loop
+         for Y in Into'Range (2) loop
+            Into (X, Y) := Column_Of (S, X, Y);
+         end loop;
+      end loop;
+   end Expand;
+
+   procedure Free_Small is new Ada.Unchecked_Deallocation (Small_Summary, Small_Access);
+   procedure Free (S : in out Small_Access) is
+   begin
+      if S /= null then
+         Free_Small (S);
+      end if;
+   end Free;
+
+   procedure Set_Column (S : in out Small_Access; X, Y : Integer; C : Short_Column; Repacked : out Boolean) is
+      P : constant Interfaces.Integer_16 := S.Place (X, Y);
+   begin
+      Repacked := False;
+      if Is_Plain (C) and then P >= 0 then
+         S.Place (X, Y) := C.S (1).Floor;                 --  plain still: its floor
+      elsif not Is_Plain (C) and then P < 0
+        and then Natural (S.Pool (Positive (-Integer (P))) mod 256) = Natural (C.N)
+      then
+         Write (S.Pool, Positive (-Integer (P)), C);      --  as many stretches as it had: over its own words
+      else
+         declare
+            Full : Ground_Summary;
+            Was  : Small_Access := S;
+         begin
+            Expand (S.all, Full);
+            Full (X, Y) := C;
+            S := Shrink (Full);
+            Free (Was);
+            Repacked := True;
+         end;
+      end if;
+   end Set_Column;
+
+   function Bytes_Of (S : Small_Summary) return Natural is (S'Size / 8);
 
    procedure Free_Summary is new Ada.Unchecked_Deallocation (Ground_Summary, Summary_Access);
    procedure Free (S : in out Summary_Access) is

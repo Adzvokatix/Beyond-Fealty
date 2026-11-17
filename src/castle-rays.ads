@@ -16,6 +16,11 @@ package Castle.Rays is
    function Pickable (M : Material) return Boolean;
    --  What stops a ray: solid blocks, foliage and bushes; grass, grain and
    --  water let it through.
+   function Stops (M : Material; X, Y, Z : Integer) return Boolean;
+   --  Pickable, but for a roof's thatch where a cleared roof is drawn at
+   --  less than half, and for whatever stands in a cleared wall's place
+   --  (Castle.Cutaway): the pointer goes on through what is not seen.  The
+   --  block (X, Y, Z) is M.
 
    generic
       with function Stops (X, Y, Z : Integer) return Boolean;

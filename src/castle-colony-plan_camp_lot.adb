@@ -45,6 +45,17 @@ begin
          return abs (Px * Ex + Py * Ey - Fa) < Half_M and then abs (Py * Ex - Px * Ey - Fb) < Half_M;
       end Inside;
    begin
+      --  not over the lord's cart
+      if Cart_Set then
+         for X in X0 .. X1 loop
+            for Y in Y0 .. Y1 loop
+               if Inside (X, Y) and then Cart_On_Block (X, Y, Margin => 2) then
+                  Refused_For := Over_Cart;
+                  return;
+               end if;
+            end loop;
+         end loop;
+      end if;
       --  near level, nothing on it but grass and grain
       Fall_Cm := 0;
       for X in X0 .. X1 loop

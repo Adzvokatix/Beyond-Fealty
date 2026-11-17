@@ -138,6 +138,35 @@ package Castle.Water is
    function To_Column (S : Short_Column) return Column;
    function To_Short (C : Column) return Short_Column;
    procedure Summarize (Work : Stack_Work; S : out Ground_Summary);
+
+   --  A ground summary kept small, nothing lost (2026-11-14; John, of what
+   --  is kept of a stack for the simulation: "Sure build the compact
+   --  summary").  Counted over the whole map, 89 block columns in a hundred
+   --  are plain: one stretch, open to the sky, dry and not source water,
+   --  which their floor's row says whole.  Each column has a place, 16 bits:
+   --  a plain column's is its floor; any other's is where its record
+   --  begins in a pool of 16-bit words (a word of how many stretches and
+   --  whether it flows, two of its rest level, three a stretch).  3.7 KB a
+   --  stack on average where the summary was 32.
+   --
+   --  It is read a column at a time (Column_Of) and written the same
+   --  (Set_Column): in place where a plain column stays plain or another
+   --  keeps its number of stretches, and by packing the stack's summary
+   --  again where not (Repacked).
+   type Place_Grid is array (0 .. 31, 0 .. 31) of Interfaces.Integer_16;
+   type Word_Array is array (Positive range <>) of Interfaces.Integer_16;
+   type Small_Summary (Words : Natural) is record
+      Place : Place_Grid;
+      Pool  : Word_Array (1 .. Words);
+   end record;
+   type Small_Access is access Small_Summary;
+   function Is_Plain (C : Short_Column) return Boolean;
+   function Shrink (S : Ground_Summary) return Small_Access;
+   procedure Expand (S : Small_Summary; Into : out Ground_Summary);
+   function Column_Of (S : Small_Summary; X, Y : Integer) return Short_Column;
+   procedure Set_Column (S : in out Small_Access; X, Y : Integer; C : Short_Column; Repacked : out Boolean);
+   function Bytes_Of (S : Small_Summary) return Natural;   --  what it takes as it is allocated
+   procedure Free (S : in out Small_Access);
    procedure Free (S : in out Summary_Access);
 
    --  The stretches of rows Bottom .. Top of a column, highest first (rows

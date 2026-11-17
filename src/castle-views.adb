@@ -96,6 +96,7 @@ package body Castle.Views is
          when Carcass => "a deer",
          when Sticks  => "an armful of sticks",
          when Hide    => (if N = 1 then "a hide" else Img (N) & " hides"),
+         when Ladder  => (if N = 1 then "a ladder" else Img (N) & " ladders"),
          when others  => Img (N) & " " & Name (K));
 
    --  "30 berries, a log": the kinds there is any of.
@@ -154,9 +155,13 @@ package body Castle.Views is
          Add (S, "Trade", "Builder, at " & House_Name (V.Site, I));
       end if;
       if House_Count > 0 and then not V.Dead then
-         Add (S, "Home", (if V.Housed then "a hovel of its own" elsif V.Home > 0 then "a hovel, being built"
-                          else "none: it sleeps by the fire"),
+         Add (S, "Home", (if V.Housed then "a hovel of its own, drawn by lot" else "none yet: it sleeps by the fire"),
               Shade => (if V.Housed then Plain else Dim));
+      end if;
+      if Beds and then not V.Dead and then (V.Housed or else Has_Camp) then
+         Add (S, "Bed", (if V.Has_Bed then (if V.Housed then "of straw, in its hovel" else "of straw, by the fire")
+                         elsif V.Housed then "none yet: it sleeps on its floor" else "none yet: it sleeps on the ground"),
+              Shade => (if V.Has_Bed then Plain else Dim));
       end if;
       if V.Cold then
          Add (S, "Cold", "no fire burning near", Shade => Bad);
@@ -174,6 +179,35 @@ package body Castle.Views is
    end Person;
 
    ------------------------------------------------------------------ a zone
+
+   function Cart return Sheet is
+      C : constant Cart_View := Castle.Colony.Cart;
+      S : Sheet;
+   begin
+      S.Title := To_Line ("The lord's cart");
+      S.Note := To_Line ("what the band was sent out with");
+      if not C.Here then
+         return S;
+      end if;
+      Add (S, "Salt", (if C.Salt = 0 then "none left" else Img (C.Salt) & " lb"),
+           Shade => (if C.Salt = 0 then Bad else Plain));
+      Add (S, "In the stores", (if Stored (Salt) = 0 then "none" else Img (Stored (Salt)) & " lb"),
+           Shade => (if Stored (Salt) = 0 then Dim else Plain));
+      Add (S, "Cures", Img (Integer'(Lb_Per_Salt)) & " lb of meat to the pound", Shade => Dim);
+      if Cart_Pull then
+         Add (S, "Stands", (if C.Towed then "pulled to a stockpile by " & Name_Of (C.By)
+                            elsif Cart_In_Stockpile then "in a stockpile"
+                            else "where it was left; to be pulled into a stockpile"),
+              Shade => (if C.Towed or else Cart_In_Stockpile then Plain else Dim));
+      end if;
+      if Deer_Salted + Deer_Unsalted > 0 then
+         Add (S, "Deer salted", Img (Deer_Salted) & " of " & Img (Deer_Salted + Deer_Unsalted));
+      end if;
+      if Meat_Lost > 0 then
+         Add (S, "Meat lost unsalted", Img (Meat_Lost) & " lb", Shade => Bad);
+      end if;
+      return S;
+   end Cart;
 
    function Zone (Z : Positive) return Sheet is
       V : constant Zone_View := Zone_At (Z);
@@ -231,6 +265,24 @@ package body Castle.Views is
                        & (if C.Stirring then ", cooking" elsif C.In_Pot > 0 then ", " & Img (C.In_Pot) & " in, not cooked"
                           else ""),
                        Shade => (if C.Stew = 0 then Dim else Plain));
+                  --  what the cook keeps in the stores for the next pot (nobody eats it raw)
+                  if Cook_Holds then
+                     declare
+                        function Kept (At_K : Positive) return String is
+                           Rest : constant String := (if At_K = Greens_Order'Last then "" else Kept (At_K + 1));
+                           K    : constant Item_Kind := Greens_Order (At_K);
+                        begin
+                           if Cook_Held (K) = 0 then
+                              return Rest;
+                           end if;
+                           return Img (Cook_Held (K)) & " " & Name (K) & (if Rest = "" then "" else ", " & Rest);
+                        end Kept;
+                     begin
+                        if Kept (Greens_Order'First) /= "" then
+                           Add (S, "Kept for the pot", Kept (Greens_Order'First));
+                        end if;
+                     end;
+                  end if;
                end if;
                Add (S, "Seats", Img (C.Seats) & " of " & Img (Integer'(Seat_Logs)) & " laid");
                if not C.Built then                --  what its hearth still waits for
@@ -301,6 +353,10 @@ package body Castle.Views is
                     Shade => (if V.Homes = 0 then Dim else Plain));
                Add (S, "Without a home", (if Homeless = 0 then "nobody" else Img (Homeless) & " of the band"),
                     Shade => (if Homeless = 0 then Good else Plain));
+               Add (S, "Room for",
+                    (if V.Lots = 0 then "no more hovels" elsif V.Lots = 1 then "1 more hovel"
+                     else Img (V.Lots) & " more hovels"),
+                    Shade => (if V.Lots = 0 then Dim else Plain));
                for H in 1 .. House_Count loop        --  those being built, each on a line
                   declare
                      Hv : constant House_View := House_At (H);
@@ -310,11 +366,13 @@ package body Castle.Views is
                              (case Hv.Phase is
                                  when Ground => "the ground", when Flooring => "the floor",
                                  when Framing => "the frame",
-                                 when Walling => "the walls", when Roofing | Standing => "the roof")
+                                 when Walling => "the walls", when Roofing => "the roof",
+                                 when Trimming | Standing => "the roof's trimming")
                              & (if Hv.Blocks > 0 then ", " & Percent (Float (Hv.Placed) / Float (Hv.Blocks)) else "")
                              & (case Hv.Waits is
                                    when Not_Waiting => "", when For_A_Builder => "; no builder",
                                    when For_Wood => "; waits for wood", when For_Straw => "; waits for straw",
+                                   when For_Stone => "; waits for stone",
                                    when For_A_Way => "; no way to it"),
                              Shade => (if Hv.Waits = Not_Waiting then Plain else Bad));
                      end if;
@@ -352,17 +410,22 @@ package body Castle.Views is
       S.Title := To_Line (Capital (House_Name (H)));
       S.Note := To_Line ((if V.Phase = Standing then "a hovel of timber, daub and thatch" else "a hovel, being built"));
       Add (S, (if V.Phase = Standing then "Lives here" else "For"),
-           (if V.Owner in 1 .. Members then Name_Of (V.Owner) else "nobody yet"),
+           (if V.Owner in 1 .. Members then Name_Of (V.Owner)
+            elsif V.Phase = Standing then "nobody" else "whoever draws it when it stands"),
            Shade => (if V.Owner = 0 then Dim else Plain));
       if V.Phase /= Standing then
          Add (S, "Work",
               (case V.Phase is
                   when Ground => "the ground", when Flooring => "the floor", when Framing => "the frame",
-                  when Walling => "the walls", when Roofing | Standing => "the roof"),
+                  when Walling => "the walls", when Roofing => "the roof",
+                                 when Trimming | Standing => "the roof's trimming"),
               Bar => (if V.Blocks > 0 then Float (V.Placed) / Float (V.Blocks) else 0.0));
          Add (S, "Builder",
               (if V.Builder in 1 .. Members then Name_Of (V.Builder) else "none: builders come from the foresters"),
               Shade => (if V.Builder = 0 then Bad else Plain));
+         if V.Takes (Stone) > 0 then
+            Add (S, "Stone", Img (V.Got (Stone)) & " of " & Img (V.Takes (Stone)) & " stones");
+         end if;
          Add (S, "Wood", Img (V.Got (Wood)) & " of " & Img (V.Takes (Wood)) & " logs");
          Add (S, "Straw", Img (V.Got (Straw)) & " of " & Img (V.Takes (Straw)) & " sheaves");
          if V.Waits /= Not_Waiting then
@@ -370,9 +433,17 @@ package body Castle.Views is
                  (case V.Waits is
                      when For_A_Builder => "a builder", when For_Wood => "wood in the stores",
                      when For_Straw => "straw in the stores", when For_A_Way => "a way to it",
+                     when For_Stone => "stone in the stores",
                      when Not_Waiting => ""),
                  Shade => Bad);
          end if;
+      end if;
+      if Ladder_At (H).Standing then          --  (a ladder against an eave: its roof being thatched, or left there)
+         Add (S, "Ladder",
+              (if V.Phase = Standing then "left against its " else "against its ")
+              & (case Ladder_At (H).Side is when 1 => "front", when 2 => "back", when 3 => "left", when others => "right")
+              & " eave",
+              Shade => (if V.Phase = Standing then Dim else Plain));
       end if;
       return S;
    end House;

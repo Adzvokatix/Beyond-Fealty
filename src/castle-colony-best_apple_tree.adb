@@ -14,7 +14,7 @@ begin
         and then Flat_Dist (Tree_Base (K), Stake_At) <= Work_Radius_M
       then
          declare
-            S : constant Float := Flat_Dist (M.Pos, Tree_Base (K)) + 0.5 * Flat_Dist (Stake_At, Tree_Base (K));
+            S : constant Float := Flat_Dist (M.Pos, Tree_Base (K)) + Stake_Weight (M) * Flat_Dist (Stake_At, Tree_Base (K));
          begin
             if S < Best_S then
                Best_S := S;

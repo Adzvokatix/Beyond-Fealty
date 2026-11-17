@@ -222,7 +222,7 @@ function Think_Build (I : Positive) return Boolean is
       return False;                          --  what it has in its hands first
    end if;
    if M.Use_For in For_Ring | For_Frame | For_Floor
-     or else (M.Use_For not in For_Store | For_House and then M.Job /= Cook)
+     or else (M.Use_For not in For_Store | For_House | For_Bed and then M.Job /= Cook)
    then
       M.Use_For := For_Store;                --  an errand that came to nothing
    end if;
@@ -290,6 +290,11 @@ function Think_Build (I : Positive) return Boolean is
      and then Seats_Laid + Build_Coming (For_Seat) < Seat_Logs
      and then Free_Stock (Wood) > 0 and then Go_Take (I, Wood, 1, For_Seat)
    then
+      return True;
+   end if;
+   --  the lord's cart into a stockpile (John, 2026-11-13: "the cart, can they pull it into the closest
+   --  stockpile zone?")
+   if Place and then Go_Tow (I) then
       return True;
    end if;
    --  then the paths the player has planned

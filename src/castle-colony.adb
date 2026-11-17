@@ -2,6 +2,7 @@ with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 with Ada.Unchecked_Conversion;
 with Ada.Unchecked_Deallocation;
 with Ada.Containers.Hashed_Maps;
+with Ada.Containers.Generic_Array_Sort;
 with Castle.Blocks; use Castle.Blocks;
 with Castle.Buildings;
 with Castle.Climate;
@@ -40,6 +41,7 @@ package body Castle.Colony is
 
    function Mat (Bx, By, Bz : Integer) return Material is (Read_Src (Bx, By, Bz).Mat);
 
+
    function Flat_Dist (A, B : Vec3) return Float is (Sqrt ((A.X - B.X) ** 2 + (A.Y - B.Y) ** 2));
    type Integer_Pair is array (1 .. 2) of Integer;
 
@@ -51,7 +53,108 @@ package body Castle.Colony is
 
    Stake_Set : Boolean := False;
    Stake_At  : Vec3 := (0.0, 0.0, 0.0);
+
+   Own_R : Natural := Natural'Last;   --  the colony's own ground, in stacks round the stake's (Set_Ground_Stacks)
+
+   procedure Set_Ground_Stacks (N : Natural) is
+   begin
+      Own_R := N;
+   end Set_Ground_Stacks;
+
+   function Ground_Stacks return Natural is (Own_R);
+
+   --  Stack (CX, CY) is of the colony's own ground (the spec, Set_Ground_Stacks).
+   function On_Own (CX, CY : Integer) return Boolean is
+     (Own_R = Natural'Last or else not Stake_Set
+      or else (abs (CX - Integer (Float'Floor (Stake_At.X / 8.0))) <= Own_R
+               and then abs (CY - Integer (Float'Floor (Stake_At.Y / 8.0))) <= Own_R
+               and then (CX - Integer (Float'Floor (Stake_At.X / 8.0))) ** 2
+                        + (CY - Integer (Float'Floor (Stake_At.Y / 8.0))) ** 2 <= Own_R ** 2));
+
+   --  The ground version of a stack as the band may know it: nothing of
+   --  what is not its own ground.  (The one way the band's own doing asks
+   --  whether a stack is in.  What the player plans is read from the ground
+   --  that is held, Version_Src itself: three places, each says so.)
+   function Own_V (CX, CY : Integer) return Natural is (if On_Own (CX, CY) then Version_Src (CX, CY) else 0);
+
+   --  Where the colony's routes may go: its own ground.
+   function Own_Region return Castle.Nav.Region is
+     (if Own_R = Natural'Last or else Own_R = 0 or else not Stake_Set then Castle.Nav.Everywhere
+      else Castle.Nav.Within_Stacks (Integer (Float'Floor (Stake_At.X / 8.0)), Integer (Float'Floor (Stake_At.Y / 8.0)),
+                                     Own_R));
    Band_Seed : U64 := 1;
+
+   --  The lord's cart, salt, and meat by the pound (the spec, "The lord's
+   --  cart"; off: the band as it was before any of it).
+   Curing_On   : Boolean := True;
+   Cart_Set    : Boolean := False;            --  it stands
+   Cart_Tried  : Boolean := False;            --  a place has been looked for (once, at the first step with a stake)
+   Cart_P      : Vec3 := (0.0, 0.0, 0.0);     --  the middle of it, on its ground
+   Cart_X      : Boolean := True;             --  it lies along X
+   Cart_Salt_N : Natural := Cart_Salt_Lb;     --  pounds of salt in it
+   --  Pulled into a stockpile (John, 2026-11-13: "the cart, can they pull
+   --  it into the closest stockpile zone?"; the spec, "The lord's cart").
+   --  The cart is in one place at every moment: standing (Cart_Set: its bed
+   --  in the world) or in tow (Cart_Towed: no bed, drawn behind its puller).
+   Pull_On     : Boolean := True;             --  the band pulls it into a stockpile (off: it stays where it stood)
+   Cart_Turn   : Float := 0.0;                --  the way its shafts point (radians; standing, a quarter of a turn's)
+   Cart_Towed  : Boolean := False;            --  in tow
+   Cart_By     : Natural := 0;                --  who pulls it, or is going to take up its shafts
+   Cart_Bound  : Boolean := False;            --  a place in a stockpile is held for it
+   Goal_P      : Vec3 := (0.0, 0.0, 0.0);     --  where it is to stand there, the middle of its bed on its ground,
+   Goal_Turn   : Float := 0.0;                --  and the way its shafts are to point
+   Cart_From   : Vec3 := (0.0, 0.0, 0.0);     --  where it was lifted from (where it goes back to, with nowhere else)
+   N_Salted, N_Unsalted, N_Meat_Lost : Natural := 0;
+
+   function Carry_Limit (K : Item_Kind) return Natural is
+     (if K = Meat and then Curing_On then Meat_Load_Lb else Carry_Table (K));
+   function Cell_Limit (K : Item_Kind) return Natural is
+     (if K = Meat and then Curing_On then Meat_Cell_Lb else Cell_Table (K));
+   function Stew_Food (K : Item_Kind) return Natural is
+     (if K = Meat and then Curing_On then Pound_Stew else Stew_Table (K));
+   function Curing return Boolean is (Curing_On);
+   procedure Set_Curing (On : Boolean) is
+   begin
+      Curing_On := On;
+   end Set_Curing;
+   function Salt_For (Lb : Natural) return Natural is ((Lb + Lb_Per_Salt - 1) / Lb_Per_Salt);
+   function Kept_Of (Lb, Salt_Lb : Natural) return Natural is
+      Salted : constant Natural := Natural'Min (Lb, Salt_Lb * Lb_Per_Salt);
+   begin
+      return Salted + (Lb - Salted) / Fresh_Div;
+   end Kept_Of;
+   function Deer_Salted return Natural is (N_Salted);
+   function Deer_Unsalted return Natural is (N_Unsalted);
+   function Meat_Lost return Natural is (N_Meat_Lost);
+   procedure Set_Cart_Salt (Lb : Natural) is
+   begin
+      Cart_Salt_N := Lb;
+   end Set_Cart_Salt;
+   function Cart return Cart_View is
+     ((Here => Cart_Set or else Cart_Towed, At_P => Cart_P, Along_X => Cart_X,
+       Salt => (if Cart_Set or else Cart_Towed then Cart_Salt_N else 0),
+       Turn => Cart_Turn, Towed => Cart_Towed, By => (if Cart_Towed then Cart_By else 0)));
+   procedure Set_Cart_Pull (On : Boolean) is
+   begin
+      Pull_On := On;
+   end Set_Cart_Pull;
+   function Cart_Pull return Boolean is (Pull_On);
+   --  (a bed's block columns, its middle at P: Cart_Long_B along its way, Cart_Wide_B across)
+   function Bed_X0 (P : Vec3; Along_X : Boolean) return Integer is
+     (Integer (Float'Floor (P.X * 4.0)) - (if Along_X then Cart_Long_B else Cart_Wide_B) / 2);
+   function Bed_Y0 (P : Vec3; Along_X : Boolean) return Integer is
+     (Integer (Float'Floor (P.Y * 4.0)) - (if Along_X then Cart_Wide_B else Cart_Long_B) / 2);
+   function Bed_On_Block (P : Vec3; Along_X : Boolean; Bx, By : Integer; Margin : Natural := 0) return Boolean is
+     (Bx in Bed_X0 (P, Along_X) - Margin .. Bed_X0 (P, Along_X) + (if Along_X then Cart_Long_B else Cart_Wide_B) - 1 + Margin
+      and then By in Bed_Y0 (P, Along_X) - Margin
+                  .. Bed_Y0 (P, Along_X) + (if Along_X then Cart_Wide_B else Cart_Long_B) - 1 + Margin);
+   function Turn_Along_X (T : Float) return Boolean is (abs Cos (T) > 0.5);
+   function Cart_X0 return Integer is (Bed_X0 (Cart_P, Cart_X));
+   function Cart_Y0 return Integer is (Bed_Y0 (Cart_P, Cart_X));
+   function Cart_On_Block (Bx, By : Integer; Margin : Natural := 0) return Boolean is
+     (Cart_Set and then Bed_On_Block (Cart_P, Cart_X, Bx, By, Margin));
+   function Cart_On (X, Y : Float) return Boolean is
+     (Cart_On_Block (Integer (Float'Floor (X * 4.0)), Integer (Float'Floor (Y * 4.0)), Margin => 1));
 
    --  A stretch of path, as planned: where it runs, and which of its
    --  metres are still to lay (bit K - 1 for metre K from A), as last
@@ -140,17 +243,35 @@ package body Castle.Colony is
       Floor_N  : Natural := 0;               --  the last of them that is floor,
       Frame_N  : Natural := 0;               --  the last that is of its frame,
       Walls_N  : Natural := 0;               --  the last that is wall or gable,
+      Roof_N   : Natural := 0;               --  the last that is roof (its trimming comes after),
+      Dress_N  : Natural := 0;               --  the last that is roof or its trimming,
       Wood_N   : Natural := 0;               --  the last that is of wood (what takes straw comes after),
+      Bed      : Boolean := False;           --  a bed of straw has been made in it (its owner's, whoever that is)
+      Stone_Left : Natural := 0;             --  blocks of its ground's walls and stairs still to lay, as last counted,
       Takes    : Per_Kind := [others => 0];  --  and what they take: logs, sheaves)
+      Ladder   : Natural := 0;               --  a ladder stands at it: under which eave (1 front, 2 back, 3 left,
+      Ladder_P : Vec3 := (0.0, 0.0, 0.0);    --  4 right; 0: none), and where its foot is
+      Ladder_Fells : Natural := 0;           --  trees its builder has gone to fell for want of a log to make one of
    end record;
    Houses       : array (1 .. Max_Houses) of House_Rec;
    N_Houses     : Natural := 0;
    House_Serial : Natural := 0;       --  houses ever begun (the next one's seed is made from it)
    N_Housing    : Natural := 0;       --  housing zones (counted, not saved)
-   Lots_Full    : Boolean := False;   --  someone is without a home and no lot was found for one, as things
-   Lots_Zones   : Natural := 0;       --  stood then: the zones' version, how many paths and how many houses
-   Lots_Paths   : Natural := 0;       --  (none of it saved: only kept to save looking again)
-   Lots_Houses  : Natural := 0;
+   --  The lots laid out for the houses still to begin, in the order they
+   --  are begun in (Lots (K) is for the house of serial House_Serial + K):
+   --  worked out when the player zones housing or lays a path, never while
+   --  the band is at its work, and saved.  (John, 2026-11-12: "Don't let the
+   --  serfs search for a lot".)  Lots_Short: the next house in turn fits on
+   --  none of the housing there is ("Hovels need to fit within the confines
+   --  of the zones, if they don't fit the housing deficit stands until the
+   --  player designates more area").
+   type Lot_Rec is record
+      Zone : Natural := 0;
+      F    : Castle.Buildings.House;
+   end record;
+   Lots         : array (1 .. Max_Houses) of Lot_Rec;
+   N_Lots       : Natural := 0;
+   Lots_Are_Short : Boolean := False;
    House_Memos_On : Boolean := True;  --  (off: nothing of housing is kept to save work)
    Housing_Far  : Float := 0.0;       --  how far from the stake the furthest housing zone reaches (counted, not saved)
 
@@ -226,6 +347,12 @@ package body Castle.Colony is
    Fuel_H      : Float := 0.0;    --  hours of burning left on the fire
    Ember_H     : Float := 0.0;    --  burnt out: hours of its dying down left (0: burning, or out)
    Labour_On : Boolean := True;   --  the camp takes the band's labour (off: as it was before it did)
+   Beds_On   : Boolean := True;   --  each makes itself a bed of straw (off: as it was before they did)
+   Hold_On   : Boolean := True;   --  the cook keeps a pot's fill of greens from being eaten raw (off: as before it did)
+   Ladders_On : Boolean := True;  --  a roof is thatched from a ladder (off: from the ground, as it was)
+   Holes_On  : Boolean := True;   --  a hole under a path is filled as it is laid (off: as it was)
+   N_Ladders, N_Ladders_Lost : Natural := 0;   --  made, and lost with whoever carried them, all told
+   Bed_Sheaves : Natural := 0;    --  sheaves of straw in all the beds made
    Pot_Stew    : Natural := 0;    --  points of stew ready
    Pot_Out     : Natural := 0;    --  of those, set aside for people on their way
    Pot_Raw     : Natural := 0;    --  points (as stew) of what is in the pot, not yet cooked
@@ -324,21 +451,29 @@ package body Castle.Colony is
                        To_Eat, Eating, To_Bed, Sleeping,
                        To_Take, Taking, To_Camp, Putting_In, Cooking, To_Seat,
                        Stoking, To_Patch, Tamping,
-                       To_Site, Raising);
+                       To_Site, Raising,
+                       To_Cart, At_Cart,
+                       Making, To_Ladder,
+                       To_Tow, Towing);
    --  (To_Site, Raising: a builder going to its house's site, and at work there)
+   --  (To_Cart, At_Cart: going to the lord's cart for salt, and taking it out)
+   --  (Making: a ladder, at the stockpile; To_Ladder: going to where one stands, to take it away)
    --  (saved by position: new states go on the end, as below)
    type Why_Idle is (Nothing_Yet, No_Bush, No_Room, No_Way, No_Tree, Enough_Wood, Nothing_To_Haul,
                      No_Source, Stocks_Full, No_Prey, Enough_Meat, Deer_Spared,
                      No_Camp, Pot_Full, Nothing_To_Cook, Winter_Bare, Enough_Food, Camp_Unbuilt,
-                     No_Timber, No_Thatch);
-   --  (No_Timber, No_Thatch: a builder with no wood, or no straw, to build with)
+                     No_Timber, No_Thatch, No_Stone);
+   --  (No_Timber, No_Thatch, No_Stone: a builder with no wood, no straw or no stone to build with)
    --  what the cook is bringing to the camp (For_Store: nothing, its load is for a stockpile)
    --  (For_Stoke: no load at all: it goes to put a log from the stack on
    --  the fire.  For_Ring, For_Frame: stone and wood to build the hearth with,
    --  which anyone may be bringing, as a seat log.)
    --  (For_Floor: earth, for a hollow of the camp's floor.)
    --  (For_House: wood or straw, for the house it is building.)
-   type Camp_Use is (For_Store, For_Pot, For_Fire, For_Seat, For_Stoke, For_Ring, For_Frame, For_Floor, For_House);
+   --  (For_Bed: straw, for its own bed.)
+   --  (For_Ladder: a log, to make a ladder of.)
+   type Camp_Use is (For_Store, For_Pot, For_Fire, For_Seat, For_Stoke, For_Ring, For_Frame, For_Floor, For_House,
+                     For_Bed, For_Ladder);
    type Fail_Memo is record
       Bush  : Natural := 0;
       Until_Tick : Natural := 0;
@@ -367,6 +502,7 @@ package body Castle.Colony is
       Check_Tick : Natural := 0;
       Replan   : Boolean := False;      --  loaded mid-walk: find the way again
       Bush     : Natural := 0;
+      Ladder_Of : Natural := 0;         --  the house whose ladder it is going for (To_Ladder)
       Cell     : Natural := 0;
       Tree     : Natural := 0;
       Pile     : Natural := 0;
@@ -402,6 +538,14 @@ package body Castle.Colony is
       Site_Laid : Natural := 0;          --  and the metres it has laid since it was given a stretch
       Site     : Natural := 0;           --  a builder: the house it is building (its own, till it stands)
       Site_Patch : Natural := 0;         --  and the patch of that house's ground it is going to, or is at (0: laying blocks)
+      Bed      : Boolean := False;       --  it has made itself a bed of straw at the camp,
+      Bed_At   : Vec3 := (0.0, 0.0, 0.0);   --  and where (it stays there when it has a house: John, 2026-11-12,
+                                            --  "we will let the old one decay outside when we add decay later")
+      Bed_Has  : Natural := 0;           --  the sheaves in it
+      Placed   : Boolean := False;       --  it has a place of its own by the fire (Bed_At: where its feet are,
+      Bed_Dir  : Float := 0.0;           --  and the way they point as it lies), bed or no bed,
+      Bed_Lo   : Integer := -1;          --  the rows of the ground's top under it when it was chosen (-1: it lies
+      Bed_Hi   : Integer := -1;          --  on the old ring, whatever the ground)
       Skill    : Level_List := [others => 0.0];   --  its level in each skill, 0 .. 1
       Apt      : Shares := [others => 1.0];       --  its aptitude for each (from its seed: not saved)
    end record;
@@ -432,13 +576,13 @@ package body Castle.Colony is
          when Meat => "meat", when Hide => "hides", when Carcass => "a deer",
          when Vegetables => "vegetables", when Apples => "apples", when Sticks => "sticks",
          when Grain => "grain",
-         when Earth => "earth");
+         when Earth => "earth",
+         when Salt => "salt",
+         when Ladder => "ladders");
 
    function Ticks return Natural is (Tick_N);
 
-   function Meat_Of (C : Castle.Deer.Class) return Positive is
-     (case C is when Castle.Deer.Fawn => 3, when Castle.Deer.Doe => 8, when Castle.Deer.Young_Stag => 6,
-                when Castle.Deer.Stag => 10);
+   function Meat_Of (C : Castle.Deer.Class) return Positive is (if Curing_On then Deer_Lb (C) else Deer_Joints (C));
    function Hit_Chance (Metres : Float) return Float is
      (Float'Max (0.25, Float'Min (0.85, 0.95 - 0.03 * Metres)));
    procedure Set_Spare_Deer (On : Boolean) is
@@ -506,14 +650,15 @@ package body Castle.Colony is
             else Standing),
          when Aiming => Aiming,
          when Lifting_Carcass | Butchering => Putting_Down,
-         when To_Eat | To_Bed | To_Take | To_Camp | To_Seat | To_Patch | To_Site =>
+         when To_Eat | To_Bed | To_Take | To_Camp | To_Seat | To_Patch | To_Site | To_Cart | To_Ladder
+            | To_Tow | Towing =>
            (if Band (I).Route.N >= 2 and then Band (I).Leg < Band (I).Route.N then Walking else Standing),
-         when Tamping | Raising => Picking,
+         when Tamping | Raising | Making => Picking,
          when Eating =>
            (if Band (I).From_Pot and then Band (I).Seat > 0 and then (Band (I).Seat + 1) / 2 <= Seats_Laid
             then Eating_Seated else Eating),
          when Sleeping => Sleeping,
-         when Taking | Putting_In | Stoking => Putting_Down,
+         when Taking | Putting_In | Stoking | At_Cart => Putting_Down,
          when Cooking => Stirring,
          when Recovering | Idle => Standing));
 
@@ -556,9 +701,18 @@ package body Castle.Colony is
    function Held_Days return Float;
 
    --  How fast it walks and works: slower with an empty belly.  (Its
-   --  condition: the first factor of every work rate.)
+   --  condition: a factor of every work rate.)
    function Vigour (M : Member) return Float is
      (if Needs_On and then M.Fed <= 0.0 then Starving_Pace else 1.0);
+
+   --  The colony's pace: what every work rate and every pace over the
+   --  ground is multiplied by (the spec, Serf_Pace).
+   Pace_Now : Float := Serf_Pace;
+   procedure Set_Pace (To : Float) is
+   begin
+      Pace_Now := Float'Max (0.1, To);
+   end Set_Pace;
+   function Pace return Float is (Pace_Now);
 
    ------------------------------------------------------------------ skills
 
@@ -615,9 +769,9 @@ package body Castle.Colony is
       return 1.0;
    end Direction;
 
-   --  rate = condition x skill x direction: every work timer goes by this.
+   --  rate = pace x condition x skill x direction: every work timer goes by this.
    function Work_Rate (M : Member; W : Work_Kind) return Float is
-     (Vigour (M) * Skill_Factor (M, W) * Direction (M));
+     (Pace_Now * Vigour (M) * Skill_Factor (M, W) * Direction (M));
 
    --  The work that getting or carrying K is.
    function Work_For (K : Item_Kind) return Work_Kind is
@@ -630,7 +784,8 @@ package body Castle.Colony is
          when Sticks                        => Camp_Keeping,
          when Meat | Hide | Carcass         => Butchering,
          when Earth                         => Site_Work,
-         when Nothing                       => Handling);
+         when Ladder                        => House_Raising,
+         when Nothing | Salt                => Handling);
 
    --  One step of practice at work W: its own skill in full, the skills
    --  beside it by their shares, each closing on mastery by its aptitude.
@@ -659,14 +814,16 @@ package body Castle.Colony is
                                                                       else Handling),
          when To_Tree | Chopping | To_Pile | Lifting              => Felling,
          when Stalking | Aiming | Recovering                      => Stalking_Game,
-         when To_Carcass | Lifting_Carcass | To_Butcher | Butchering => Butchering,
+         when To_Carcass | Lifting_Carcass | To_Butcher | Butchering | To_Cart | At_Cart => Butchering,
          when To_Take | Taking | To_Camp | Putting_In | Cooking | Stoking =>
            (if M.Use_For in For_Ring | For_Frame then Site_Work
-            elsif M.Use_For = For_House then House_Raising else Camp_Keeping),
+            elsif M.Use_For = For_House then House_Raising
+            elsif M.Use_For = For_Bed then Handling else Camp_Keeping),
          when To_Patch | Tamping                                  => Site_Work,
          when To_Site | Raising                                   =>
            (if M.Site_Patch > 0 then Site_Work else House_Raising),
-         when Idle | Strolling | To_Eat | Eating | To_Bed | Sleeping | To_Seat => Handling);
+         when Making | To_Ladder                                  => House_Raising,
+         when Idle | Strolling | To_Eat | Eating | To_Bed | Sleeping | To_Seat | To_Tow | Towing => Handling);
 
    procedure Set_Skills (On : Boolean) is
    begin
@@ -917,9 +1074,35 @@ package body Castle.Colony is
 
    --  A route from where M stands to Goal; True if it gets there (or, for
    --  Near > 0, ends within Near metres of it).
-   function Route_To (M : in out Member; Goal : Vec3; Near : Float := 0.0) return Boolean is
+   --  A goal under the lord's cart has no ground to stand on, and the way to
+   --  such a one is searched for as far as the band's ground reaches before
+   --  it is given up (57 ms, where a plan is 1: found in the stage 6 run,
+   --  whose idle hands strolled there).  So a place on the cart is taken to
+   --  mean the nearest place beside it.
+   function Off_Cart (P : Vec3) return Vec3 is
+      Bx : constant Integer := B (P.X);
+      By : constant Integer := B (P.Y);
    begin
-      M.Route := Castle.Nav.Plan (M.Pos, Goal);
+      if not Cart_On_Block (Bx, By, Margin => 1) then
+         return P;
+      end if;
+      declare
+         X_Lo : constant Float := Float (Cart_X0 - 1) * 0.25 - 0.4;
+         X_Hi : constant Float := Float (Cart_X0 + (if Cart_X then Cart_Long_B else Cart_Wide_B) + 1) * 0.25 + 0.4;
+         Y_Lo : constant Float := Float (Cart_Y0 - 1) * 0.25 - 0.4;
+         Y_Hi : constant Float := Float (Cart_Y0 + (if Cart_X then Cart_Wide_B else Cart_Long_B) + 1) * 0.25 + 0.4;
+         D    : constant Float :=
+           Float'Min (Float'Min (P.X - X_Lo, X_Hi - P.X), Float'Min (P.Y - Y_Lo, Y_Hi - P.Y));
+      begin
+         return (if D = P.X - X_Lo then (X_Lo, P.Y, P.Z) elsif D = X_Hi - P.X then (X_Hi, P.Y, P.Z)
+                 elsif D = P.Y - Y_Lo then (P.X, Y_Lo, P.Z) else (P.X, Y_Hi, P.Z));
+      end;
+   end Off_Cart;
+
+   function Route_To (M : in out Member; Goal_Asked : Vec3; Near : Float := 0.0) return Boolean is
+      Goal : constant Vec3 := (if Cart_Set then Off_Cart (Goal_Asked) else Goal_Asked);
+   begin
+      M.Route := Castle.Nav.Plan (M.Pos, Goal, Within => Own_Region);
       M.Leg := 1;
       M.Along := 0.0;
       M.Check_Tick := Tick_N + Tick_Hz / 2;
@@ -954,6 +1137,8 @@ package body Castle.Colony is
          when To_Patch => (if M.Site_Seg > 0 then 0.7 else Patch_Reach_M),
          when To_Site => Build_Reach_M,
          when To_Source => (if M.Fetch in Sticks | Apples then 1.2 else 0.0),
+         when To_Tow => 0.5,
+         when Towing => 0.3,
          when others  => 0.0);
 
    procedure Keep_Route_Good (M : in out Member; Ok : out Boolean) is separate;
@@ -964,7 +1149,28 @@ package body Castle.Colony is
 
    --  The nearest ripe bush nobody else is after, weighed toward the stake
    --  (half the distance from the stake counts too), that a route reaches.
+   --  How much the way home from a bush or a tree counts beside the way
+   --  to it, for whoever chooses one: half; nothing for one that fends for
+   --  itself (it eats where it picks: the nearest to where it stands).
+   function Stake_Weight (M : Member) return Float is (if M.Fends then 0.0 else 0.5);
+
    function Go_Pick (I : Positive) return Boolean is separate;
+
+   --  A stockpile place under the cart: its bed over the place's middle, as
+   --  it stands or where a place is held for it.  Nothing is put there.
+   function Under_Cart (K : Positive) return Boolean is
+     (Cart_On_Block (B (Cells (K).Centre.X), B (Cells (K).Centre.Y))
+      or else (Cart_Bound
+               and then Bed_On_Block (Goal_P, Turn_Along_X (Goal_Turn), B (Cells (K).Centre.X), B (Cells (K).Centre.Y))));
+
+   --  Stockpile place K takes N of kind Kind: one holding that with room for
+   --  all of them, or an empty one; never one under the cart.  The one test
+   --  of it (Go_Store, Room_For, Can_Store, the butchering's; Supply's empty
+   --  places).
+   function Takes (K : Positive; Kind : Item_Kind; N : Natural) return Boolean is
+     (((Cells (K).Kind = Kind and then Cells (K).Count + Cells (K).Incoming + N <= Cell_Limit (Kind))
+       or else (Cells (K).Kind = Nothing and then Cells (K).Incoming = 0))
+      and then not Under_Cart (K));
 
    --  The nearest stockpile cell that takes what M carries: one already
    --  holding it with room, else an empty one.
@@ -981,17 +1187,12 @@ package body Castle.Colony is
       return N;
    end Wood_Total;
 
-   function Room_For (K : Item_Kind) return Boolean is
-   begin
-      for C in 1 .. N_Cells loop
-         if (Cells (C).Kind = K and then Cells (C).Count + Cells (C).Incoming + 1 <= Cell_Limit (K))
-           or else (Cells (C).Kind = Nothing and then Cells (C).Incoming = 0)
-         then
-            return True;
-         end if;
-      end loop;
-      return False;
-   end Room_For;
+   function Room_For (K : Item_Kind) return Boolean is (for some C in 1 .. N_Cells => Takes (C, K, 1));
+
+   --  A stockpile cell takes the whole of what M carries: Go_Store's own
+   --  test (the cells it has lately failed to get to left out).
+   function Can_Store (M : Member) return Boolean is
+     (for some K in 1 .. N_Cells => Takes (K, M.Carry, M.Carried) and then not Failed (M, Cell_Base + K));
 
    --  The nearest standing tree nobody else is felling, weighed toward the
    --  stake as bushes are, that may be felled (apple trees are kept while
@@ -1349,7 +1550,7 @@ package body Castle.Colony is
       Goal : constant Vec3 := (Round.X + R * Cos (A), Round.Y + R * Sin (A), Round.Z);
    begin
       M.Wait := 8.0 + 20.0 * Hash01 (M, 3);
-      if Route_To (M, Goal, 1.5) then
+      if Route_To (M, Goal, 1.5) then            --  (toward the lord's cart: to beside it, Route_To)
          M.State := Strolling;
       else
          M.State := Idle;
@@ -1371,6 +1572,8 @@ package body Castle.Colony is
    function Cooking_Of (I : Positive) return Float is (Castle.Hash.Unit (Castle.Hash.Mix (Band (I).Seed + 4_051)));
 
    Fend_Id : constant := 31_001;   --  a fail memo: nothing to gather for itself in reach
+   Bed_Id  : constant := 31_002;   --  a fail memo: no straw to cut for its bed,
+   No_Way_Id : constant := 31_003; --  and: no way to where it is to lie with it
    Camp_Id   : constant := 31_000;               --  a fail memo: no way to the pot
    Stack_Off : constant Vec3 := (2.75, -2.75, 0.0);   --  the firewood, in the south-east corner
 
@@ -1450,8 +1653,34 @@ package body Castle.Colony is
    begin
       Stone_From := Float'Max (0.0, Metres);
    end Set_Stone_From;
-   --  (and as far as any housing reaches: people build there, and live there)
-   function Ground_Reach_M return Float is (Float'Max (Float'Max (Search_Reach, Path_Far), Housing_Far));
+   --  How far from the stake the furthest stockpile or camp reaches (with
+   --  the margin housing has), of those no further than the band's ground
+   --  ever goes.  (Counted when asked: a few zones.)
+   function Stores_Far return Float is
+      D, F : Float := 0.0;
+   begin
+      for Z in 1 .. N_Zones loop
+         if Zones (Z).Kind /= Habitation_Zone and then Zones (Z).N > 0 then
+            F := 0.0;
+            for X of Integer_Pair'(Zones (Z).Bx0, Zones (Z).Bx1 + 1) loop
+               for Y of Integer_Pair'(Zones (Z).By0, Zones (Z).By1 + 1) loop
+                  F := Float'Max (F, Flat_Dist ((Float (X) * 0.25, Float (Y) * 0.25, 0.0), Stake_At));
+               end loop;
+            end loop;
+            if F + 4.0 <= Far_Reach_Max_M then
+               D := Float'Max (D, F + 4.0);
+            end if;
+         end if;
+      end loop;
+      return D;
+   end Stores_Far;
+
+   --  (and as far as any housing reaches: people build there, and live there;
+   --  and, since the colony reads its own ground and no other, as far as a
+   --  stockpile or the camp: one zoned past the work radius was served only
+   --  while the camera kept its ground loaded)
+   function Ground_Reach_M return Float is
+     (Float'Max (Float'Max (Float'Max (Search_Reach, Path_Far), Housing_Far), Stores_Far));
 
    --  Every stack within Reach of the stake's that is in has been looked
    --  through.  (The host has all of the colony's ground in before a step,
@@ -1465,7 +1694,7 @@ package body Castle.Colony is
          for DY in -R .. R loop
             if DX * DX + DY * DY <= R * R
               and then SX + DX in Indexed_Grid'Range (1) and then SY + DY in Indexed_Grid'Range (2)
-              and then not Indexed (SX + DX, SY + DY) and then Version_Src (SX + DX, SY + DY) > 0
+              and then not Indexed (SX + DX, SY + DY) and then Own_V (SX + DX, SY + DY) > 0
             then
                return False;
             end if;
@@ -1497,14 +1726,110 @@ package body Castle.Colony is
 
    ------------------------------------------------------------------ paths: laying them
 
+   --  A hollow in the ground (John, 2026-11-13: "instead of just filling
+   --  the holes"; "fill in holes in the path when they are compacting the
+   --  ground"): ground at one level, its block columns side by side, every
+   --  one of them closed in on its four sides by ground higher than it or
+   --  of the hollow (nothing lower beside it, nothing not known), no more
+   --  than Hollow_Most columns.  A pit, a dent, a ditch closed at its ends.
+   --  A step of a slope and the inside corner of one are of a terrace that
+   --  goes on to lower ground: no hollow.  Fill_Hollows fills each, in a
+   --  grid of the tops of a stretch of ground (-1: not known), to the
+   --  lowest of the ground round it; Passes times over, so that a hollow in
+   --  the bottom of a hollow is filled up to the rest of it, and that to
+   --  the ground round it.
+   type Top_Grid is array (Integer range <>, Integer range <>) of Integer;
+
+   procedure Fill_Hollows (Tops : in out Top_Grid; Passes : Positive := 2) is
+      W     : constant Natural := Tops'Length (1) * Tops'Length (2);
+      Seen  : array (Tops'Range (1), Tops'Range (2)) of Boolean;
+      Qx, Qy : array (1 .. Natural'Max (1, W)) of Integer;
+   begin
+      for Pass in 1 .. Passes loop
+         Seen := [others => [others => False]];
+         for X in Tops'Range (1) loop
+            for Y in Tops'Range (2) loop
+               if Tops (X, Y) >= 0 and then not Seen (X, Y) then
+                  declare
+                     T      : constant Integer := Tops (X, Y);
+                     N, At_Q : Natural := 1;
+                     Closed : Boolean := True;
+                     Rim    : Integer := Integer'Last;
+                     procedure Look (Nx, Ny : Integer) is
+                     begin
+                        if Nx not in Tops'Range (1) or else Ny not in Tops'Range (2) or else Tops (Nx, Ny) < 0
+                          or else Tops (Nx, Ny) < T
+                        then
+                           Closed := False;
+                        elsif Tops (Nx, Ny) > T then
+                           Rim := Integer'Min (Rim, Tops (Nx, Ny));
+                        elsif not Seen (Nx, Ny) then
+                           Seen (Nx, Ny) := True;
+                           N := N + 1;
+                           Qx (N) := Nx;
+                           Qy (N) := Ny;
+                        end if;
+                     end Look;
+                  begin
+                     Seen (X, Y) := True;
+                     Qx (1) := X;
+                     Qy (1) := Y;
+                     At_Q := 0;
+                     while At_Q < N loop
+                        At_Q := At_Q + 1;
+                        Look (Qx (At_Q) - 1, Qy (At_Q));
+                        Look (Qx (At_Q) + 1, Qy (At_Q));
+                        Look (Qx (At_Q), Qy (At_Q) - 1);
+                        Look (Qx (At_Q), Qy (At_Q) + 1);
+                     end loop;
+                     if Closed and then N <= Hollow_Most and then Rim /= Integer'Last then
+                        for K in 1 .. N loop
+                           Tops (Qx (K), Qy (K)) := Rim;
+                        end loop;
+                     end if;
+                  end;
+               end if;
+            end loop;
+         end loop;
+      end loop;
+   end Fill_Hollows;
+
+   --  What grows over a column's top cut, whether it stands on it or is
+   --  left over a hole dug under it (a plant is never left in the air).
+   procedure Cut_Plants (X, Y, Top : Integer) is
+   begin
+      for Up in 1 .. 4 loop
+         if Mat (X, Y, Top + Up) in Tall_Grass | Wild_Grain | Wild_Vegetables then
+            Write_Src (X, Y, Top + Up, Air_Block);
+         elsif Mat (X, Y, Top + Up) /= Air then
+            exit;
+         end if;
+      end loop;
+   end Cut_Plants;
+   function Plants_Over (X, Y, Top : Integer) return Boolean is
+   begin
+      for Up in 1 .. 4 loop
+         if Mat (X, Y, Top + Up) in Tall_Grass | Wild_Grain | Wild_Vegetables then
+            return True;
+         elsif Mat (X, Y, Top + Up) /= Air then
+            return False;
+         end if;
+      end loop;
+      return False;
+   end Plants_Over;
+
+
    Path_Fail : constant := 31_300;      --  fail memos: no way to that metre of that stretch (to 32_699)
 
    function Path_Metres (S : Path_Seg) return Natural is (Natural (Float'Ceiling (Flat_Dist (S.A, S.B))));
    function All_Metres (S : Path_Seg) return Unsigned_64 is
      (if Path_Metres (S) >= 64 then Unsigned_64'Last else Shift_Left (Unsigned_64'(1), Path_Metres (S)) - 1);
 
-   --  The ground a stretch lies on is in: every stack under it is loaded.
-   function Stretch_In (S : Path_Seg) return Boolean is
+   --  The ground a stretch lies on is in: every stack under it is the
+   --  colony's own and loaded (what the band does goes by this); Held: is
+   --  loaded, the colony's own or not (what the player plans is read from
+   --  the ground that is held: the line shown, the count of a path marked).
+   function Stretch_In (S : Path_Seg; Held : Boolean := False) return Boolean is
       Half : constant Float := Path_Width_M / 2.0;
    begin
       for CX in Integer (Float'Floor ((Float'Min (S.A.X, S.B.X) - Half) / 8.0))
@@ -1513,7 +1838,9 @@ package body Castle.Colony is
          for CY in Integer (Float'Floor ((Float'Min (S.A.Y, S.B.Y) - Half) / 8.0))
            .. Integer (Float'Floor ((Float'Max (S.A.Y, S.B.Y) + Half) / 8.0))
          loop
-            if CX in Indexed_Grid'Range (1) and then CY in Indexed_Grid'Range (2) and then Version_Src (CX, CY) = 0 then
+            if CX in Indexed_Grid'Range (1) and then CY in Indexed_Grid'Range (2)
+              and then (if Held then Version_Src (CX, CY) else Own_V (CX, CY)) = 0
+            then
                return False;
             end if;
          end loop;
@@ -1557,6 +1884,7 @@ package body Castle.Colony is
          end loop;
       end loop;
    end For_Path_Work;
+
 
    --  The middle of metre Metre of a stretch, on the ground.
    function Metre_Middle (S : Path_Seg; Metre : Positive) return Vec3 is
@@ -1641,19 +1969,71 @@ package body Castle.Colony is
    --  Metre Metre of stretch K laid: what grows on it cut, the top of the
    --  ground turned to footpath, all of it at once.
    procedure Lay_Metre (K : Positive; Metre : Positive) is
-      procedure Turn (X, Y, Zr, M : Integer) is
+      --  (the 64th stands for whatever lies beyond it, in a stretch of before there were pieces)
+      function This_Metre (M : Integer) return Boolean is (M = Metre or else (Metre = 64 and then M > 64));
+      R : constant := Hollow_Reach_B;
+      X0, Y0 : Integer := Integer'Last;
+      X1, Y1 : Integer := Integer'First;
+      Near   : Integer := -1;
+      procedure Bound (X, Y, Zr, M : Integer) is
       begin
-         --  (the 64th stands for whatever lies beyond it, in a stretch of before there were pieces)
-         if M = Metre or else (Metre = 64 and then M > 64) then
-            Write_Src (X, Y, Zr, (Mat => Footpath, State => 0));
-            for Up in 1 .. 3 loop
-               exit when Mat (X, Y, Zr + Up) not in Tall_Grass | Wild_Grain | Wild_Vegetables;
-               Write_Src (X, Y, Zr + Up, Air_Block);
-            end loop;
+         if This_Metre (M) then
+            X0 := Integer'Min (X0, X);
+            X1 := Integer'Max (X1, X);
+            Y0 := Integer'Min (Y0, Y);
+            Y1 := Integer'Max (Y1, Y);
+            Near := (if Near < 0 then Zr else Near);
          end if;
-      end Turn;
+      end Bound;
    begin
-      For_Path_Work (Path_List (K), Turn'Access);
+      if Holes_On then
+         For_Path_Work (Path_List (K), Bound'Access);
+      end if;
+      declare
+         Any : constant Boolean := Holes_On and then X0 <= X1;
+         --  the ground round the metre, its hollows filled (Fill_Hollows): what each column is laid at
+         G : Top_Grid ((if Any then X0 - R else 1) .. (if Any then X1 + R else 0),
+                       (if Any then Y0 - R else 1) .. (if Any then Y1 + R else 0));
+         Raw : Top_Grid (G'Range (1), G'Range (2));
+         --  (a column is raised only where the ground read round the metre is its own top: read from
+         --  another height it could be a bough or a hump; and never by more than Hollow_Rise_B)
+         procedure Turn (X, Y, Zr, M : Integer) is
+            Top : constant Integer :=
+              (if Any and then X in G'Range (1) and then Y in G'Range (2) and then Raw (X, Y) = Zr
+                 and then G (X, Y) - Zr in 1 .. Hollow_Rise_B
+               then G (X, Y) else Zr);
+         begin
+            if This_Metre (M) then
+               Cut_Plants (X, Y, Zr);                    --  what grows on it cut (filled: over what it is filled to too)
+               if Top > Zr then
+                  Cut_Plants (X, Y, Top);
+               end if;
+               for Z in Zr .. Top - 1 loop               --  a hole filled with earth
+                  Write_Src (X, Y, Z, (Mat => Dirt, State => 0));
+               end loop;
+               Write_Src (X, Y, Top, (Mat => Footpath, State => 0));
+            end if;
+         end Turn;
+      begin
+         if Any then
+            for Gx in G'Range (1) loop
+               for Gy in G'Range (2) loop
+                  declare
+                     Z : constant Integer := Ground_Row (Gx, Gy, Near);
+                  begin
+                     --  (only the ground's own top: under a bough or a log what was read is not known)
+                     G (Gx, Gy) := (if Z >= 0 and then abs (Z - Near) <= 8
+                                      and then Mat (Gx, Gy, Z) in Grass | Dirt | Sand | Gravel | Clay | Placer_Gravel
+                                                                | Bog_Iron | Footpath
+                                    then Z else -1);
+                  end;
+               end loop;
+            end loop;
+            Raw := G;
+            Fill_Hollows (G);
+         end if;
+         For_Path_Work (Path_List (K), Turn'Access);
+      end;
       Path_List (K).Todo := Path_List (K).Todo and not Shift_Left (Unsigned_64'(1), Integer'Min (63, Metre - 1));
       Count_Paths;
    end Lay_Metre;
@@ -1805,7 +2185,7 @@ package body Castle.Colony is
    use type CB.Stage;
 
    Site_Fail       : constant := 20_000;   --  fail memos: no way to work at that house (to 20_048),
-   Site_Patch_Fail : constant := 20_100;   --  and no way to that patch of its ground (to 20_260)
+   Site_Patch_Fail : constant := 20_100;   --  and no way to that patch of its ground (to 20_484)
    --  (clear of the others': bushes, cells, trees and piles below 17_000, the
    --  camp's and the paths' from 31_000, a source's from 32_768 up)
 
@@ -1836,47 +2216,194 @@ package body Castle.Colony is
    --  How far back its lot reaches (its bank's end, if that is further).
    function Lot_Back (F : CB.House) return Integer is (Integer'Max (CB.Lot_B + V_Lo - 1, V_Hi (F)));
 
-   --  A column of the way out from a house's door to its path.
-   function In_Door_Way (F : CB.House; U, V : Integer) return Boolean is
-     (V < 0 and then -V <= F.Door_Run
-      and then U in F.Openings (1).Offset .. F.Openings (1).Offset + F.Openings (1).Width - 1);
-
    --  How many blocks the path's ground may lie above or below a house's
    --  pad for its door to be got to: a block where the path is hard by, a
    --  block for each column of the way past its landing otherwise.
    function Door_Steps (F : CB.House) return Natural is
      (Integer'Max (1, F.Door_Run - CB.Door_Landing_B));
 
-   --  The ground a house's builder makes ready: under its walls, the bank
-   --  round them, and the way out from its door.
-   function Site_V_Lo (F : CB.House) return Integer is (-Integer'Max (CB.Apron_Front_B, F.Door_Run));
-   function In_Site (F : CB.House; U, V : Integer) return Boolean is
-     ((V in V_Lo .. V_Hi (F) and then U in -Apron_U (F) .. F.W - 1 + Apron_U (F)) or else In_Door_Way (F, U, V));
+   --  The ground a house's builder makes ready, its site: under its walls,
+   --  a yard round them (Apron_B behind and to either side, as far as its
+   --  lot is; before its front wall all the way to its path: Front), the way
+   --  out from its door among it.  All of it is brought to the level of its
+   --  floor but the door's way where that is a stair, and the walls that
+   --  hold it (below).
+   --  To either side it reaches further where a house begun before it
+   --  stands beside it, as far as that one's ground (John, 2026-11-12: "Yes
+   --  extend as one and they, don't need to be extended as a straight line
+   --  they can meet and turn into each other, just take the difference
+   --  between the two"): Reach_L, Reach_R (Join_Site sets them).
+   function Front_Of (F : CB.House; U : Integer) return Integer is
+     (if U in F.Front'Range then Integer'Max (CB.Apron_Front_B, F.Front (U)) else CB.Apron_Front_B);
 
-   --  The row the top of the ground at (U, V) of a house's frame is brought
-   --  to (Old: its row now): the pad's under the walls; on the way out from
-   --  its door, a landing at the pad's level and then a stair between the
-   --  pad and the ground where that way meets the path (a block to a block
-   --  at most: Place_House sees to it, by Door_Steps); within
-   --  the bank, no further off the pad's than it is from the walls; beyond,
-   --  as it lies.
-   function Target_Row (F : CB.House; U, V, Old : Integer) return Integer is
-      Du  : constant Integer := (if U < 0 then -U elsif U >= F.W then U - F.W + 1 else 0);
-      Dv  : constant Integer := (if V < 0 then -V elsif V >= F.D then V - F.D + 1 else 0);
-      D   : constant Integer := Integer'Max (Du, Dv);
+   --  A column of the way out from a house's door to its path: straight
+   --  out from the doorway, each of its columns as far as the path's edge
+   --  (beside a path that runs aslant they are not all as long: Door_Run is
+   --  the shortest, and the stair is made over that; what the longer ones
+   --  have past it lies at the level of the stair's foot, not a stub of the
+   --  yard's wall across it).
+   function In_Door_Way (F : CB.House; U, V : Integer) return Boolean is
+     (V < 0 and then F.Door_Run > 0
+      and then U in F.Openings (1).Offset .. F.Openings (1).Offset + F.Openings (1).Width - 1
+      and then -V <= Integer'Max (F.Door_Run, Front_Of (F, U)));
+   function Site_U_Lo (F : CB.House) return Integer is (-Apron_U (F) - F.Reach_L);
+   function Site_U_Hi (F : CB.House) return Integer is (F.W - 1 + Apron_U (F) + F.Reach_R);
+   function Site_V_Lo (F : CB.House) return Integer is
+      M : Integer := CB.Apron_Front_B;
+   begin
+      for U in Site_U_Lo (F) .. Site_U_Hi (F) loop
+         M := Integer'Max (M, Front_Of (F, U));
+      end loop;
+      return -M;
+   end Site_V_Lo;
+   function In_Site (F : CB.House; U, V : Integer) return Boolean is
+     (U in Site_U_Lo (F) .. Site_U_Hi (F) and then V <= V_Hi (F) and then V >= -Front_Of (F, U));
+
+   --  A column of its door's way that is a step of its stair.  There is a
+   --  stair only where the path's ground lies more than a block above or
+   --  below its floor (Retain_Over_B, as for a wall): a single block is a
+   --  step like any other of the land's, left as earth (John, 2026-11-12,
+   --  of a patch of stone before a door: "the stairs were added when the
+   --  pathway was pretty much already leavel witht he house path").
+   function Is_Stair (F : CB.House; U, V : Integer) return Boolean is
+     (In_Door_Way (F, U, V) and then (-V > CB.Door_Landing_B or else -V > F.Door_Run)
+      and then abs (F.Door_Row - (F.Pad - 1)) > Retain_Over_B);
+
+   --  The row the top of the ground at (U, V) of a house's site is brought
+   --  to, before any wall: its floor's, but on the way out from its door,
+   --  past a landing at that level, a stair between it and the ground where
+   --  that way meets the path (a block to a block at most: Place_House sees
+   --  to it, by Door_Steps).
+   function Level_Of (F : CB.House; U, V : Integer) return Integer is
       Pad : constant Integer := F.Pad - 1;
    begin
-      if D = 0 then
-         return Pad;
-      elsif In_Door_Way (F, U, V) then
-         return (if -V <= CB.Door_Landing_B then Pad
-                 else Pad + (F.Door_Row - Pad) * (-V - CB.Door_Landing_B) / (F.Door_Run - CB.Door_Landing_B));
-      elsif Du > Apron_U (F) or else V < V_Lo or else V > V_Hi (F) then
-         return Old;
-      else
-         return Integer'Max (Pad - D, Integer'Min (Pad + D, Old));
+      return (if not In_Door_Way (F, U, V) then Pad
+              elsif -V > F.Door_Run then F.Door_Row            --  (past the stair's foot, beside a path aslant)
+              elsif -V > CB.Door_Landing_B
+              then Pad + (F.Door_Row - Pad) * (-V - CB.Door_Landing_B) / (F.Door_Run - CB.Door_Landing_B)
+              else Pad);
+   end Level_Of;
+
+   --  What counts as ground beside a site: earth, rock, a path, a wall of
+   --  stones; not a tree, and nothing of a house.
+   function Is_Ground (M : Material) return Boolean is
+     (Class_Of (M) = Solid and then M not in Trunk | Thatch | Daub | Plank | Shingle);
+
+   --  The top of the ground at a block column, found from row Near: up it
+   --  while there is ground over ground, else down to the first there is
+   --  (-1: none within 6 m).  (An eave or a bough over it is not its top.)
+   function Top_By (X, Y, Near : Integer) return Integer is
+      Z : Integer := Near;
+   begin
+      if Is_Ground (Mat (X, Y, Z)) then
+         while Z < Near + 24 and then Is_Ground (Mat (X, Y, Z + 1)) loop
+            Z := Z + 1;
+         end loop;
+         return Z;
       end if;
-   end Target_Row;
+      for Down in 1 .. 24 loop
+         if Is_Ground (Mat (X, Y, Near - Down)) then
+            return Near - Down;
+         end if;
+      end loop;
+      return -1;
+   end Top_By;
+
+
+   --  What a column of a house's site is made (John, 2026-11-12: "the .25m
+   --  next to the path will be reserved for a retaining wall built from
+   --  stone in the stockpile, stairs built on the path from stone as it
+   --  rises or falls to the door, dirt around the back of a blueprint is dug
+   --  away and a retaining wall is built ... same with houses that step
+   --  down, retaining walls built between them ... if its over .25m").  Top:
+   --  the row its top is brought to.  Stone: the lowest row of it that is
+   --  of stone (Top + 1: none of it is).
+   --    * Where the ground beside the site stands more than Retain_Over_B
+   --      over the column's level, the column is a wall against it: stone
+   --      from the level up, its top flush with that ground.  (So the earth
+   --      behind a house is dug away to the wall, and what is beyond stays.)
+   --    * Where the column's level stands that much over what is beside it
+   --      (lower ground outside, the path, a lower step of its own stair),
+   --      it is a wall holding the site up: stone from there to its top.
+   --    * A step of the door's stair has a tread of stone.
+   --  Each house walls its own site, as it finds the ground beside it (the
+   --  site is read from the world each time).  **Between two sites there is
+   --  one wall, and it is the earlier house's**: where a column of a site
+   --  has the site of a house begun after it beside it, it is planned
+   --  against that site's level (not against the ground as it lies), and
+   --  the later house plans nothing against the earlier one's.  So a house
+   --  begun beside another, its ground reaching to the other's, shares one
+   --  wall with it where their floors are more than a block apart, and
+   --  none where they are not; behind them the two back walls meet, and
+   --  where one house is deeper than the other the deeper one's side wall
+   --  is the turn between them.
+   type Column_Plan is record
+      Top   : Integer := 0;
+      Stone : Integer := 1;
+   end record;
+
+   --  The house, other than But, whose site block column (Bx, By) is of (0: none).
+   function Site_Of_Block (Bx, By : Integer; But : Natural) return Natural is
+   begin
+      for K in 1 .. N_Houses loop
+         if K /= But and then In_Site (Houses (K).F, H_U (Houses (K).F, Bx, By), H_V (Houses (K).F, Bx, By)) then
+            return K;
+         end if;
+      end loop;
+      return 0;
+   end Site_Of_Block;
+
+   function Plan_Of (H : Positive; U, V : Integer) return Column_Plan is
+      F   : CB.House renames Houses (H).F;
+      Lvl : constant Integer := Level_Of (F, U, V);
+      Hi  : Integer := Lvl;       --  the highest ground beside it, outside the site
+      Lo  : Integer := Lvl;       --  the lowest level beside it, inside the site or out
+      procedure Beside (Nu, Nv : Integer) is
+      begin
+         if In_Site (F, Nu, Nv) then
+            Lo := Integer'Min (Lo, Level_Of (F, Nu, Nv));
+         else
+            declare
+               X : constant Integer := H_X (F, Nu, Nv);
+               Y : constant Integer := H_Y (F, Nu, Nv);
+               K : constant Natural := (if N_Houses > 1 then Site_Of_Block (X, Y, But => H) else 0);
+            begin
+               if K > H then
+                  --  (a later house's site: its level there, as it will be)
+                  declare
+                     L : constant Integer := Level_Of (Houses (K).F, H_U (Houses (K).F, X, Y), H_V (Houses (K).F, X, Y));
+                  begin
+                     Hi := Integer'Max (Hi, L);
+                     Lo := Integer'Min (Lo, L);
+                  end;
+               elsif K = 0 then
+                  declare
+                     G : constant Integer := Top_By (X, Y, F.Pad - 1);
+                  begin
+                     if G >= 0 then
+                        Hi := Integer'Max (Hi, G);
+                        Lo := Integer'Min (Lo, G);
+                     end if;
+                  end;
+               end if;                      --  (an earlier house's site: the wall between them is that one's)
+            end;
+         end if;
+      end Beside;
+   begin
+      Beside (U + 1, V);
+      Beside (U - 1, V);
+      Beside (U, V + 1);
+      Beside (U, V - 1);
+      if Hi - Lvl > Retain_Over_B and then not In_Door_Way (F, U, V) then
+         return (Top => Hi, Stone => Lvl + 1);
+      elsif Lvl - Lo > Retain_Over_B then
+         return (Top => Lvl, Stone => Lo + 1);
+      elsif Is_Stair (F, U, V) then
+         return (Top => Lvl, Stone => Lvl);
+      else
+         return (Top => Lvl, Stone => Lvl + 1);
+      end if;
+   end Plan_Of;
 
    function House_Count return Natural is (N_Houses);
 
@@ -2376,7 +2903,8 @@ package body Castle.Colony is
                          and then (Band (J).State in To_Source | Gathering | To_Take | Taking | To_Camp | Putting_In
                                    or else (Band (J).State = Idle and then Band (J).Carried > 0)))
                 or else (Band (J).Carry = Earth and then Band (J).Carried > 0           --  (earth off the camp's floor)
-                         and then Band (J).State in Idle | To_Store | Storing)));
+                         and then Band (J).State in Idle | To_Store | Storing)
+                or else Band (J).State in To_Tow | Towing));                          --  (the lord's cart)
 
    function At_Extra return Natural is
       N : Natural := 0;
@@ -2413,7 +2941,7 @@ package body Castle.Colony is
             end;
          when For_Pot | For_Store | For_Stoke =>
             return Cook_Side;
-         when For_Ring | For_Frame | For_Floor | For_House =>
+         when For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder =>
             return Pot_Side (M.Pos);          --  to the fire's place, from the side it comes
       end case;
    end Camp_Spot;
@@ -2425,6 +2953,9 @@ package body Castle.Colony is
    begin
       if N_Houses > 0 and then Housed (I) then
          return Bed_Place (Home_Of (I));           --  (under its own roof)
+      end if;
+      if Band (I).Bed or else Band (I).Placed then
+         return Band (I).Bed_At;                   --  (on the bed it made itself, or the place it has chosen for it)
       end if;
       if Camp_Set then
          declare
@@ -2450,10 +2981,290 @@ package body Castle.Colony is
    --  What a sleeper lies with its feet toward: the fire (the stake, with
    --  no camp); under its own roof, its house's back wall, so that it lies
    --  along the house and clear of its walls.
+   --  (at a place of its own by the fire: the way it chose to lie there, across the way to the fire)
+   function Own_Facing (I : Positive) return Vec3 is
+     (Band (I).Bed_At + (Cos (Band (I).Bed_Dir), Sin (Band (I).Bed_Dir), 0.0));
    function Bed_Facing (I : Positive) return Vec3 is
      (if At_Home (I)
       then Bed_Place (Home_Of (I)) + (Float (Houses (Home_Of (I)).F.Vx), Float (Houses (Home_Of (I)).F.Vy), 0.0)
+      elsif Band (I).Placed and then not (N_Houses > 0 and then Housed (I)) then Own_Facing (I)
       elsif Camp_Set then Camp_At else Stake_At);
+   --  (the same for one that is to lie at Feet, wherever it stands now)
+   function Bed_Facing_At (I : Positive; Feet : Vec3) return Vec3 is
+     (if N_Houses > 0 and then Housed (I)
+      then Feet + (Float (Houses (Home_Of (I)).F.Vx), Float (Houses (Home_Of (I)).F.Vy), 0.0)
+      elsif Band (I).Placed then Own_Facing (I)
+      elsif Camp_Set then Camp_At else Stake_At);
+
+   ------------------------------------------------------------------ beds
+
+   --  A bed of straw (John, 2026-11-12: "when the campground is built have
+   --  them pull or collect straw for a bed ... When they get assigned a home
+   --  they can build a new straw bed in their house, we will let the old one
+   --  decay outside when we add decay later").  Each of the band makes its
+   --  own, where it sleeps: by the fire once the camp is built, and again in
+   --  its house once one is its own (the house's bed is the house's: whoever
+   --  the house falls to next has it).  Its straw is the stockpile's, what
+   --  of it the hovels being built do not still want; with none to spare it
+   --  cuts its own.  Bed_Straw sheaves, or as many as it could come by (one
+   --  at the least).  A bed changes nothing but where its maker is seen to
+   --  lie: it is neither warmer nor better rested for it.
+   procedure Set_Beds (On : Boolean) is
+   begin
+      Beds_On := On;
+   end Set_Beds;
+   function Beds return Boolean is (Beds_On);
+   function Straw_In_Beds return Natural is (Bed_Sheaves);
+
+   --  Member I has a bed where it sleeps now; and still has one to make.
+   function Has_Bed (I : Positive) return Boolean is
+     (if N_Houses > 0 and then Housed (I) then Houses (Home_Of (I)).Bed else Band (I).Bed);
+   function Wants_Bed (I : Positive) return Boolean is
+     (Beds_On and then not Band (I).Is_Dead and then not Has_Bed (I)
+      and then ((N_Houses > 0 and then Housed (I)) or else (Camp_Set and then Camp_Built)));
+
+   function Sleeping_Place (I : Positive) return Bed_View is
+     (if I <= N_Members
+      then (Made => Has_Bed (I), Feet => Bed_Spot (I), Toward => Bed_Facing_At (I, Bed_Spot (I)),
+            By_Fire => Band (I).Placed and then Band (I).Bed_Lo >= 0 and then not (N_Houses > 0 and then Housed (I)))
+      else (Made => False, others => <>));
+
+   function Camp_Bed (I : Positive) return Bed_View is
+     (if I <= N_Members and then Band (I).Bed
+      then (Made => True, Feet => Band (I).Bed_At,
+            Toward => (if Band (I).Placed then Own_Facing (I) elsif Camp_Set then Camp_At else Stake_At),
+            By_Fire => Band (I).Placed and then Band (I).Bed_Lo >= 0)
+      else (Made => False, others => <>));
+
+   --  The ground under one that lies with its middle at C, its feet toward
+   --  (Ux, Uy): from a metre before its middle, where it stands to lie down,
+   --  to a metre behind, and a block to either side.  Ok: all of it is the
+   --  camp's ground or nobody's, no path's, bare but for what grows and can
+   --  be cut, with nothing over it; Lo .. Hi: the rows of its top.
+   procedure Lie_Ground (C : Vec3; Ux, Uy : Float; Near : Integer; Ok : out Boolean; Lo, Hi : out Integer) is
+   begin
+      Ok := False;
+      Lo := Integer'Last;
+      Hi := Integer'First;
+      for A in -4 .. 4 loop
+         for W in -1 .. 1 loop
+            declare
+               X  : constant Integer := B (C.X + Ux * 0.25 * Float (A) - Uy * 0.25 * Float (W));
+               Y  : constant Integer := B (C.Y + Uy * 0.25 * Float (A) + Ux * 0.25 * Float (W));
+               Zn : constant Natural := Zone_Of_Block (X, Y);
+               Zr : constant Integer := Ground_Row (X, Y, Near);
+            begin
+               if Zr < 0 or else (Zn /= 0 and then Zn /= Camp_Zone_N)
+                 or else Near_Path ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25, 0.0)
+                 or else Mat (X, Y, Zr) not in Grass | Dirt | Sand | Gravel | Clay | Placer_Gravel | Bog_Iron
+                 or else Mat (X, Y, Zr + 1) not in Air | Tall_Grass | Wild_Grain | Wild_Vegetables
+                 or else (for some Up in 2 .. 4 => Class_Of (Mat (X, Y, Zr + Up)) = Solid)
+               then
+                  return;
+               end if;
+               Lo := Integer'Min (Lo, Zr);
+               Hi := Integer'Max (Hi, Zr);
+            end;
+         end loop;
+      end loop;
+      Ok := True;
+   end Lie_Ground;
+
+   --  How near two sleepers lie: the least way between the lines they lie
+   --  along (each from where its feet stand, Feet, 1.85 m back from the way
+   --  they point).
+   function Lie_Gap (Feet_1 : Vec3; Dir_1 : Float; Feet_2 : Vec3; Dir_2 : Float) return Float is
+      Least : Float := Float'Last;
+   begin
+      for A in 0 .. 8 loop
+         for C in 0 .. 8 loop
+            declare
+               Ta : constant Float := 1.85 * Float (A) / 8.0;
+               Tc : constant Float := 1.85 * Float (C) / 8.0;
+            begin
+               Least := Float'Min
+                 (Least, Flat_Dist ((Feet_1.X - Cos (Dir_1) * Ta, Feet_1.Y - Sin (Dir_1) * Ta, 0.0),
+                                    (Feet_2.X - Cos (Dir_2) * Tc, Feet_2.Y - Sin (Dir_2) * Tc, 0.0)));
+            end;
+         end loop;
+      end loop;
+      return Least;
+   end Lie_Gap;
+
+   --  Member I's place by the fire is chosen (see Bed_Near_M): the nearest
+   --  to the fire of the places round it, across the way to it, that are
+   --  level enough, nobody else's and can be got to; one a block out of
+   --  level counted Bed_Step_M further off.  With none, the old ring.
+   procedure Place_Bed (I : Positive) is
+      M      : Member renames Band (I);
+      Turn   : constant Float := (if I mod 2 = 1 then 1.0 else -1.0);   --  (heads and feet turn about round the fire)
+      Best   : Float := Float'Last;
+      R      : Float := Bed_Near_M;
+      Wood_P : constant Vec3 := Firewood_Place;
+   begin
+      while R <= Bed_Far_M + 0.001 and then Best > R loop
+         declare
+            N : constant Positive := Positive'Max (8, Integer (2.0 * Ada.Numerics.Pi * R / Bed_Ring_M));
+         begin
+            for K in 0 .. N - 1 loop
+               declare
+                  A  : constant Float := Camp_Turn + 2.0 * Ada.Numerics.Pi * (Float (K) + 0.5) / Float (N);
+                  C  : constant Vec3 := (Camp_At.X + R * Cos (A), Camp_At.Y + R * Sin (A), 0.0);
+                  Ux : constant Float := -Sin (A) * Turn;
+                  Uy : constant Float := Cos (A) * Turn;
+                  Feet : Vec3 := (C.X + Ux, C.Y + Uy, 0.0);
+                  Dir  : constant Float := Arctan (Uy, Ux);
+                  Sz : constant Float := Castle.Nav.Surface_Z (C.X, C.Y);
+                  Ok : Boolean := Sz >= 0.0 and then Flat_Dist (C, Wood_P) > 1.6;
+                  Lo, Hi : Integer := 0;
+               begin
+                  if Ok then
+                     Lie_Ground (C, Ux, Uy, B (Sz) - 1, Ok, Lo, Hi);
+                  end if;
+                  if Ok and then Hi - Lo <= Bed_Uneven_B and then R + Bed_Step_M * Float (Hi - Lo) < Best then
+                     Feet.Z := Float (Hi + 1) * 0.25;
+                     for J in 1 .. N_Members loop
+                        if J /= I and then (Band (J).Placed or else Band (J).Bed)
+                          and then Lie_Gap (Feet, Dir, Band (J).Bed_At, Band (J).Bed_Dir) < Bed_Apart_M
+                        then
+                           Ok := False;
+                        end if;
+                     end loop;
+                     if Ok then
+                        declare
+                           Way : constant Castle.Nav.Route := Castle.Nav.Plan (Cook_Side, Feet, Budget => 20_000, Within => Own_Region);
+                        begin
+                           Ok := Castle.Nav."=" (Way.Result, Castle.Nav.Found) and then Way.N > 0
+                             and then Flat_Dist (Way.Pts (Way.N).P, Feet) <= 0.6;
+                        end;
+                     end if;
+                     if Ok then
+                        Best := R + Bed_Step_M * Float (Hi - Lo);
+                        M.Bed_At := Feet;
+                        M.Bed_Dir := Dir;
+                        M.Bed_Lo := Lo;
+                        M.Bed_Hi := Hi;
+                     end if;
+                  end if;
+               end;
+            end loop;
+         end;
+         R := R + Bed_Ring_M;
+      end loop;
+      if Best = Float'Last then
+         --  (no such place: on the ring, as the band lay before it looked for one)
+         M.Bed_At := Bed_Spot (I);
+         M.Bed_Dir := Arctan (Camp_At.Y - M.Bed_At.Y, Camp_At.X - M.Bed_At.X);
+         M.Bed_Lo := -1;
+         M.Bed_Hi := -1;
+      end if;
+      M.Placed := True;
+   end Place_Bed;
+
+   --  Its place by the fire is still as it was chosen: its ground where it
+   --  was, no path over it, no house's ground come to it.
+   function Bed_Kept (I : Positive) return Boolean is
+      M  : Member renames Band (I);
+      Ux : constant Float := Cos (M.Bed_Dir);
+      Uy : constant Float := Sin (M.Bed_Dir);
+   begin
+      for A in -4 .. 4 loop
+         for W in -1 .. 1 loop
+            declare
+               X : constant Integer := B (M.Bed_At.X - Ux + Ux * 0.25 * Float (A) - Uy * 0.25 * Float (W));
+               Y : constant Integer := B (M.Bed_At.Y - Uy + Uy * 0.25 * Float (A) + Ux * 0.25 * Float (W));
+            begin
+               if Near_Path ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25, 0.0)
+                 or else (N_Houses > 0 and then Site_Of_Block (X, Y, 0) /= 0)
+                 or else (M.Bed_Lo >= 0 and then Ground_Row (X, Y, M.Bed_Hi) not in M.Bed_Lo .. M.Bed_Hi)
+               then
+                  return False;
+               end if;
+            end;
+         end loop;
+      end loop;
+      return True;
+   end Bed_Kept;
+
+   --  Once a game hour: a place by the fire that something has been built
+   --  or dug on is nobody's any more, and a bed made there is gone with its
+   --  straw (whoever still sleeps by the fire chooses another, and makes
+   --  its bed again).
+   procedure Keep_Beds is
+   begin
+      for I in 1 .. N_Members loop
+         if Band (I).Placed and then not Bed_Kept (I) then
+            Band (I).Placed := False;
+            if Band (I).Bed then
+               Bed_Sheaves := Bed_Sheaves - Natural'Min (Bed_Sheaves, Band (I).Bed_Has);
+               Band (I).Bed := False;
+               Band (I).Bed_Has := 0;
+            end if;
+         end if;
+      end loop;
+   end Keep_Beds;
+
+   --  The bed is made, of the straw it has brought, where it stands to lie
+   --  down: what grows there is cut.  Made False: where it sleeps is no
+   --  longer where it has come to (a hovel fell to it on its way to the
+   --  fire with its straw), and nothing is laid: it goes there with it.
+   procedure Make_Bed (I : Positive; Made : out Boolean) is
+      M    : Member renames Band (I);
+      Used : constant Natural := Natural'Min (M.Carried, Bed_Straw);
+      Feet : constant Vec3 := Bed_Spot (I);
+      To   : constant Vec3 := Bed_Facing_At (I, Feet);
+      L    : constant Float := Float'Max (0.01, Flat_Dist (Feet, To));
+      Dx   : constant Float := (To.X - Feet.X) / L;
+      Dy   : constant Float := (To.Y - Feet.Y) / L;
+   begin
+      Made := False;
+      if Used = 0 or else M.Carry /= Straw or else Flat_Dist (M.Pos, Feet) > Home_M then
+         return;
+      end if;
+      Made := True;
+      if N_Houses > 0 and then Housed (I) then
+         Houses (Home_Of (I)).Bed := True;
+      else
+         M.Bed := True;
+         M.Bed_At := Feet;
+         M.Bed_Has := Used;
+         if not M.Placed then                      --  (with no place chosen: as the band lay before it looked for one)
+            M.Placed := True;
+            M.Bed_Dir := Arctan (To.Y - Feet.Y, To.X - Feet.X);
+            M.Bed_Lo := -1;
+            M.Bed_Hi := -1;
+         end if;
+         --  (the grass under it: from its feet back along where it lies)
+         for Along in 0 .. 8 loop
+            for Across in -2 .. 2 loop
+               declare
+                  X : constant Integer := B (Feet.X - Dx * 0.25 * Float (Along) - Dy * 0.25 * Float (Across));
+                  Y : constant Integer := B (Feet.Y - Dy * 0.25 * Float (Along) + Dx * 0.25 * Float (Across));
+                  Z : constant Integer := Ground_Row (X, Y, B (Feet.Z) - 1);
+               begin
+                  if Z >= 0 then
+                     for Up in 1 .. 3 loop
+                        exit when Mat (X, Y, Z + Up) not in Tall_Grass | Wild_Grain | Wild_Vegetables;
+                        Write_Src (X, Y, Z + Up, Air_Block);
+                     end loop;
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end if;
+      Bed_Sheaves := Bed_Sheaves + Used;
+      M.Carried := M.Carried - Used;
+      if M.Carried = 0 then
+         --  the grain that came with straw it cut itself goes to the stores
+         if M.Grain > 0 then
+            M.Carry := Grain;
+            M.Carried := M.Grain;
+            M.Grain := 0;
+         else
+            M.Carry := Nothing;
+         end if;
+      end if;
+   end Make_Bed;
 
    procedure Build_Camp_Now is
    begin
@@ -2556,15 +3367,58 @@ package body Castle.Colony is
       Store_Days := Natural'Min (Days, 60);
    end Set_Winter_Store;
 
-   --  Food to be had: stew, or raw food in the stockpiles, not set aside
-   --  or held back.
+   function Has_Cook return Boolean is
+     (for some I in 1 .. N_Members => Band (I).Job = Cook and then not Band (I).Is_Dead);
+
+   function Pot_Room return Natural is (Integer'Max (0, Pot_Points - Integer (Pot_Stew) - Integer (Pot_Raw)));
+   function Pot_Goal return Natural is (Integer'Max (0, Pot_Points - Integer (Pot_Stew)));   --  to fill it
+
+   --  What the cook keeps for the pot, of a kind that can be eaten raw: the
+   --  greens of a pot's fill, in the cook's own order, from what the winter
+   --  store does not hold (the spec, "What the cook keeps").
+   function Cook_Hold (K : Item_Kind) return Natural is
+      Left : Integer := Cook_Keeps;
+   begin
+      if not Hold_On or else Raw_Food (K) = 0 or else not Camp_Built or else not Has_Cook then
+         return 0;
+      end if;
+      if Usable (Meat) > 0 then                --  (meat's half of a pot, while there is meat)
+         Left := Left - Integer'Min (Usable (Meat) * Stew_Food (Meat), Cook_Keeps / 2);
+      end if;
+      for J of Greens_Order loop
+         declare
+            Take : constant Natural :=
+              Natural'Min (Usable (J), (Integer'Max (0, Left) + Stew_Food (J) - 1) / Stew_Food (J));
+         begin
+            if J = K then
+               return Take;
+            end if;
+            Left := Left - Take * Stew_Food (J);
+         end;
+      end loop;
+      return 0;
+   end Cook_Hold;
+
+   --  Of K, what may be eaten raw: not set aside, not held for winter, not
+   --  kept for the pot.
+   function Raw_Free (K : Item_Kind) return Natural is (Usable (K) - Natural'Min (Usable (K), Cook_Hold (K)));
+
+   procedure Set_Cook_Hold (On : Boolean) is
+   begin
+      Hold_On := On;
+   end Set_Cook_Hold;
+   function Cook_Holds return Boolean is (Hold_On);
+   function Cook_Held (K : Item_Kind) return Natural is (Cook_Hold (K));
+
+   --  Food to be had: stew, or raw food in the stockpiles, not set aside,
+   --  held back or kept for the pot.
    function Food_In_Store return Boolean is
    begin
       if Stew_Free > 0 then
          return True;
       end if;
       for K of Keep_Order loop
-         if Raw_Food (K) > 0 and then Usable (K) > 0 then
+         if Raw_Food (K) > 0 and then Raw_Free (K) > 0 then
             return True;
          end if;
       end loop;
@@ -2581,9 +3435,6 @@ package body Castle.Colony is
       end loop;
       return N;
    end Stew_Stock;
-
-   function Has_Cook return Boolean is
-     (for some I in 1 .. N_Members => Band (I).Job = Cook and then not Band (I).Is_Dead);
 
    ------------------------------------------------------------------ needs: eating and sleeping
 
@@ -2706,6 +3557,22 @@ package body Castle.Colony is
 
    function Go_Eat (I : Positive) return Boolean is separate;
 
+   --  Come to within a step of where it sleeps, it lies down on its bed
+   --  if it has one, not beside it.
+   procedure Lie_On_Bed (I : Positive) is
+      M : Member renames Band (I);
+   begin
+      if Beds_On and then Flat_Dist (M.Pos, Bed_Spot (I)) <= 0.8
+        and then ((Has_Bed (I) and then abs (M.Pos.Z - Bed_Spot (I).Z) < 0.3)
+                  --  (at a place of its own by the fire, bed or no bed: the ground it chose, all of it
+                  --  level, whatever the walking map makes of the ground beside it)
+                  or else (M.Placed and then M.Bed_Lo >= 0 and then not (N_Houses > 0 and then Housed (I))
+                           and then abs (M.Pos.Z - Bed_Spot (I).Z) < 0.8))
+      then
+         M.Pos := Bed_Spot (I);
+      end if;
+   end Lie_On_Bed;
+
    function Go_Bed (I : Positive) return Boolean is
       M : Member renames Band (I);
    begin
@@ -2714,6 +3581,7 @@ package body Castle.Colony is
          M.Route.N := 0;
          M.Pace := 0.0;
          M.State := Sleeping;
+         Lie_On_Bed (I);
          M.Spot := Bed_Facing (I);
          return True;
       end if;
@@ -2734,7 +3602,8 @@ package body Castle.Colony is
    --  with a load for the house, which Step_Member lets it deliver.)
    function Interruptible (S : Task_State) return Boolean is
      (S in Strolling | To_Bush | Picking | To_Tree | To_Pile | To_Source | Gathering | Stalking | To_Carcass
-         | To_Take | To_Patch | Tamping | To_Site | Raising);
+         | To_Take | To_Patch | Tamping | To_Site | Raising | To_Cart | To_Ladder);
+   --  (To_Tow and Towing are not: the cart is taken where it is going, as a load is)
 
    procedure Interrupt (M : in out Member; I : Positive) is
    begin
@@ -2814,9 +3683,6 @@ package body Castle.Colony is
       end loop;
       return Nothing;
    end Greens;
-
-   function Pot_Room return Natural is (Integer'Max (0, Pot_Points - Integer (Pot_Stew) - Integer (Pot_Raw)));
-   function Pot_Goal return Natural is (Integer'Max (0, Pot_Points - Integer (Pot_Stew)));   --  to fill it
 
    function Next_Ingredient return Item_Kind is
       G : constant Item_Kind := Greens;
@@ -2907,6 +3773,7 @@ package body Castle.Colony is
       X, Y, Z : Integer_16 := 0;
       M       : Material := Air;
       S       : CB.Stage := CB.Floor;
+      St      : Unsigned_8 := 0;     --  the state the block is laid with (a roof's trimming)
    end record;
    Max_BP : constant := Max_House_Blocks;
    type BP_Array is array (1 .. Max_BP) of BP_Block;
@@ -2916,11 +3783,11 @@ package body Castle.Colony is
    BP_Of : Natural := 0;             --  the house it is of (0: none)
 
    procedure Blueprint_Of (H : Positive) is
-      procedure Note (Bx, By, Bz : Integer; M : Material; S : CB.Stage) is
+      procedure Note (Bx, By, Bz : Integer; M : Material; S : CB.Stage; State : Natural) is
       begin
          if M /= Air and then BP_N < Max_BP then
             BP_N := BP_N + 1;
-            BP (BP_N) := (Integer_16 (Bx), Integer_16 (By), Integer_16 (Bz), M, S);
+            BP (BP_N) := (Integer_16 (Bx), Integer_16 (By), Integer_16 (Bz), M, S, Unsigned_8 (State));
          end if;
       end Note;
       procedure Draw is new CB.Blueprint (Note);
@@ -2936,7 +3803,6 @@ package body Castle.Colony is
    begin
       House_Memos_On := On;
       BP_Of := 0;
-      Lots_Full := False;
    end Set_House_Memos;
 
    --  What a block is made from, and how many blocks one of that makes.
@@ -2946,8 +3812,23 @@ package body Castle.Colony is
    --  (Nothing: work alone, never carried, never counted in what a house
    --  takes or has).
    function Kind_Of_Block (M : Material) return Item_Kind is
-     (case M is when Thatch | Daub => Straw, when Log | Plank => Wood, when others => Nothing);
-   function Blocks_Per (K : Item_Kind) return Positive is (if K = Straw then Thatch_Per_Sheaf else Planks_Per_Log);
+     (case M is when Thatch | Daub => Straw, when Log | Plank => Wood, when Fieldstone => Stone, when others => Nothing);
+   function Blocks_Per (K : Item_Kind) return Positive is
+     (if K = Straw then Thatch_Per_Sheaf elsif K = Stone then Wall_Per_Stone else Planks_Per_Log);
+   --  (a roof's trimming is its thatch again, as it lies: work alone)
+   function Kind_Of (Bk : BP_Block) return Item_Kind is
+     (if Bk.S = CB.Dress then Nothing else Kind_Of_Block (Bk.M));
+
+   --  What a house still wants of stone, from the blocks of wall and stair
+   --  last counted as still to lay (its site is read, not kept: the count
+   --  moves as the ground beside it does) and what lies there not yet laid.
+   procedure Note_Stone (H : Positive; Left : Natural) is
+      Hs : House_Rec renames Houses (H);
+   begin
+      Hs.Stone_Left := Left;
+      Hs.Takes (Stone) :=
+        Hs.Got (Stone) + (if Left > Hs.Lying (Stone) then (Left - Hs.Lying (Stone) + Wall_Per_Stone - 1) / Wall_Per_Stone else 0);
+   end Note_Stone;
 
    --  What house H's blueprint comes to: its blocks, where its floor, its
    --  frame and its walls end, and the logs and sheaves they take.
@@ -2962,10 +3843,18 @@ package body Castle.Colony is
       Hs.Frame_N := 0;
       Hs.Walls_N := 0;
       Hs.Wood_N := 0;
+      Hs.Roof_N := 0;
+      Hs.Dress_N := 0;
       for K in 1 .. BP_N loop
-         N (Kind_Of_Block (BP (K).M)) := N (Kind_Of_Block (BP (K).M)) + 1;
-         if Kind_Of_Block (BP (K).M) = Wood then
+         N (Kind_Of (BP (K))) := N (Kind_Of (BP (K))) + 1;
+         if Kind_Of (BP (K)) = Wood then
             Hs.Wood_N := K;
+         end if;
+         if BP (K).S < CB.Dress then
+            Hs.Roof_N := K;
+         end if;
+         if BP (K).S <= CB.Dress then
+            Hs.Dress_N := K;
          end if;
          if BP (K).S = CB.Floor then
             Hs.Floor_N := K;
@@ -2978,8 +3867,9 @@ package body Castle.Colony is
          end if;
       end loop;
       Hs.Takes := [others => 0];
+      Note_Stone (H, Hs.Stone_Left);
       for K in Item_Kind loop
-         if K /= Nothing and then N (K) > 0 then
+         if K not in Nothing | Stone and then N (K) > 0 then
             Hs.Takes (K) := (N (K) + Blocks_Per (K) - 1) / Blocks_Per (K);
          end if;
       end loop;
@@ -2991,12 +3881,46 @@ package body Castle.Colony is
      (if Houses (H).Built or else Houses (H).Got (K) >= Houses (H).Takes (K) then 0
       else Houses (H).Takes (K) - Houses (H).Got (K));
 
+   --  A log for a ladder: a house not yet built wants one of the stores
+   --  while no ladder stands at it and there is none to be had for it
+   --  (stored, standing at a hovel that is built, in somebody's arms or in
+   --  the making), the houses begun first before those begun after.  It is
+   --  asked with the house's timber, so that it is felled with it; it is not
+   --  of the house's own timber, and is never carried to it as a log.
+   function Ladder_Short (H : Positive) return Natural is
+      Avail, Before : Natural := 0;
+   begin
+      if not Ladders_On or else Houses (H).Built or else Houses (H).Ladder > 0 then
+         return 0;
+      end if;
+      for C in 1 .. N_Cells loop
+         if Cells (C).Kind = Ladder then
+            Avail := Avail + Cells (C).Count;
+         end if;
+      end loop;
+      for K in 1 .. N_Houses loop
+         if Houses (K).Built and then Houses (K).Ladder > 0 then
+            Avail := Avail + 1;
+         elsif K < H and then not Houses (K).Built and then Houses (K).Ladder = 0 then
+            Before := Before + 1;
+         end if;
+      end loop;
+      for I in 1 .. N_Members loop
+         if not Band (I).Is_Dead
+           and then ((Band (I).Carry = Ladder and then Band (I).Carried > 0) or else Band (I).State = Making)
+         then
+            Avail := Avail + 1;
+         end if;
+      end loop;
+      return (if Before >= Avail then Ladder_Wood else 0);
+   end Ladder_Short;
+
    function Zone_Short (Z : Positive; K : Item_Kind) return Natural is
       N : Natural := 0;
    begin
       for H in 1 .. N_Houses loop
          if Houses (H).Zone = Z then
-            N := N + House_Short (H, K);
+            N := N + House_Short (H, K) + (if K = Wood then Ladder_Short (H) else 0);
          end if;
       end loop;
       return N;
@@ -3006,7 +3930,7 @@ package body Castle.Colony is
       N : Natural := 0;
    begin
       for H in 1 .. N_Houses loop
-         N := N + House_Short (H, K);
+         N := N + House_Short (H, K) + (if K = Wood then Ladder_Short (H) else 0);
       end loop;
       return N;
    end Houses_Short;
@@ -3052,8 +3976,9 @@ package body Castle.Colony is
    --  A house's lot is taken.
    procedure Lot_Take (F : CB.House) is
    begin
-      for V in V_Lo .. Lot_Back (F) loop
-         for U in -Lot_Left (F) .. F.W - 1 + Lot_Right (F) loop
+      --  (and what it reaches over to a neighbour's)
+      for U in Integer'Min (-Lot_Left (F), Site_U_Lo (F)) .. Integer'Max (F.W - 1 + Lot_Right (F), Site_U_Hi (F)) loop
+         for V in -Front_Of (F, U) .. Lot_Back (F) loop
             declare
                X : constant Integer := H_X (F, U, V) - Lot_X0;
                Y : constant Integer := H_Y (F, U, V) - Lot_Y0;
@@ -3066,8 +3991,9 @@ package body Castle.Colony is
       end loop;
    end Lot_Take;
 
-   --  The grid of zone Z as things stand: its ground, less every lot taken.
-   procedure Lot_Grid_Of_Zone (Z : Positive) is
+   --  The grid of zone Z as things stand: its ground, less every lot taken
+   --  (With_Lots: and less every lot laid out for a house not yet begun).
+   procedure Lot_Grid_Of_Zone (Z : Positive; With_Lots : Boolean := True) is
       R : Zone_Rec renames Zones (Z);
    begin
       Lot_Open (R.Bx0, R.By0, R.Bx1, R.By1);
@@ -3077,6 +4003,11 @@ package body Castle.Colony is
       for H in 1 .. N_Houses loop
          Lot_Take (Houses (H).F);
       end loop;
+      if With_Lots then
+         for K in 1 .. N_Lots loop
+            Lot_Take (Lots (K).F);
+         end loop;
+      end if;
    end Lot_Grid_Of_Zone;
 
    --  A house as placed: its walls and the bank round them wholly on the
@@ -3121,16 +4052,32 @@ package body Castle.Colony is
 
    --  The level of its pad: the highest at which the earth dug off what
    --  stands above it is at least what the hollows below it take (so that
-   --  the earth for them is always there, as for the camp's floor).
+   --  the earth for them is always there, as for the camp's floor),
+   --  reckoned as if its hollows were filled: they are, with the turf cut
+   --  off its floor (Fill_Hollows).  Reckoned on the ground as it lies, a hole or
+   --  two in level ground wanted earth that nothing dug off gave, and the
+   --  whole lot was dug down to their bottoms instead (John, 2026-11-13:
+   --  "othewise even ground was dug out entirely becuase it had a couple
+   --  of holes in it, instead of just filling the holes").  A slope has
+   --  no holes: its pad is where it was.
    procedure Choose_Pad (F : in out CB.House) is
+      Au : constant Integer := Apron_U (F);
+      Tops : Top_Grid (-CB.Apron_B - 1 .. CB.Max_Width_B + CB.Apron_B,
+                       -(CB.Max_Push_B + CB.Setback_Max_B + 6) - 1 .. CB.Max_Depth_B + CB.Apron_B) :=
+        [others => [others => -1]];                              --  -1: not of its lot
       Lo : Integer := Integer'Last;
       Hi : Integer := Integer'First;
-      Au : constant Integer := Apron_U (F);
    begin
+      for U in -Au .. F.W - 1 + Au loop
+         for V in -Front_Of (F, U) .. V_Hi (F) loop
+            Tops (U, V) := Lot_Cell (H_X (F, U, V), H_Y (F, U, V)) - 1;
+         end loop;
+      end loop;
+      Fill_Hollows (Tops);
       for V in 0 .. F.D - 1 loop
          for U in 0 .. F.W - 1 loop
-            Lo := Integer'Min (Lo, Lot_Cell (H_X (F, U, V), H_Y (F, U, V)) - 1);
-            Hi := Integer'Max (Hi, Lot_Cell (H_X (F, U, V), H_Y (F, U, V)) - 1);
+            Lo := Integer'Min (Lo, Tops (U, V));
+            Hi := Integer'Max (Hi, Tops (U, V));
          end loop;
       end loop;
       for Level in reverse Lo .. Hi loop
@@ -3138,16 +4085,15 @@ package body Castle.Colony is
          declare
             Cut, Fill : Natural := 0;
          begin
-            for V in V_Lo .. V_Hi (F) loop
-               for U in -Au .. F.W - 1 + Au loop
+            for U in -Au .. F.W - 1 + Au loop
+               for V in -Front_Of (F, U) .. V_Hi (F) loop
                   declare
-                     Old : constant Integer := Lot_Cell (H_X (F, U, V), H_Y (F, U, V)) - 1;
-                     T   : constant Integer := Target_Row (F, U, V, Old);
+                     T : constant Integer := Tops (U, V);
                   begin
-                     if Old > T then
-                        Cut := Cut + Old - T;
-                     else
-                        Fill := Fill + T - Old;
+                     if T >= 0 and then T > Level then
+                        Cut := Cut + T - Level;
+                     elsif T >= 0 then
+                        Fill := Fill + Level - T;
                      end if;
                   end;
                end loop;
@@ -3156,6 +4102,33 @@ package body Castle.Colony is
          end;
       end loop;
    end Choose_Pad;
+
+   --  A house's front yard as it is placed: at each place along its front,
+   --  the free ground of its zone straight out from its front wall's line,
+   --  as far as that goes (to its path's edge, as a rule).
+   procedure Front_Yard (F : in out CB.House) is
+      Most : constant := CB.Max_Push_B + CB.Setback_Max_B + 6;
+   begin
+      F.Front := [others => 0];
+      for U in -Apron_U (F) .. F.W - 1 + Apron_U (F) loop
+         declare
+            N : Natural := 0;
+         begin
+            while N < Most and then Lot_Cell (H_X (F, U, -(N + 1)), H_Y (F, U, -(N + 1))) > 0 loop
+               N := N + 1;
+            end loop;
+            --  (straight out past the end of its path, or to something else
+            --  in the way: no further than the least a yard is)
+            if N = Most
+              or else not Near_Path ((Float (H_X (F, U, -(N + 1))) + 0.5) * 0.25,
+                                     (Float (H_Y (F, U, -(N + 1))) + 0.5) * 0.25, 0.0)
+            then
+               N := Natural'Min (N, CB.Apron_Front_B);
+            end if;
+            F.Front (U) := N;
+         end;
+      end loop;
+   end Front_Yard;
 
    --  The way out from a house's door to its path, on the grid: how many
    --  block columns of the zone's free ground lie between its front wall
@@ -3205,6 +4178,30 @@ package body Castle.Colony is
    Fronts : constant Front_Access := new Front_Array;
 
    function House_Seed (Serial : Positive) return U64 is (Castle.Hash.Hash_2 (Band_Seed, 6_001, Serial));
+
+   --  A house where it is put, on the grid as it is filled: its yard to its
+   --  path, its pad's level and its door's way worked out.  Verdict: how its
+   --  lot lies; Ok: it can stand there, its door got to from its path.
+   procedure Try_Lot (G : in out CB.House; Verdict : out Lot_Verdict; Ok : out Boolean) is
+   begin
+      Ok := False;
+      G.Door_Run := 0;
+      Verdict := Check_Lot (G);
+      if Verdict /= Clear then
+         return;
+      end if;
+      Front_Yard (G);
+      Choose_Pad (G);
+      Door_Way (G);
+      --  its door has to be got to from the path: a pad that would stand
+      --  higher over the path's ground than its door's way can step down is
+      --  cut deeper; one that would lie further below it steps back for a
+      --  longer way, if there is room
+      if G.Door_Run > 0 and then G.Pad - 1 > G.Door_Row + Door_Steps (G) then
+         G.Pad := G.Door_Row + Door_Steps (G) + 1;
+      end if;
+      Ok := G.Door_Run > 0 and then G.Pad - 1 >= G.Door_Row - Door_Steps (G);
+   end Try_Lot;
 
    --  Where on the grid, as it is filled, the house of that serial goes:
    --  the free frontage nearest the homestake.  Its front wall stands a
@@ -3285,87 +4282,272 @@ package body Castle.Colony is
                for Push in 0 .. CB.Max_Push_B loop
                   G.Fx := B (A.P.X) + G.Vx * (Off + Push) - G.Ux * (G.W / 2);
                   G.Fy := B (A.P.Y) + G.Vy * (Off + Push) - G.Uy * (G.W / 2);
-                  G.Door_Run := 0;
-                  case Check_Lot (G) is
-                     when Clear =>
-                        Choose_Pad (G);
-                        Door_Way (G);
-                        --  its door has to be got to from the path: a pad that
-                        --  would stand higher over the path's ground than its
-                        --  door's way can step down is cut deeper; one that
-                        --  would lie further below it steps back for a longer
-                        --  way, if there is room
-                        if G.Door_Run > 0 and then G.Pad - 1 > G.Door_Row + Door_Steps (G) then
-                           G.Pad := G.Door_Row + Door_Steps (G) + 1;
-                        end if;
-                        if G.Door_Run > 0 and then G.Pad - 1 >= G.Door_Row - Door_Steps (G) then
-                           F := G;
-                           Key := A.Key;
-                           Ok := True;
-                           return;
-                        end if;
-                     when On_A_Path =>
-                        null;
-                     when Blocked =>
-                        exit;
-                  end case;
+                  declare
+                     Verdict : Lot_Verdict;
+                     Stands  : Boolean;
+                  begin
+                     Try_Lot (G, Verdict, Stands);
+                     if Stands then
+                        F := G;
+                        Key := A.Key;
+                        Ok := True;
+                        return;
+                     end if;
+                     exit when Verdict = Blocked;
+                  end;
                end loop;
             end;
          end;
       end loop;
    end Place_House;
 
-   --  A house begun for Owner (0: for nobody yet), on the lot nearest the
-   --  homestake that any housing zone has.  Ok False: there is no lot.
-   procedure New_House (Owner : Natural; Ok : out Boolean) is
-      Best     : CB.House;
-      Best_Key : Float := Float'Last;
-      Best_Z   : Natural := 0;
-      F        : CB.House;
-      Key      : Float;
-      Fits     : Boolean;
+   --  The lots for the houses still to begin, laid out anew: the next house
+   --  in turn on the free frontage nearest the homestake that any housing
+   --  has, then the one after it with that lot taken, and so on until one
+   --  fits nowhere (Lots_Short) or there are as many as there can be houses.
+   --  Called when the player zones housing or lays a path, and when a lot
+   --  laid out turns out not to hold its house any more.
+   procedure Plan_Lots is
+      F    : CB.House;
+      Key  : Float;
+      Fits : Boolean;
+   begin
+      N_Lots := 0;
+      Lots_Are_Short := False;
+      if N_Housing = 0 then
+         return;
+      end if;
+      while N_Houses + N_Lots < Max_Houses loop
+         declare
+            Best     : CB.House;
+            Best_Key : Float := Float'Last;
+            Best_Z   : Natural := 0;
+         begin
+            for Z in 1 .. N_Zones loop
+               if Zones (Z).Kind = Habitation_Zone and then Zones (Z).N > 0 then
+                  Lot_Grid_Of_Zone (Z);
+                  Place_House (House_Serial + N_Lots + 1, F, Key, Fits);
+                  if Fits and then Key < Best_Key then
+                     Best := F;
+                     Best_Key := Key;
+                     Best_Z := Z;
+                  end if;
+               end if;
+            end loop;
+            if Best_Z = 0 then
+               Lots_Are_Short := True;
+               exit;
+            end if;
+            N_Lots := N_Lots + 1;
+            Lots (N_Lots) := (Zone => Best_Z, F => Best);
+         end;
+      end loop;
+      Zones_Ver := Zones_Ver + 1;
+   end Plan_Lots;
+
+   function Lot_Count return Natural is (N_Lots);
+   function Lot_At (K : Positive) return Lot_Corners is
+      F : CB.House renames Lots (K).F;
+   begin
+      return [H_Point (F, -0.5, -0.5), H_Point (F, Float (F.W) - 0.5, -0.5),
+              H_Point (F, Float (F.W) - 0.5, Float (F.D) - 0.5), H_Point (F, -0.5, Float (F.D) - 0.5)];
+   end Lot_At;
+   function Lots_Short return Boolean is (Lots_Are_Short);
+
+   --  A house just begun reaches over to the ground of a house begun before
+   --  it that stands beside it along the same path: their fronts the same
+   --  way, their walls side by side, and nearer than another lot would fit
+   --  between.  The ground between the two is then the new one's to make
+   --  ready with its own, to its own level, from its path back to the end of
+   --  its own back yard (so two houses stand on one terrace, or on two with
+   --  one wall between, and the walls behind them meet).  Only where all of
+   --  that ground is its zone's and nobody else's: a tree left standing
+   --  between two houses keeps them apart.  (Its ground made ready round a
+   --  tree's foot was tried: in a gap a few columns wide the tree's ground,
+   --  walled, shuts the back of the gap off, and what lies behind it is a
+   --  pit a serf can drop into and not climb out of.)
+   procedure Join_Site (H : Positive) is
+      Hs   : House_Rec renames Houses (H);
+      F    : CB.House renames Hs.F;
+      Most : constant := CB.Max_Push_B + CB.Setback_Max_B + 6;
+      function Free (U, V : Integer) return Boolean is
+        (Zone_Of_Block (H_X (F, U, V), H_Y (F, U, V)) = Hs.Zone
+         and then Site_Of_Block (H_X (F, U, V), H_Y (F, U, V), But => H) = 0);
+      procedure Reach (Left : Boolean) is
+         Best : Natural := Natural'Last;
+         function Column (G : Positive) return Integer is
+           (if Left then -Apron_U (F) - G else F.W - 1 + Apron_U (F) + G);
+      begin
+         for K in 1 .. N_Houses loop
+            if K /= H then
+               declare
+                  A  : CB.House renames Houses (K).F;
+                  Du : constant Integer := H_U (F, A.Fx, A.Fy);
+                  Dv : constant Integer := H_V (F, A.Fx, A.Fy);
+                  Gap, Lot_Gap : Integer;
+               begin
+                  if A.Ux = F.Ux and then A.Uy = F.Uy and then A.Vx = F.Vx and then A.Vy = F.Vy
+                    and then Dv <= F.D - 1 and then Dv + A.D - 1 >= 0
+                  then
+                     if Left then
+                        Gap := -Apron_U (F) - (Du + Site_U_Hi (A)) - 1;
+                        Lot_Gap := -Lot_Left (F) - (Du + A.W - 1 + Lot_Right (A)) - 1;
+                     else
+                        Gap := (Du + Site_U_Lo (A)) - (F.W - 1 + Apron_U (F)) - 1;
+                        Lot_Gap := (Du - Lot_Left (A)) - (F.W - 1 + Lot_Right (F)) - 1;
+                     end if;
+                     if Gap >= 0 and then Lot_Gap < CB.Lot_B and then Gap <= CB.Max_Reach_B and then Gap < Best then
+                        Best := Gap;
+                     end if;
+                  end if;
+               end;
+            end if;
+         end loop;
+         if Best = Natural'Last or else Best = 0 then
+            return;                          --  (nobody beside it; or their grounds touch as they are)
+         end if;
+         for G in 1 .. Best loop
+            for V in -CB.Apron_Front_B .. V_Hi (F) loop
+               if not Free (Column (G), V) then
+                  return;
+               end if;
+            end loop;
+         end loop;
+         --  its yard before each of those columns: to its path, as before its own
+         for G in 1 .. Best loop
+            declare
+               U : constant Integer := Column (G);
+               N : Natural := CB.Apron_Front_B;
+            begin
+               while N < Most and then Free (U, -(N + 1)) loop
+                  N := N + 1;
+               end loop;
+               if N = Most
+                 or else not Near_Path ((Float (H_X (F, U, -(N + 1))) + 0.5) * 0.25,
+                                        (Float (H_Y (F, U, -(N + 1))) + 0.5) * 0.25, 0.0)
+               then
+                  N := CB.Apron_Front_B;
+               end if;
+               F.Front (U) := N;
+            end;
+         end loop;
+         if Left then
+            F.Reach_L := Best;
+         else
+            F.Reach_R := Best;
+         end if;
+      end Reach;
+   begin
+      Reach (Left => True);
+      Reach (Left => False);
+   end Join_Site;
+
+   --  The next house is begun, nobody's, on the first lot laid out.  The
+   --  lot alone is looked at again (the ground may have been dug since it
+   --  was laid out); if its house can no longer stand there, the lots are
+   --  laid out anew, once.  Ok False: there is no lot.
+   procedure Begin_Lot (Ok : out Boolean) is
    begin
       Ok := False;
-      if N_Houses >= Max_Houses then
+      for Attempt in 1 .. 2 loop
+         if N_Lots = 0 or else N_Houses >= Max_Houses then
+            return;
+         end if;
+         declare
+            G       : CB.House := Lots (1).F;
+            Verdict : Lot_Verdict;
+            Stands  : Boolean;
+         begin
+            Lot_Grid_Of_Zone (Lots (1).Zone, With_Lots => False);
+            Try_Lot (G, Verdict, Stands);
+            if Stands then
+               House_Serial := House_Serial + 1;
+               N_Houses := N_Houses + 1;
+               Houses (N_Houses) :=
+                 (Zone => Lots (1).Zone, Seed => House_Seed (House_Serial), F => G, others => <>);
+               N_Lots := N_Lots - 1;
+               for K in 1 .. N_Lots loop
+                  Lots (K) := Lots (K + 1);
+               end loop;
+               Join_Site (N_Houses);
+               Measure_House (N_Houses);
+               Zones_Ver := Zones_Ver + 1;          --  (whatever shows the zones shows its lot)
+               Ok := True;
+               return;
+            end if;
+         end;
+         exit when Attempt = 2;
+         Plan_Lots;
+      end loop;
+   end Begin_Lot;
+
+   --  A house that stands and is nobody's is drawn for by lot among the
+   --  living who have none (John, 2026-11-12: "just assign it to them by
+   --  lottery, when the construction is complete").  The draw is made from
+   --  the house's seed and how many are in it: the same house among the same
+   --  people falls to the same one.
+   procedure Draw_Owner (H : Positive) is
+      N : Natural := 0;
+   begin
+      if Houses (H).Owner /= 0 or else not Houses (H).Built then
          return;
       end if;
-      for Z in 1 .. N_Zones loop
-         if Zones (Z).Kind = Habitation_Zone and then Zones (Z).N > 0 then
-            Lot_Grid_Of_Zone (Z);
-            Place_House (House_Serial + 1, F, Key, Fits);
-            if Fits and then Key < Best_Key then
-               Best := F;
-               Best_Key := Key;
-               Best_Z := Z;
-            end if;
+      for I in 1 .. N_Members loop
+         if not Band (I).Is_Dead and then Home_Of (I) = 0 then
+            N := N + 1;
          end if;
       end loop;
-      if Best_Z = 0 then
+      if N = 0 then
          return;
       end if;
-      House_Serial := House_Serial + 1;
-      N_Houses := N_Houses + 1;
-      Houses (N_Houses) :=
-        (Zone => Best_Z, Seed => House_Seed (House_Serial), F => Best, Owner => Owner, others => <>);
-      Measure_House (N_Houses);
-      Zones_Ver := Zones_Ver + 1;          --  (whatever shows the zones shows its lot)
-      Ok := True;
-   end New_House;
+      declare
+         Pick : Natural := Natural (Castle.Hash.Hash_2 (Houses (H).Seed, 6_101, N) mod U64 (N)) + 1;
+      begin
+         for I in 1 .. N_Members loop
+            if not Band (I).Is_Dead and then Home_Of (I) = 0 then
+               Pick := Pick - 1;
+               if Pick = 0 then
+                  Houses (H).Owner := I;
+                  return;
+               end if;
+            end if;
+         end loop;
+      end;
+   end Draw_Owner;
 
-   --  Nothing a lot is found by has changed since none was found.
-   function Lots_As_They_Were return Boolean is
-     (Lots_Zones = Zones_Ver and then Lots_Paths = N_Paths and then Lots_Houses = N_Houses);
-   procedure Note_Lots_Full is
+   --  The living with no house, and the houses begun that do not stand yet
+   --  (each of them will be somebody's).
+   function Without_A_House return Natural is
+      N : Natural := 0;
    begin
-      Lots_Full := True;
-      Lots_Zones := Zones_Ver;
-      Lots_Paths := N_Paths;
-      Lots_Houses := N_Houses;
-   end Note_Lots_Full;
+      for I in 1 .. N_Members loop
+         if not Band (I).Is_Dead and then Home_Of (I) = 0 then
+            N := N + 1;
+         end if;
+      end loop;
+      return N;
+   end Without_A_House;
 
-   --  Once a colony second: a house whose owner has died goes to the first
-   --  without one; and a house is begun for whoever has none, as many at
-   --  once as there are foresters to build them (one, with none).
+   function Houses_Open return Natural is
+      N : Natural := 0;
+   begin
+      for H in 1 .. N_Houses loop
+         if not Houses (H).Built then
+            N := N + 1;
+         end if;
+      end loop;
+      return N;
+   end Houses_Open;
+
+   --  Someone is without a house, none is being built for them, and there
+   --  is no lot to begin one on: more housing is the player's to mark.
+   function Room_Short return Boolean is
+     (N_Housing > 0 and then N_Lots = 0 and then Without_A_House > Houses_Open);
+
+   --  Once a colony second: a house whose owner has died is nobody's, and
+   --  is drawn for again; and while more are without a house than there are
+   --  houses being built, another is begun on the next lot, as many at once
+   --  as there are foresters to build them (one, with none).
    procedure Begin_Houses is
       Open, Foresters : Natural := 0;
       Ok : Boolean;
@@ -3379,37 +4561,18 @@ package body Castle.Colony is
          end if;
       end loop;
       for H in 1 .. N_Houses loop
-         if Houses (H).Owner = 0 then
-            for I in 1 .. N_Members loop
-               if not Band (I).Is_Dead and then Home_Of (I) = 0 then
-                  Houses (H).Owner := I;
-                  exit;
-               end if;
-            end loop;
-         end if;
-         if not Houses (H).Built then
-            Open := Open + 1;
-         end if;
+         Draw_Owner (H);
       end loop;
+      Open := Houses_Open;
       for I in 1 .. N_Members loop
          if not Band (I).Is_Dead and then Band (I).Job = Forester then
             Foresters := Foresters + 1;
          end if;
       end loop;
-      for I in 1 .. N_Members loop
-         exit when Open >= Natural'Max (1, Foresters);
-         if not Band (I).Is_Dead and then Home_Of (I) = 0 then
-            if House_Memos_On and then Lots_Full and then Lots_As_They_Were then
-               return;                     --  (no lot, and nothing has changed since)
-            end if;
-            New_House (I, Ok);
-            if not Ok then
-               Note_Lots_Full;
-               return;
-            end if;
-            Lots_Full := False;
-            Open := Open + 1;
-         end if;
+      while Open < Without_A_House and then Open < Natural'Max (1, Foresters) loop
+         Begin_Lot (Ok);
+         exit when not Ok;
+         Open := Open + 1;
       end loop;
    end Begin_Houses;
 
@@ -3420,75 +4583,170 @@ package body Castle.Colony is
    type Site_Sums is array (1 .. Max_Site_Patch) of Vec3;
 
    function Site_Patch_At (U, V : Integer) return Positive is
-     (((U + CB.Apron_B) / 4) * 16 + (V + 24) / 4 + 1);   --  (V from -22, where a door's way can begin)
+     (((U + CB.Apron_B + CB.Max_Reach_B) / 4) * 16 + (V + 32) / 4 + 1);
+   --  (U from as far to its left as its ground can reach, V from -30, as far as a front yard can)
+   --  (how far back from its path a patch lies: the nearest are worked first)
+   function Patch_Band (P : Positive) return Natural is ((P - 1) mod 16);
 
    --  The row over a house's ridge: as high as anything of it is built.
    function House_Top (F : CB.House) return Integer is
      (F.Pad + F.Wall_H + (if F.Ridge_Along_U then (F.D + 1) / 2 else (F.W + 1) / 2));
 
-   --  A column of a house's ground has work in it: something growing on it
-   --  to cut, its top not where it is to be, or (where the house and its
-   --  eaves will be) a neighbouring tree's leaves or boughs hanging in the
-   --  way.
-   function Column_Wants (F : CB.House; U, V : Integer) return Boolean is
+   --  What is still to do in a column of a house's site: earth to move
+   --  (something growing on it to cut; ground standing over where its top
+   --  is to be; a hollow under where its earth is to reach; where the house
+   --  and its eaves will be, a neighbouring tree's leaves or boughs hanging
+   --  in the way), and when that is done stone to lay.  Stone: the blocks
+   --  of stone it still wants.  **Earth that stands where stone is to go is
+   --  left until the stone is laid in its place**: a wall is never dug out
+   --  first and built after, so the ground of a site is whole at every
+   --  moment (a builder who had dug the stair to his own door away, with no
+   --  stone yet to build it of, starved in the pit).
+   type Ground_Work is (All_Done, To_Dig, To_Wall);
+
+   procedure Work_In (H : Positive; U, V : Integer; Work : out Ground_Work; Stone_N : out Natural) is
+      F   : CB.House renames Houses (H).F;
       X   : constant Integer := H_X (F, U, V);
       Y   : constant Integer := H_Y (F, U, V);
-      Top : constant Integer := Ground_Row (X, Y, F.Pad - 1);
+      Top : constant Integer := Top_By (X, Y, F.Pad - 1);
    begin
-      return Top >= 0
-        and then (Mat (X, Y, Top + 1) in Tall_Grass | Wild_Grain | Wild_Vegetables
-                  or else Top /= Target_Row (F, U, V, Top)
-                  or else (U in -1 .. F.W and then V in -1 .. F.D
-                           and then (for some Z in F.Pad .. House_Top (F) =>
-                                       Mat (X, Y, Z) in Crown or else Mat (X, Y, Z) in Trunk)));
-   end Column_Wants;
+      Work := All_Done;
+      Stone_N := 0;
+      if Top < 0 then
+         return;
+      end if;
+      declare
+         P : constant Column_Plan := Plan_Of (H, U, V);
+         E : constant Integer := Integer'Min (P.Stone - 1, P.Top);      --  the top of its earth
+      begin
+         for Z in P.Stone .. P.Top loop
+            if Mat (X, Y, Z) /= Fieldstone then
+               Stone_N := Stone_N + 1;
+            end if;
+         end loop;
+         if Plants_Over (X, Y, Top) or else Top > P.Top or else Top < E
+           or else (U in -1 .. F.W and then V in -1 .. F.D
+                    and then (for some Z in F.Pad .. House_Top (F) =>
+                                Mat (X, Y, Z) in Crown or else Mat (X, Y, Z) in Trunk))
+         then
+            Work := To_Dig;
+         elsif Stone_N > 0 then
+            Work := To_Wall;
+         end if;
+      end;
+   end Work_In;
 
-   --  Which patches of house H's ground still have work in them, and for
-   --  each the sum of where that work is (X, Y) and how many columns (Z).
-   procedure Site_Patches (H : Positive; Wants : out Site_Flags; Sum : out Site_Sums) is
-      F  : CB.House renames Houses (H).F;
-      Au : constant Integer := Apron_U (F);
+   --  The columns house H's builder makes ready: every column of its site;
+   --  and, where its site lies against the site of a house begun before it,
+   --  that house's columns along it (the wall between the two is the earlier
+   --  house's to have, and the later one's to build if the earlier one's
+   --  ground is done).  Visit (K, U, V, Pu, Pv): a column, (U, V) in house
+   --  K's frame; (Pu, Pv), in H's own frame, says which patch of H's site it
+   --  is worked with.
+   generic
+      with procedure Visit (K : Positive; U, V : Integer; Pu, Pv : Integer);
+   procedure For_Site (H : Positive);
+
+   procedure For_Site (H : Positive) is
+      F : CB.House renames Houses (H).F;
+      --  the first of a column's four neighbours that is of H's site: an
+      --  earlier house's column is visited from that one alone
+      procedure Other (U, V, Nu, Nv : Integer) is
+         X : constant Integer := H_X (F, Nu, Nv);
+         Y : constant Integer := H_Y (F, Nu, Nv);
+         K : Natural;
+         function First_Is_Here return Boolean is
+           (if In_Site (F, Nu - 1, Nv) then U = Nu - 1 and then V = Nv
+            elsif In_Site (F, Nu + 1, Nv) then U = Nu + 1 and then V = Nv
+            elsif In_Site (F, Nu, Nv - 1) then U = Nu and then V = Nv - 1
+            else True);
+      begin
+         if In_Site (F, Nu, Nv) then
+            return;
+         end if;
+         K := Site_Of_Block (X, Y, But => H);
+         if K in 1 .. H - 1 and then First_Is_Here then
+            Visit (K, H_U (Houses (K).F, X, Y), H_V (Houses (K).F, X, Y), U, V);
+         end if;
+      end Other;
    begin
-      Wants := [others => False];
-      Sum := [others => (0.0, 0.0, 0.0)];
       for V in Site_V_Lo (F) .. V_Hi (F) loop
-         for U in -Au .. F.W - 1 + Au loop
-            if In_Site (F, U, V) and then Column_Wants (F, U, V) then
-               declare
-                  P : constant Positive := Site_Patch_At (U, V);
-                  C : constant Vec3 := H_Point (F, Float (U), Float (V));
-               begin
-                  Wants (P) := True;
-                  Sum (P) := Sum (P) + (C.X, C.Y, 1.0);
-               end;
+         for U in Site_U_Lo (F) .. Site_U_Hi (F) loop
+            if In_Site (F, U, V) then
+               Visit (H, U, V, U, V);
+               if H > 1 then
+                  Other (U, V, U - 1, V);
+                  Other (U, V, U + 1, V);
+                  Other (U, V, U, V - 1);
+                  Other (U, V, U, V + 1);
+               end if;
             end if;
          end loop;
       end loop;
+   end For_Site;
+
+   --  Which patches of house H's site still have earth to move (Dig) and
+   --  which stone to lay with none left to move (Wall), for each the sum of
+   --  where that work is (X, Y) and how many columns (Z); and the blocks of
+   --  stone the whole site still wants.
+   procedure Site_Patches (H : Positive; Dig, Wall : out Site_Flags; Sum : out Site_Sums; Stone_N : out Natural) is
+      Earth_Sum, Stone_Sum : Site_Sums := [others => (0.0, 0.0, 0.0)];
+      Stones : Natural := 0;
+      procedure Look (K : Positive; U, V : Integer; Pu, Pv : Integer) is
+         Work : Ground_Work;
+         N    : Natural;
+         P    : constant Positive := Site_Patch_At (Pu, Pv);
+         C    : constant Vec3 := H_Point (Houses (K).F, Float (U), Float (V));
+      begin
+         Work_In (K, U, V, Work, N);
+         Stones := Stones + N;
+         if Work = To_Dig then
+            Dig (P) := True;
+            Earth_Sum (P) := Earth_Sum (P) + (C.X, C.Y, 1.0);
+         elsif Work = To_Wall then
+            Wall (P) := True;
+            Stone_Sum (P) := Stone_Sum (P) + (C.X, C.Y, 1.0);
+         end if;
+      end Look;
+      procedure Look_All is new For_Site (Look);
+   begin
+      Dig := [others => False];
+      Wall := [others => False];
+      Look_All (H);
+      Stone_N := Stones;
+      for P in Dig'Range loop
+         if Dig (P) then
+            Wall (P) := False;                 --  (its earth first)
+            Sum (P) := Earth_Sum (P);
+         else
+            Sum (P) := Stone_Sum (P);
+         end if;
+      end loop;
    end Site_Patches;
 
-   --  A column of a house's ground brought to where it is to be: what grows
-   --  on it cut, what stands above its level dug off, a hollow filled.  (The
-   --  earth is the site's own: what is dug off fills the hollows, and what
-   --  is over is thrown aside on the lot.)
-   procedure Level_Column (F : CB.House; U, V : Integer) is
+   --  A column of a house's site brought to where its earth is to be: what
+   --  grows on it cut, what stands above its level (or where its wall is to
+   --  stand) dug off, a hollow filled.  (The earth is the site's own: what
+   --  is dug off fills the hollows, and what is over is thrown aside on the
+   --  lot.)
+   procedure Level_Column (H : Positive; U, V : Integer) is
+      F   : CB.House renames Houses (H).F;
       X   : constant Integer := H_X (F, U, V);
       Y   : constant Integer := H_Y (F, U, V);
-      Top : constant Integer := Ground_Row (X, Y, F.Pad - 1);
+      Top : constant Integer := Top_By (X, Y, F.Pad - 1);
    begin
       if Top < 0 then
          return;
       end if;
-      for Up in 1 .. 3 loop
-         exit when Mat (X, Y, Top + Up) not in Tall_Grass | Wild_Grain | Wild_Vegetables;
-         Write_Src (X, Y, Top + Up, Air_Block);
-      end loop;
+      Cut_Plants (X, Y, Top);
       declare
-         T : constant Integer := Target_Row (F, U, V, Top);
+         P : constant Column_Plan := Plan_Of (H, U, V);
+         E : constant Integer := Integer'Min (P.Stone - 1, P.Top);
       begin
-         for Z in reverse T + 1 .. Top loop
+         for Z in reverse P.Top + 1 .. Top loop
             Write_Src (X, Y, Z, Air_Block);
          end loop;
-         for Z in Top + 1 .. T loop
+         for Z in Top + 1 .. E loop
             Write_Src (X, Y, Z, (Mat => Dirt, State => 0));
          end loop;
       end;
@@ -3503,19 +4761,53 @@ package body Castle.Colony is
       end if;
    end Level_Column;
 
-   --  Patch P of house H's ground made ready (0: all of it).
+   --  Patch P of house H's site: its earth moved (0: all of the site's).
    procedure Level_Patch (H : Positive; P : Natural) is
-      F  : CB.House renames Houses (H).F;
-      Au : constant Integer := Apron_U (F);
+      procedure Level (K : Positive; U, V : Integer; Pu, Pv : Integer) is
+      begin
+         if P = 0 or else Site_Patch_At (Pu, Pv) = P then
+            Level_Column (K, U, V);
+         end if;
+      end Level;
+      procedure Level_All is new For_Site (Level);
    begin
-      for V in Site_V_Lo (F) .. V_Hi (F) loop
-         for U in -Au .. F.W - 1 + Au loop
-            if In_Site (F, U, V) and then (P = 0 or else Site_Patch_At (U, V) = P) then
-               Level_Column (F, U, V);
-            end if;
-         end loop;
-      end loop;
+      Level_All (H);
    end Level_Patch;
+
+   --  Stone laid in patch P of house H's site (0: all of it), from the foot
+   --  of each wall up, where no earth is left to move, in place of whatever
+   --  earth stands there: Most blocks at most.  Laid: how many were.
+   procedure Wall_Patch (H : Positive; P : Natural; Most : Natural; Laid : out Natural) is
+      Done : Natural := 0;
+      procedure Lay (K : Positive; U, V : Integer; Pu, Pv : Integer) is
+         Work : Ground_Work;
+         N    : Natural;
+      begin
+         if Done >= Most or else not (P = 0 or else Site_Patch_At (Pu, Pv) = P) then
+            return;
+         end if;
+         Work_In (K, U, V, Work, N);
+         if Work = To_Wall then
+            declare
+               X    : constant Integer := H_X (Houses (K).F, U, V);
+               Y    : constant Integer := H_Y (Houses (K).F, U, V);
+               Plan : constant Column_Plan := Plan_Of (K, U, V);
+            begin
+               for Z in Plan.Stone .. Plan.Top loop
+                  exit when Done >= Most;
+                  if Mat (X, Y, Z) /= Fieldstone then
+                     Write_Src (X, Y, Z, (Mat => Fieldstone, State => 0));
+                     Done := Done + 1;
+                  end if;
+               end loop;
+            end;
+         end if;
+      end Lay;
+      procedure Lay_All is new For_Site (Lay);
+   begin
+      Lay_All (H);
+      Laid := Done;
+   end Wall_Patch;
 
    --  Someone other than its builder stands where block (X, Y, Z) is to go.
    --  (The builder stands clear of what it lays; where it could find no
@@ -3533,11 +4825,11 @@ package body Castle.Colony is
       Door : CB.Opening renames F.Openings (1);
    begin
       for U in Door.Offset .. Door.Offset + Door.Width - 1 loop
-         for T in 1 .. F.Door_Run loop
+         for T in 1 .. Integer'Max (F.Door_Run, (if F.Door_Run > 0 then Front_Of (F, U) else 0)) loop
             declare
                X   : constant Integer := H_X (F, U, -T);
                Y   : constant Integer := H_Y (F, U, -T);
-               Top : constant Integer := Ground_Row (X, Y, Target_Row (F, U, -T, F.Pad - 1));
+               Top : constant Integer := Top_By (X, Y, Level_Of (F, U, -T));
             begin
                if Top >= 0 and then Is_Earth (Mat (X, Y, Top)) and then Zone_Of_Block (X, Y) = Houses (H).Zone then
                   Write_Src (X, Y, Top, (Mat => Footpath, State => 0));
@@ -3568,6 +4860,7 @@ package body Castle.Colony is
       end loop;
       Read_Zone_Ground (Hs.Zone);
       Zones_Ver := Zones_Ver + 1;
+      Draw_Owner (H);                       --  (it is somebody's from the moment it stands)
    end Finish_House;
 
    --  House H built on the spot, nothing taken from anywhere.
@@ -3575,33 +4868,49 @@ package body Castle.Colony is
       Hs : House_Rec renames Houses (H);
    begin
       if not Hs.Pad_Done then
-         Level_Patch (H, 0);
+         declare
+            Dig, Wall : Site_Flags;
+            Sum  : Site_Sums;
+            Wanted, Laid : Natural;
+         begin
+            Level_Patch (H, 0);
+            Site_Patches (H, Dig, Wall, Sum, Wanted);
+            Wall_Patch (H, 0, Natural'Last, Laid);
+            Hs.Got (Stone) := Hs.Got (Stone) + (Laid + Wall_Per_Stone - 1) / Wall_Per_Stone;
+            Note_Stone (H, 0);
+         end;
          Read_Zone_Ground (Hs.Zone);          --  (its ground as it is made ready, before anything stands on it)
          Hs.Pad_Done := True;
       end if;
       Blueprint_Of (H);
       for K in Hs.Placed + 1 .. BP_N loop
-         Write_Src (Integer (BP (K).X), Integer (BP (K).Y), Integer (BP (K).Z), (Mat => BP (K).M, State => 0));
+         Write_Src (Integer (BP (K).X), Integer (BP (K).Y), Integer (BP (K).Z), (Mat => BP (K).M, State => BP (K).St));
       end loop;
       Hs.Placed := BP_N;
       Hs.Got := Hs.Takes;
       Finish_House (H);
    end Raise_Now;
 
-   procedure Build_Homes_Now is
+   procedure Build_Homes_Now (Last_First : Boolean := False) is
       Ok : Boolean;
+      Begun : constant Natural := N_Houses;
    begin
-      Begin_Houses;                        --  (houses nobody's now to those without)
-      for I in 1 .. N_Members loop
-         if not Band (I).Is_Dead and then Home_Of (I) = 0 then
-            New_House (I, Ok);
-            exit when not Ok;
-         end if;
-      end loop;
       for H in 1 .. N_Houses loop
-         if not Houses (H).Built then
-            Raise_Now (H);
-         end if;
+         Draw_Owner (H);                   --  (houses nobody's now to those without)
+      end loop;
+      for K in 1 .. Begun loop
+         declare
+            H : constant Positive := (if Last_First then Begun + 1 - K else K);
+         begin
+            if not Houses (H).Built then
+               Raise_Now (H);
+            end if;
+         end;
+      end loop;
+      while Without_A_House > 0 loop
+         Begin_Lot (Ok);
+         exit when not Ok;
+         Raise_Now (N_Houses);
       end loop;
    end Build_Homes_Now;
 
@@ -3681,6 +4990,7 @@ package body Castle.Colony is
                when Meat  => Have_Or_Coming (Meat) + Meat_Coming < Reserves (Meat),
                when Straw => Have_Or_Coming (Straw) < Reserves (Straw),
                when Stone | Water => Have_Or_Coming (K) < Demand (K),
+               when Salt | Ladder => False,        --  (nobody of the band brings either in: never asked for)
                when others => True));
 
    --  The stores take stock: each good is asked for from its low level
@@ -3825,6 +5135,7 @@ package body Castle.Colony is
       Keep : constant Natural :=
         (if K = Wood and then Camp_Set
          then Fire_Day_Logs + (if Seats_Laid < Seat_Logs then Seat_Logs - Seats_Laid else 0) + Hearth_Short (Wood)
+         elsif K = Stone and then Camp_Set then Hearth_Short (Stone)       --  (the hearth's stones first)
          else 0);
    begin
       return (if Free > Keep then Free - Keep else 0);
@@ -3848,11 +5159,16 @@ package body Castle.Colony is
         (Zone => Hs.Zone, Owner => Hs.Owner, Builder => Bd,
          Phase => (if Hs.Built then Standing elsif not Hs.Pad_Done then Ground
                    elsif Hs.Placed < Hs.Floor_N then Flooring elsif Hs.Placed < Hs.Frame_N then Framing
-                   elsif Hs.Placed < Hs.Walls_N then Walling else Roofing),
+                   elsif Hs.Placed < Hs.Walls_N then Walling elsif Hs.Placed < Hs.Roof_N then Roofing
+                   else Trimming),
          Blocks => Hs.Total, Placed => Hs.Placed, Takes => Hs.Takes, Got => Hs.Got,
          Waits => (if Hs.Built then Not_Waiting
                    elsif Bd = 0 then For_A_Builder
                    elsif Failed (Band (Bd), Site_Fail + K) then For_A_Way
+                   elsif not Hs.Pad_Done
+                   then (if Band (Bd).Why = No_Stone and then Hs.Lying (Stone) = 0 and then not Bringing
+                           and then Free_For_Building (Stone) = 0
+                         then For_Stone else Not_Waiting)
                    elsif Hs.Pad_Done and then Hs.Placed >= Hs.Floor_N and then Hs.Lying (Next) = 0 and then not Bringing
                      and then Free_For_Building (Next) = 0
                    then (if Next = Straw then For_Straw else For_Wood)
@@ -3862,14 +5178,170 @@ package body Castle.Colony is
          Door => H_Point (F, Float (Door.Offset) + Float (Door.Width) / 2.0 - 0.5, -2.5),
          Way => F.Door_Run, Rise => (if F.Door_Run > 0 then F.Pad - 1 - F.Door_Row else 0),
          Bed => Bed_Place (K),
-         Top_Z => Float (F.Pad + F.Wall_H + (if F.Ridge_Along_U then (F.D + 1) / 2 else (F.W + 1) / 2)) * 0.25);
+         Top_Z => Float (F.Pad + F.Wall_H + (if F.Ridge_Along_U then (F.D + 1) / 2 else (F.W + 1) / 2)) * 0.25,
+         Has_Bed => Hs.Bed, Reach_L => F.Reach_L, Reach_R => F.Reach_R);
    end House_At;
+
+   --  Its bed: straw for one, then to where it sleeps with it.  True: it
+   --  is seeing to it.
+   function Think_Bed (I : Positive) return Boolean is separate;
 
    --  A builder at its house: a load for it carried there; its ground made
    --  ready; then its blueprint laid from what lies there, and more fetched
    --  from the stores when that runs out.  False: nothing of it for M to do
    --  now (no house wants a builder, or there is nothing to build with: it
    --  goes on as the forester it is).
+   ------------------------------------------------------------------ housing: a ladder for the roof
+
+   Ladder_Fail : constant := 20_600;   --  fail memos: no way to that house's ladder, or to stand one at it (to 20_648)
+
+   procedure Set_Ladders (On : Boolean) is
+   begin
+      Ladders_On := On;
+   end Set_Ladders;
+
+   procedure Set_Path_Holes (On : Boolean) is
+   begin
+      Holes_On := On;
+   end Set_Path_Holes;
+   function Path_Holes return Boolean is (Holes_On);
+   function Ladders return Boolean is (Ladders_On);
+   function Ladders_Made return Natural is (N_Ladders);
+   function Ladders_Lost return Natural is (N_Ladders_Lost);
+   function Ladders_Standing return Natural is
+      N : Natural := 0;
+   begin
+      for H in 1 .. N_Houses loop
+         if Houses (H).Ladder > 0 then
+            N := N + 1;
+         end if;
+      end loop;
+      return N;
+   end Ladders_Standing;
+
+   --  The next block of a house's blueprint is of its roof, or of the
+   --  roof's trimming.
+   function Roof_Next (Hs : House_Rec) return Boolean is
+     (not Hs.Built and then Hs.Pad_Done and then Hs.Placed >= Hs.Walls_N and then Hs.Placed < Hs.Dress_N);
+
+   --  The slope a column of a house's roof is of, by the eave it runs down
+   --  to: 1 front, 2 back (its ridge along its front), 3 left, 4 right.
+   function Roof_Side (F : CB.House; Bx, By : Integer) return Positive is
+     (if F.Ridge_Along_U then (if 2 * H_V (F, Bx, By) + 1 <= F.D then 1 else 2)
+      else (if 2 * H_U (F, Bx, By) + 1 <= F.W then 3 else 4));
+
+   --  Where along its front wall a ladder is stood: the middle of the
+   --  longer stretch of wall beside its door, so that it is not in the
+   --  doorway.
+   function Clear_Of_Door (F : CB.House) return Float is
+      D0 : constant Float := Float (F.Openings (1).Offset);
+      D1 : constant Float := Float (F.Openings (1).Offset + F.Openings (1).Width - 1);
+   begin
+      return (if D0 >= Float (F.W - 1) - D1 then (D0 - 1.0) / 2.0 else (D1 + 1.0 + Float (F.W - 1)) / 2.0);
+   end Clear_Of_Door;
+
+   --  Where a ladder's foot is put for a side (Out_B blocks out from the
+   --  wall), on the ground at the pad's level.
+   function Ladder_Place (F : CB.House; Side : Positive; Out_B : Float) return Vec3 is
+     (case Side is
+         when 1 => H_Point (F, Clear_Of_Door (F), -Out_B),
+         when 2 => H_Point (F, Clear_Of_Door (F), Float (F.D - 1) + Out_B),
+         when 3 => H_Point (F, -Out_B, Float (F.D - 1) / 2.0),
+         when others => H_Point (F, Float (F.W - 1) + Out_B, Float (F.D - 1) / 2.0));
+
+   --  Where the ladder at a house rests on its eave (the eave is a block
+   --  out from the wall, its top at the top of the wall).
+   function Ladder_Top (Hs : House_Rec) return Vec3 is
+      P : constant Vec3 := Ladder_Place (Hs.F, Positive'Max (1, Hs.Ladder), 1.0);
+   begin
+      return (P.X, P.Y, Pad_Z (Hs.F) + 0.25 * Float (Hs.F.Wall_H));
+   end Ladder_Top;
+
+   function Ladder_At (H : Positive) return Ladder_View is
+   begin
+      if H > N_Houses or else Houses (H).Ladder = 0 then
+         return (others => <>);
+      end if;
+      declare
+         F : constant Vec3 := Houses (H).Ladder_P;
+         T : Vec3 := Ladder_Top (Houses (H));
+      begin
+         --  (its foot on high ground behind a house cut into a hill: it leans over the eave, not flat along it)
+         T.Z := Float'Max (T.Z, F.Z + Ladder_Lean * Flat_Dist (F, T));
+         return (Standing => True, Side => Houses (H).Ladder, Foot => F, Top => T);
+      end;
+   end Ladder_At;
+
+   --  Member I is at the foot of the ladder that stands at its house, with
+   --  its roof next: what it lays, it lays from the ladder.
+   function At_Ladder (I : Positive) return Boolean is
+      M : Member renames Band (I);
+   begin
+      return Ladders_On and then M.Site in 1 .. N_Houses and then Houses (M.Site).Ladder > 0
+        and then Roof_Next (Houses (M.Site)) and then Flat_Dist (M.Pos, Houses (M.Site).Ladder_P) <= 0.7;
+   end At_Ladder;
+
+   function Aloft (I : Positive) return Boolean is
+     (I <= N_Members and then not Band (I).Is_Dead and then Band (I).State = Raising and then Band (I).Site_Patch = 0
+      and then At_Ladder (I));
+
+   function Shown_At (I : Positive) return Vec3 is
+   begin
+      if not Aloft (I) then
+         return Where (I);
+      end if;
+      declare
+         L : constant Ladder_View := Ladder_At (Band (I).Site);
+         D : constant Vec3 := L.Top - L.Foot;
+         Len : constant Float := Sqrt (Dot (D, D));
+      begin
+         --  (its feet on a rung, a metre and a half up the ladder, or as far as the eave if that is nearer)
+         return L.Foot + D * (Float'Min (1.5, 0.75 * Len) / Float'Max (0.1, Len));
+      end;
+   end Shown_At;
+
+   --  A hovel that stands with a ladder still against it that nobody is
+   --  going for (0: none).
+   function Spare_Ladder (I : Positive) return Natural is
+   begin
+      for K in 1 .. N_Houses loop
+         if Houses (K).Built and then Houses (K).Ladder > 0 and then not Failed (Band (I), Ladder_Fail + K)
+           and then (for all J in 1 .. N_Members => Band (J).State /= To_Ladder or else Band (J).Ladder_Of /= K)
+         then
+            return K;
+         end if;
+      end loop;
+      return 0;
+   end Spare_Ladder;
+
+   --  Member I is a builder whose roof is next with no ladder at its house
+   --  and none to be had (stored, or left at a hovel that stands): a log of
+   --  its own that it brings home is the ladder's.
+   function Wants_Ladder_Log (I : Positive) return Boolean is
+      M : Member renames Band (I);
+   begin
+      return Ladders_On and then M.Job = Forester and then M.Site in 1 .. N_Houses
+        and then Roof_Next (Houses (M.Site)) and then Houses (M.Site).Ladder = 0
+        and then Free_Stock (Ladder) = 0 and then Spare_Ladder (I) = 0;
+   end Wants_Ladder_Log;
+
+   --  To the ladder that stands at house K, to take it away.
+   function Go_Ladder (I : Positive; K : Positive) return Boolean is
+      M : Member renames Band (I);
+   begin
+      if Failed (M, Ladder_Fail + K) then
+         return False;
+      end if;
+      if Route_To (M, Houses (K).Ladder_P, 0.6) then
+         Release (M, I);
+         M.Ladder_Of := K;
+         M.State := To_Ladder;
+         return True;
+      end if;
+      Remember_Failure (M, Ladder_Fail + K, Seconds => 300);
+      return False;
+   end Go_Ladder;
+
    function Think_House (I : Positive) return Boolean is separate;
 
    --  A step of a builder's work (To_Site, Raising).
@@ -3888,7 +5360,520 @@ package body Castle.Colony is
    --  load for the camp) M turns to it before its job.  The camp first: its
    --  ground, stone for the ring, wood for the crossbar, a seat log.  Then a
    --  metre of path.  False: nothing of it for M to do now.
+   --  The lord's cart pulled into a stockpile (with the cart, below).
+   function Cart_To_Pull return Boolean;
+   function Go_Tow (I : Positive) return Boolean;
+
    function Think_Build (I : Positive) return Boolean is separate;
+
+   ------------------------------------------------------------------ the lord's cart
+
+   Cart_Id : constant := 31_004;   --  a fail memo: no way to the cart
+
+   --  Where one stands to take from it: beside the middle of its long side,
+   --  on the stake's side of it.
+   function Cart_Beside return Vec3 is
+      Off : constant Float := Float (Cart_Wide_B) * 0.125 + 0.6;
+   begin
+      return (if Cart_X then (Cart_P.X, Cart_P.Y + (if Stake_At.Y >= Cart_P.Y then Off else -Off), Cart_P.Z)
+              else (Cart_P.X + (if Stake_At.X >= Cart_P.X then Off else -Off), Cart_P.Y, Cart_P.Z));
+   end Cart_Beside;
+
+   --  The cart comes with the band: at the first step with a stake raised
+   --  (its ground is in by then) it is stood on the first level, open ground
+   --  found going out from the stake a metre at a time and round it from the
+   --  north, its long side to the stake.  Open: grass or bare earth with
+   --  nothing on it but grass to cut, no zone's and no path's, and nothing
+   --  about it standing higher than its middle (so that nobody can step up
+   --  onto it).  What makes it a thing in the world is its bed, a slab of
+   --  timber over the ground (blocks of log: every test for a tree in the
+   --  way holds for it, and nobody walks under it); the rest is drawn.
+   procedure Place_Cart is
+      From : constant Vec3 := (if N_Members > 0 then Band (1).Pos else Stake_At);
+      procedure Turned (Along_X : Boolean) is
+      begin
+         Cart_Turn := (if Along_X then 0.0 else Ada.Numerics.Pi / 2.0);
+      end Turned;
+      function Fits (Cx, Cy : Integer; Along_X : Boolean; Row : out Integer) return Boolean is
+         L  : constant Integer := (if Along_X then Cart_Long_B else Cart_Wide_B);
+         W  : constant Integer := (if Along_X then Cart_Wide_B else Cart_Long_B);
+         X0 : constant Integer := Cx - L / 2;
+         Y0 : constant Integer := Cy - W / 2;
+      begin
+         Row := Ground_Row (Cx, Cy, B (Stake_At.Z) - 1);
+         if Row < 0 then
+            return False;
+         end if;
+         for X in X0 - 2 .. X0 + L + 1 loop
+            for Y in Y0 - 2 .. Y0 + W + 1 loop
+               declare
+                  Zr : constant Integer := Ground_Row (X, Y, Row);
+               begin
+                  if Zr not in Row - 1 .. Row or else Mat (X, Y, Zr) not in Grass | Dirt
+                    or else Zone_Of_Block (X, Y) /= 0
+                    or else Near_Path ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25, 0.5)
+                  then
+                     return False;
+                  end if;
+                  for Z in Zr + 1 .. Row + Cart_Up_B + 6 loop
+                     if Mat (X, Y, Z) not in Air | Tall_Grass then
+                        return False;
+                     end if;
+                  end loop;
+               end;
+            end loop;
+         end loop;
+         return True;
+      end Fits;
+   begin
+      Cart_Set := False;
+      for Ring in 0 .. Integer (Cart_Far_M - Cart_Near_M) loop
+         for Step in 0 .. 11 loop
+            declare
+               R   : constant Float := Cart_Near_M + Float (Ring);
+               A   : constant Float := Ada.Numerics.Pi / 2.0 - Float (Step) * Ada.Numerics.Pi / 6.0;
+               Cx  : constant Integer := B (Stake_At.X + R * Cos (A));
+               Cy  : constant Integer := B (Stake_At.Y + R * Sin (A));
+               Along_X : constant Boolean := abs Sin (A) > 0.7;      --  (its long side to the stake)
+               Row : Integer;
+            begin
+               if Fits (Cx, Cy, Along_X, Row) then
+                  Cart_P := (Float (Cx) * 0.25, Float (Cy) * 0.25, Float (Row + 1) * 0.25);
+                  Cart_X := Along_X;
+                  Turned (Along_X);
+                  Cart_Set := True;
+                  if Castle.Nav."=" (Castle.Nav.Plan (From, Cart_Beside, Within => Own_Region).Result, Castle.Nav.Found) then
+                     for X in Cart_X0 .. Cart_X0 + (if Along_X then Cart_Long_B else Cart_Wide_B) - 1 loop
+                        for Y in Cart_Y0 .. Cart_Y0 + (if Along_X then Cart_Wide_B else Cart_Long_B) - 1 loop
+                           for Z in Row .. Row + Cart_Up_B - 1 loop      --  (the grass under it cut)
+                              if Mat (X, Y, Z) = Tall_Grass then
+                                 Write_Src (X, Y, Z, (Mat => Air, State => 0));
+                              end if;
+                           end loop;
+                           Write_Src (X, Y, Row + Cart_Up_B, (Mat => Log, State => 0));
+                        end loop;
+                     end loop;
+                     return;
+                  end if;
+                  Cart_Set := False;
+               end if;
+            end;
+         end loop;
+      end loop;
+   end Place_Cart;
+
+   --  A hunter keeps salt by for its kills: while the stockpiles (and the
+   --  band's hands) hold less than Salt_Keep_Lb of it, the cart has some,
+   --  there is room to store it and nobody is at the cart for it already.
+   function Salt_Short return Boolean is
+     (Curing_On and then Cart_Set and then not Cart_Bound and then Cart_Salt_N > 0 and then Have (Salt) < Salt_Keep_Lb
+      and then Room_For (Salt)
+      and then (for all J in 1 .. N_Members => Band (J).State not in To_Cart | At_Cart));
+
+   --  To the cart for a sackful of it.
+   function Go_Cart (I : Positive) return Boolean is
+      M : Member renames Band (I);
+   begin
+      if not Salt_Short or else Failed (M, Cart_Id) then
+         return False;
+      end if;
+      if Route_To (M, Cart_Beside, 0.6) then
+         Release (M, I);
+         M.State := To_Cart;
+         return True;
+      end if;
+      Remember_Failure (M, Cart_Id, Seconds => 600);
+      return False;
+   end Go_Cart;
+
+   --  N pounds of salt out of the stockpiles (as much as there is).
+   procedure Use_Salt (N : Natural) is
+      Left : Natural := N;
+   begin
+      for C in 1 .. N_Cells loop
+         exit when Left = 0;
+         if Cells (C).Kind = Salt and then Cells (C).Count > Cells (C).Outgoing then
+            declare
+               T : constant Natural := Natural'Min (Left, Cells (C).Count - Cells (C).Outgoing);
+            begin
+               Cells (C).Count := Cells (C).Count - T;
+               Left := Left - T;
+               if Cells (C).Count = 0 and then Cells (C).Incoming = 0 and then Cells (C).Outgoing = 0 then
+                  Cells (C).Kind := Nothing;
+               end if;
+            end;
+         end if;
+      end loop;
+   end Use_Salt;
+
+   ------------------------------------------------------------------ the lord's cart pulled into a stockpile
+
+   Tow_Fail : constant := 31_005;   --  a fail memo: no place for it, or no way to its shafts or on with it
+
+   --  Its middle stands on a stockpile zone's ground.
+   function Cart_In_Stockpile return Boolean is
+      Z : constant Natural := Zone_Of_Block (B (Cart_P.X), B (Cart_P.Y));
+   begin
+      return Z in 1 .. N_Zones and then Zones (Z).Kind = Stockpile_Zone;
+   end Cart_In_Stockpile;
+
+   function Cart_To_Pull return Boolean is
+     (Pull_On and then Curing_On and then Cart_Set and then not Cart_Bound and then N_Cells > 0
+      and then not Cart_In_Stockpile
+      and then (for all J in 1 .. N_Members => Band (J).State not in To_Cart | At_Cart));
+
+   --  The bar across its shafts, standing at P and turned so.
+   function Shaft_End (P : Vec3; Turn : Float) return Vec3 is
+     (P.X + Cos (Turn) * Cart_Shaft_M, P.Y + Sin (Turn) * Cart_Shaft_M, P.Z);
+
+   --  Its bed laid in the world, or taken out of it, its middle at P (on
+   --  its ground: the row under P.Z is that ground's top).
+   procedure Lay_Bed (P : Vec3; Along_X : Boolean; Lay : Boolean) is
+      Row : constant Integer := Integer (Float'Floor (P.Z * 4.0 + 0.5)) - 1;
+   begin
+      for X in Bed_X0 (P, Along_X) .. Bed_X0 (P, Along_X) + (if Along_X then Cart_Long_B else Cart_Wide_B) - 1 loop
+         for Y in Bed_Y0 (P, Along_X) .. Bed_Y0 (P, Along_X) + (if Along_X then Cart_Wide_B else Cart_Long_B) - 1 loop
+            if Lay then
+               for Z in Row .. Row + Cart_Up_B - 1 loop
+                  if Mat (X, Y, Z) in Tall_Grass | Wild_Grain | Wild_Vegetables then
+                     Write_Src (X, Y, Z, Air_Block);
+                  end if;
+               end loop;
+               Write_Src (X, Y, Row + Cart_Up_B, (Mat => Log, State => 0));
+            elsif Mat (X, Y, Row + Cart_Up_B) = Log then
+               Write_Src (X, Y, Row + Cart_Up_B, Air_Block);
+            end if;
+         end loop;
+      end loop;
+   end Lay_Bed;
+
+   --  Its bed fits with its middle at block corner (Cx, Cy): on Z's ground
+   --  if Z > 0 (no place under it holding or awaiting anything, nobody
+   --  standing there), else on ground nobody has marked and off the paths;
+   --  level within a block, nothing over it but grass, nothing round it
+   --  higher.  Row: the top of its ground.
+   function Bed_Fits (Cx, Cy : Integer; Along_X : Boolean; Z : Natural; Near_Row : Integer; Row : out Integer)
+     return Boolean
+   is
+      L  : constant Integer := (if Along_X then Cart_Long_B else Cart_Wide_B);
+      W  : constant Integer := (if Along_X then Cart_Wide_B else Cart_Long_B);
+      X0 : constant Integer := Cx - L / 2;
+      Y0 : constant Integer := Cy - W / 2;
+      P  : constant Vec3 := (Float (Cx) * 0.25, Float (Cy) * 0.25, 0.0);
+   begin
+      Row := Ground_Row (Cx, Cy, Near_Row);
+      if Row < 0 then
+         return False;
+      end if;
+      for X in X0 - 1 .. X0 + L loop
+         for Y in Y0 - 1 .. Y0 + W loop
+            declare
+               Zr  : constant Integer := Ground_Row (X, Y, Row);
+               Bed : constant Boolean := X in X0 .. X0 + L - 1 and then Y in Y0 .. Y0 + W - 1;
+            begin
+               if Zr < 0 or else Zr > Row then
+                  return False;
+               end if;
+               if Bed then
+                  if Zr < Row - 1
+                    or else Mat (X, Y, Zr) not in Grass | Dirt | Footpath | Sand | Gravel | Clay | Placer_Gravel | Bog_Iron
+                    or else (if Z > 0 then Zone_Of_Block (X, Y) /= Z
+                             else Zone_Of_Block (X, Y) /= 0
+                                  or else Near_Path ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25, 0.5))
+                  then
+                     return False;
+                  end if;
+                  for Zz in Zr + 1 .. Row + Cart_Up_B + 6 loop
+                     if Mat (X, Y, Zz) not in Air | Tall_Grass | Wild_Grain | Wild_Vegetables then
+                        return False;
+                     end if;
+                  end loop;
+               end if;
+            end;
+         end loop;
+      end loop;
+      for K in 1 .. N_Cells loop
+         if Bed_On_Block (P, Along_X, B (Cells (K).Centre.X), B (Cells (K).Centre.Y))
+           and then (Cells (K).Kind /= Nothing or else Cells (K).Incoming > 0 or else Cells (K).Outgoing > 0)
+         then
+            return False;
+         end if;
+      end loop;
+      for J in 1 .. N_Members loop
+         if not Band (J).Is_Dead and then Bed_On_Block (P, Along_X, B (Band (J).Pos.X), B (Band (J).Pos.Y), Margin => 1)
+         then
+            return False;
+         end if;
+      end loop;
+      return True;
+   end Bed_Fits;
+
+   --  Where it is to stand in a stockpile: on two of the zone's places side
+   --  by side, empty, the nearest such to it, in the zone nearest it that has
+   --  them; its bed square to the grid along the way the two lie, with a way
+   --  from the stake to beside it.  Turn: the way it is pulled in.
+   function Find_Cart_Place (P : out Vec3; Turn : out Float) return Boolean is
+      Most : constant := 64;
+      type Cand is record
+         Mid  : Vec3;
+         Z    : Natural;
+         Away : Float;
+         Along_X : Boolean;           --  the two part along X (else along Y)
+      end record;
+      C : array (1 .. Most) of Cand := [others => (Mid => (0.0, 0.0, 0.0), Z => 0, Away => 0.0, Along_X => True)];
+      N : Natural := 0;
+      function Empty (K : Positive) return Boolean is
+        (Cells (K).Kind = Nothing and then Cells (K).Incoming = 0 and then Cells (K).Outgoing = 0
+         and then not Under_Cart (K));
+   begin
+      P := (0.0, 0.0, 0.0);
+      Turn := 0.0;
+      for K1 in 1 .. N_Cells loop
+         if Empty (K1) and then Cells (K1).Zone in 1 .. N_Zones then
+            for K2 in K1 + 1 .. N_Cells loop
+               if Cells (K2).Zone = Cells (K1).Zone and then Empty (K2)
+                 and then Flat_Dist (Cells (K1).Centre, Cells (K2).Centre) in 0.8 .. 1.2
+               then
+                  declare
+                     M : constant Vec3 := (Cells (K1).Centre + Cells (K2).Centre) * 0.5;
+                     D : constant Float := Flat_Dist (M, Cart_P);
+                     W : Natural := 0;
+                  begin
+                     if N < Most then
+                        N := N + 1;
+                        W := N;
+                     else
+                        for J in 1 .. N loop        --  (the farthest kept gives way)
+                           if C (J).Away > D and then (W = 0 or else C (J).Away > C (W).Away) then
+                              W := J;
+                           end if;
+                        end loop;
+                     end if;
+                     if W > 0 then
+                        C (W) := (Mid => M, Z => Cells (K1).Zone, Away => D,
+                                  Along_X => abs (Cells (K1).Centre.X - Cells (K2).Centre.X)
+                                             >= abs (Cells (K1).Centre.Y - Cells (K2).Centre.Y));
+                     end if;
+                  end;
+               end if;
+            end loop;
+         end if;
+      end loop;
+      --  nearest first: a zone's nearer pairs before a farther zone's
+      for Try in 1 .. N loop
+         declare
+            Best : Natural := 0;
+         begin
+            for J in 1 .. N loop
+               if C (J).Z > 0 and then (Best = 0 or else C (J).Away < C (Best).Away) then
+                  Best := J;
+               end if;
+            end loop;
+            exit when Best = 0;
+            declare
+               Mid : constant Vec3 := C (Best).Mid;
+               Z   : constant Natural := C (Best).Z;
+               Cx  : constant Integer := Integer (Float'Rounding (Mid.X * 4.0));
+               Cy  : constant Integer := Integer (Float'Rounding (Mid.Y * 4.0));
+               Along_X : constant Boolean := C (Best).Along_X;
+               Row : Integer;
+            begin
+               C (Best).Z := 0;
+               declare
+               begin
+                  begin
+                     if Bed_Fits (Cx, Cy, Along_X, Z, B (Mid.Z) - 1, Row)
+                       and then (for some K in 1 .. N_Cells =>
+                                   Bed_On_Block ((Float (Cx) * 0.25, Float (Cy) * 0.25, 0.0), Along_X,
+                                                 B (Cells (K).Centre.X), B (Cells (K).Centre.Y)))
+                     then
+                        declare
+                           At_P : constant Vec3 := (Float (Cx) * 0.25, Float (Cy) * 0.25, Float (Row + 1) * 0.25);
+                           Sgn  : constant Float :=
+                             (if (if Along_X then At_P.X - Cart_P.X else At_P.Y - Cart_P.Y) >= 0.0 then 1.0 else -1.0);
+                           T    : constant Float :=
+                             (if Along_X then (if Sgn > 0.0 then 0.0 else Ada.Numerics.Pi)
+                              else (if Sgn > 0.0 then Ada.Numerics.Pi / 2.0 else -Ada.Numerics.Pi / 2.0));
+                           Off  : constant Float := Float (Cart_Wide_B) * 0.125 + 0.6;
+                           Side : constant Vec3 :=
+                             (if Along_X then (At_P.X, At_P.Y + (if Stake_At.Y >= At_P.Y then Off else -Off), At_P.Z)
+                              else (At_P.X + (if Stake_At.X >= At_P.X then Off else -Off), At_P.Y, At_P.Z));
+                        begin
+                           if Castle.Nav."=" (Castle.Nav.Plan (Stake_At, Side, Within => Own_Region).Result, Castle.Nav.Found)
+                             and then Castle.Nav."=" (Castle.Nav.Plan (Stake_At, Shaft_End (At_P, T), Within => Own_Region).Result,
+                                                      Castle.Nav.Found)
+                           then
+                              P := At_P;
+                              Turn := T;
+                              return True;
+                           end if;
+                        end;
+                     end if;
+                  end;
+               end;
+            end;
+         end;
+      end loop;
+      return False;
+   end Find_Cart_Place;
+
+   function Go_Tow (I : Positive) return Boolean is
+      M : Member renames Band (I);
+      P : Vec3;
+      T : Float;
+   begin
+      if not Cart_To_Pull or else Failed (M, Tow_Fail) then
+         return False;
+      end if;
+      if Find_Cart_Place (P, T) and then Route_To (M, Shaft_End (Cart_P, Cart_Turn), 0.4) then
+         Release (M, I);
+         Cart_Bound := True;
+         Cart_By := I;
+         Goal_P := P;
+         Goal_Turn := T;
+         M.State := To_Tow;
+         M.Spot := Shaft_End (Cart_P, Cart_Turn) + (0.0, 0.0, 0.8);
+         return True;
+      end if;
+      Remember_Failure (M, Tow_Fail, Seconds => 600);
+      return False;
+   end Go_Tow;
+
+   --  Set down where it is, if it fits there (or near, a metre at a time and
+   --  round, ten at most); else where it was lifted from.
+   procedure Set_Cart_Down (Near : Vec3) is
+      Row : Integer;
+      procedure Stand (Cx, Cy : Integer; Along_X : Boolean; R : Integer; Turn : Float) is
+      begin
+         Cart_P := (Float (Cx) * 0.25, Float (Cy) * 0.25, Float (R + 1) * 0.25);
+         Cart_X := Along_X;
+         Cart_Turn := Turn;
+         Lay_Bed (Cart_P, Cart_X, Lay => True);
+         Cart_Set := True;
+         Cart_Towed := False;
+         Cart_Bound := False;
+         Cart_By := 0;
+      end Stand;
+      Ax : constant Boolean := Turn_Along_X (Cart_Turn);
+      T  : constant Float :=
+        (if Ax then (if Cos (Cart_Turn) >= 0.0 then 0.0 else Ada.Numerics.Pi)
+         else (if Sin (Cart_Turn) >= 0.0 then Ada.Numerics.Pi / 2.0 else -Ada.Numerics.Pi / 2.0));
+   begin
+      for Ring in 0 .. 10 loop
+         for Step in 0 .. (if Ring = 0 then 0 else 11) loop
+            declare
+               A  : constant Float := Float (Step) * Ada.Numerics.Pi / 6.0;
+               Cx : constant Integer := Integer (Float'Rounding ((Near.X + Float (Ring) * Cos (A)) * 4.0));
+               Cy : constant Integer := Integer (Float'Rounding ((Near.Y + Float (Ring) * Sin (A)) * 4.0));
+               Z  : constant Natural := Zone_Of_Block (Cx, Cy);
+               Zs : constant Natural := (if Z in 1 .. N_Zones and then Zones (Z).Kind = Stockpile_Zone then Z else 0);
+            begin
+               if Bed_Fits (Cx, Cy, Ax, Zs, B (Near.Z) - 1, Row) then
+                  Stand (Cx, Cy, Ax, Row, T);
+                  return;
+               end if;
+            end;
+         end loop;
+      end loop;
+      Stand (B (Cart_From.X + 0.125), B (Cart_From.Y + 0.125), Turn_Along_X (Cart_Turn), B (Cart_From.Z) - 1, T);
+   end Set_Cart_Down;
+
+   procedure Step_Tow (I : Positive) is
+      M    : Member renames Band (I);
+      Ok   : Boolean;
+      Goal : constant Vec3 := M.Goal;
+   begin
+      case M.State is
+         when To_Tow =>
+            Keep_Route_Good (M, Ok);
+            if not Ok or else not Cart_Set or else not Cart_Bound or else Cart_By /= I then
+               if not Ok then
+                  Remember_Failure (M, Tow_Fail, Seconds => 600);
+               end if;
+               M.State := Idle;                     --  (the place held for it is let go: Keep_Cart)
+               M.Wait := 0.5;
+            elsif Walk_On (M, 0.5) then
+               --  its shafts taken up: lifted off its ground, and on to the place held for it, its
+               --  puller to stand at the bar with the cart where it is to stand behind
+               if Route_To (M, Shaft_End (Goal_P, Goal_Turn), 0.3) then
+                  Lay_Bed (Cart_P, Cart_X, Lay => False);
+                  Cart_From := Cart_P;
+                  Cart_Set := False;
+                  Cart_Towed := True;
+                  M.State := Towing;
+               else
+                  Remember_Failure (M, Tow_Fail, Seconds => 600);
+                  M.State := Idle;
+                  M.Wait := 0.5;
+               end if;
+            end if;
+         when Towing =>
+            Keep_Route_Good (M, Ok);
+            if not Ok then
+               Remember_Failure (M, Tow_Fail, Seconds => 600);
+               M.State := Idle;                     --  (set down where it is: Keep_Cart)
+               M.Wait := 0.5;
+               return;
+            end if;
+            if Walk (M, Goal, 0.3, Scale => Cart_Tow_Pace) then
+               declare
+                  Row : Integer;
+                  Ax  : constant Boolean := Turn_Along_X (Goal_Turn);
+               begin
+                  if Bed_Fits (B (Goal_P.X + 0.125), B (Goal_P.Y + 0.125), Ax,
+                               Zone_Of_Block (B (Goal_P.X), B (Goal_P.Y)), B (Goal_P.Z) - 1, Row)
+                  then
+                     Cart_P := Goal_P;
+                     Cart_X := Ax;
+                     Cart_Turn := Goal_Turn;
+                     Lay_Bed (Cart_P, Cart_X, Lay => True);
+                     Cart_Set := True;
+                     Cart_Towed := False;
+                     Cart_Bound := False;
+                     Cart_By := 0;
+                  else
+                     Set_Cart_Down (Cart_P);
+                  end if;
+               end;
+               M.State := Idle;
+               M.Wait := 0.5;
+            else
+               --  it trails behind, its middle Cart_Shaft_M back from where its puller is
+               declare
+                  Dx : constant Float := M.Pos.X - Cart_P.X;
+                  Dy : constant Float := M.Pos.Y - Cart_P.Y;
+                  L  : constant Float := Sqrt (Dx * Dx + Dy * Dy);
+               begin
+                  if L > Cart_Shaft_M then
+                     Cart_P := On_Ground (M.Pos.X - Dx / L * Cart_Shaft_M, M.Pos.Y - Dy / L * Cart_Shaft_M);
+                  end if;
+                  if L > 0.05 then
+                     Cart_Turn := Arctan (Dy, Dx);
+                  end if;
+                  M.Spot := M.Pos + (0.0, 0.0, 0.8);
+               end;
+            end if;
+         when others =>
+            null;
+      end case;
+   end Step_Tow;
+
+   --  Once a step: a cart in tow with nobody at its shafts is set down; a
+   --  place held for it with nobody coming to it is let go.
+   procedure Keep_Cart is
+   begin
+      if Cart_Towed and then (Cart_By not in 1 .. N_Members or else Band (Cart_By).Is_Dead
+                              or else Band (Cart_By).State /= Towing)
+      then
+         Set_Cart_Down (Cart_P);
+      end if;
+      if Cart_Bound and then not Cart_Towed
+        and then (Cart_By not in 1 .. N_Members or else Band (Cart_By).Is_Dead or else Band (Cart_By).State /= To_Tow)
+      then
+         Cart_Bound := False;
+         Cart_By := 0;
+      end if;
+   end Keep_Cart;
 
    procedure Think (I : Positive) is separate;
 
@@ -4146,7 +6131,7 @@ package body Castle.Colony is
 
    ------------------------------------------------------------------ paths: laying one
 
-   type Path_Refused is (Laid_Some, Nothing_There, Through_Zone, No_More);
+   type Path_Refused is (Laid_Some, Nothing_There, Through_Zone, No_More, Through_Cart);
    Path_Refused_For : Path_Refused := Laid_Some;
 
    function Path_Refusal return String is
@@ -4154,9 +6139,78 @@ package body Castle.Colony is
          when Laid_Some     => "",
          when Nothing_There => "there is no ground there to lay a path on",
          when Through_Zone  => "a zone is in the way: paths go round zones",
-         when No_More       => "there are as many paths as there can be");
+         when No_More       => "there are as many paths as there can be",
+         when Through_Cart  => "the lord's cart is in the way: it cannot be moved yet");
+
+   --  Planned, a path is kept as stretches of Path_Stretch_M, the last what
+   --  is left (and up to a metre over, not a sliver of its own): how many a
+   --  line L long is, and piece P of them.  Where a piece ends is on the
+   --  ground there if that is in (else at no height yet: it is given one
+   --  when it is).
+   function Line_Pieces (L : Float) return Positive is
+     (if Labour_On then Positive'Max (1, Natural (Float'Ceiling ((L - 1.0) / Path_Stretch_M))) else 1);
+   function Line_Piece (From, To : Vec3; P, Pieces : Positive) return Path_Seg is
+      L : constant Float := Flat_Dist (From, To);
+      function Joint (T : Float) return Vec3 is
+         X : constant Float := From.X + (To.X - From.X) * T;
+         Y : constant Float := From.Y + (To.Y - From.Y) * T;
+         Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+      begin
+         return (X, Y, (if Z >= 0.0 then Z elsif From.Z >= 0.0 and then To.Z >= 0.0
+                        then From.Z + (To.Z - From.Z) * T else -1.0));
+      end Joint;
+   begin
+      return (A => (if P = 1 then From else Joint (Float (P - 1) * Path_Stretch_M / L)),
+              B => (if P = Pieces then To else Joint (Float (P) * Path_Stretch_M / L)), others => <>);
+   end Line_Piece;
 
    procedure Lay_Path (From, To : Vec3; Laid : out Natural) is separate;
+
+   procedure For_Path_Left (K : Positive; Visit : not null access procedure (X, Y, Zr : Integer)) is
+      procedure Each (X, Y, Zr, Metre : Integer) is
+      begin
+         if (Path_List (K).Todo and Shift_Left (Unsigned_64'(1), Integer'Min (63, Metre - 1))) /= 0 then
+            Visit (X, Y, Zr);
+         end if;
+      end Each;
+   begin
+      if K <= N_Paths and then Path_List (K).Known and then Path_List (K).Todo /= 0
+        and then Path_List (K).A.Z >= 0.0 and then Path_List (K).B.Z >= 0.0
+      then
+         For_Path_Work (Path_List (K), Each'Access);
+      end if;
+   end For_Path_Left;
+
+   procedure For_Path_Line (From, To : Vec3; Visit : not null access procedure (X, Y, Zr : Integer)) is
+      L : constant Float := Flat_Dist (From, To);
+      procedure Each (X, Y, Zr, Metre : Integer) is
+         pragma Unreferenced (Metre);
+      begin
+         Visit (X, Y, Zr);
+      end Each;
+   begin
+      if L < 0.25 then
+         return;
+      end if;
+      for P in 1 .. Line_Pieces (L) loop
+         declare
+            S : constant Path_Seg := Line_Piece (From, To, P, Line_Pieces (L));
+         begin
+            if Stretch_In (S, Held => True) and then S.A.Z >= 0.0 and then S.B.Z >= 0.0 then
+               For_Path_Work (S, Each'Access);
+            end if;
+         end;
+      end loop;
+   end For_Path_Line;
+
+   function Paths_Left_Key return Natural is
+      H : U64 := U64 (N_Paths);
+   begin
+      for K in 1 .. N_Paths loop
+         H := Castle.Hash.Mix (H + U64 (Path_List (K).Todo) + (if Path_List (K).Known then 1 else 0));
+      end loop;
+      return Natural (H mod 2 ** 30);
+   end Paths_Left_Key;
 
    ------------------------------------------------------------------ zones: laying out a lot
 
@@ -4306,7 +6360,7 @@ package body Castle.Colony is
    ------------------------------------------------------------------ the camp: zoning
 
    type Refusal is (Taken_None, Already, No_Stake_Yet, Too_Steep, In_The_Way, Over_Stockpile, Path_Near,
-                    No_Free_Ground, Out_Of_Room);
+                    No_Free_Ground, Out_Of_Room, Over_Cart);
    Refused_For : Refusal := Taken_None;
    In_Way_At   : Vec3 := (0.0, 0.0, 0.0);
    Fall_Cm     : Natural := 0;            --  how far the ground fell or rose from the middle
@@ -4324,7 +6378,8 @@ package body Castle.Colony is
          when Path_Near      => "a path runs too near the fire (keep it" & Integer'Image (Integer (Camp_Clear_M))
                                 & " m off)",
          when No_Free_Ground => "there is no free ground there for it",
-         when Out_Of_Room    => "there is no room for another zone");
+         when Out_Of_Room    => "there is no room for another zone",
+         when Over_Cart      => "the lord's cart stands there: it cannot be moved yet");
 
    --  The plan for the camp with its fire at Centre: whether it would be
    --  taken (Refused_For), and its ground.  Nothing is changed.  The fire's
@@ -4362,9 +6417,17 @@ package body Castle.Colony is
 
    ------------------------------------------------------------------ housing: zoning
 
-   Housing_No_Hovel : Boolean := False;    --  the last lot planned for housing would hold not one hovel
-   Housing_Too_Far  : Boolean := False;    --  or reaches further from the stake than ground can be kept in
-   Plan_Hovels      : Natural := 0;        --  how many it would hold
+   Housing_Too_Far  : Boolean := False;    --  the last strip planned for housing reaches further from the stake
+                                           --  than ground can be kept in
+   Housing_Is_Housing : Boolean := False;  --  or lies wholly on ground that is housing already
+   Housing_Open     : Boolean := False;    --  the last fill planned was of ground that paths do not close round
+   Housing_No_Path  : Boolean := False;    --  or of ground no path lies beside
+   Plan_Hovels      : Natural := 0;        --  how many more hovels there would be room for
+   --  the housing zones the planned strip overlaps or touches: it is taken into the first of them, and the rest with it
+   Plan_Join        : array (1 .. Max_Zones) of Natural := [others => 0];
+   Plan_Join_N      : Natural := 0;
+   Joined_Last      : Natural := 0;        --  how many the last zoning was combined with
+   Zoned_Last       : Natural := 0;        --  the housing zone the last zoning made, or added to
 
    --  How far from the stake a box of block columns reaches, and a margin
    --  for the banks and the door paths of what is built at its edge.
@@ -4413,17 +6476,33 @@ package body Castle.Colony is
          By0 := Integer'Min (By0, Integer (Plan_Run (K).Y));
          By1 := Integer'Max (By1, Integer (Plan_Run (K).Y));
       end loop;
+      for J in 1 .. Plan_Join_N loop
+         Bx0 := Integer'Min (Bx0, Zones (Plan_Join (J)).Bx0);
+         Bx1 := Integer'Max (Bx1, Zones (Plan_Join (J)).Bx1);
+         By0 := Integer'Min (By0, Zones (Plan_Join (J)).By0);
+         By1 := Integer'Max (By1, Zones (Plan_Join (J)).By1);
+      end loop;
       Housing_Too_Far := Far_Of (Bx0, By0, Bx1, By1) > Far_Reach_Max_M;
       if Housing_Too_Far then
          return 0;
+      end if;
+      if Bx1 - Bx0 >= Max_Plan_B or else By1 - By0 >= Max_Plan_B then
+         return 0;                           --  (Plan_Housing_Lot sees to it that this is never so)
       end if;
       Lot_Open (Bx0, By0, Bx1, By1);
       for K in 1 .. Plan_N loop
          Lot_Run (Plan_Run (K));
       end loop;
+      for J in 1 .. Plan_Join_N loop
+         for K in Zones (Plan_Join (J)).First + 1 .. Zones (Plan_Join (J)).First + Zones (Plan_Join (J)).N loop
+            Lot_Run (Runs (K));
+         end loop;
+      end loop;
       for H in 1 .. N_Houses loop
          Lot_Take (Houses (H).F);
       end loop;
+      --  (the next houses in turn, as they are begun: the count ends at the
+      --  first that does not fit)
       while N_Houses + N < Max_Houses loop
          Place_House (House_Serial + N + 1, F, Key, Ok);
          exit when not Ok;
@@ -4433,81 +6512,808 @@ package body Castle.Colony is
       return N;
    end Planned_Hovels;
 
-   --  The plan for a housing zone between two corners (X0, Y0: where it was begun).
-   procedure Plan_Housing_Lot (X0, Y0, X1, Y1 : Float) is
-      Ex, Ey, Gap : Float;
+   --  The straight run of path that stretch K is of: the stretches that
+   --  carry on from it end to end in a line (a path is recorded a stretch
+   --  at a time: a stretch's joint is not an end or a turn of the path).
+   --  From: one end of it; (Tx, Ty): the way it runs from there; Len: how
+   --  long it is.
+   Of_Run : array (1 .. Max_Paths) of Boolean := [others => False];   --  (which stretches the last run asked for is of)
+
+   procedure Run_Of (K : Positive; From : out Vec3; Tx, Ty, Len : out Float) is
+      A    : Vec3 := Path_List (K).A;
+      Bp   : Vec3 := Path_List (K).B;
+      L0   : constant Float := Flat_Dist (A, Bp);
+      Grew : Boolean := L0 > 0.01;
+      Turns : Natural := 0;
    begin
-      Housing_No_Hovel := False;
+      From := A;
+      Tx := 1.0;
+      Ty := 0.0;
+      Len := L0;
+      Of_Run := [others => False];
+      Of_Run (K) := True;
+      if L0 <= 0.01 then
+         return;
+      end if;
+      Tx := (Bp.X - A.X) / L0;
+      Ty := (Bp.Y - A.Y) / L0;
+      while Grew and then Turns <= N_Paths loop
+         Grew := False;
+         Turns := Turns + 1;
+         for J in 1 .. N_Paths loop
+            declare
+               S  : Path_Seg renames Path_List (J);
+               L  : constant Float := Flat_Dist (S.A, S.B);
+               function Ahead (P, Of_P : Vec3) return Float is ((P.X - Of_P.X) * Tx + (P.Y - Of_P.Y) * Ty);
+               Joined : Boolean := False;
+            begin
+               if L > 0.01 and then abs Ahead (S.B, S.A) >= Run_Straight * L then
+                  if Flat_Dist (S.A, Bp) < Run_Joint_M and then Ahead (S.B, Bp) > Run_Joint_M then
+                     Bp := S.B;
+                     Joined := True;
+                  elsif Flat_Dist (S.B, Bp) < Run_Joint_M and then Ahead (S.A, Bp) > Run_Joint_M then
+                     Bp := S.A;
+                     Joined := True;
+                  elsif Flat_Dist (S.B, A) < Run_Joint_M and then Ahead (S.A, A) < -Run_Joint_M then
+                     A := S.A;
+                     Joined := True;
+                  elsif Flat_Dist (S.A, A) < Run_Joint_M and then Ahead (S.B, A) < -Run_Joint_M then
+                     A := S.B;
+                     Joined := True;
+                  end if;
+                  if Joined then
+                     Grew := True;
+                     Of_Run (J) := True;
+                  end if;
+               end if;
+            end;
+         end loop;
+      end loop;
+      From := A;
+      Len := Flat_Dist (A, Bp);
+      Tx := (Bp.X - A.X) / Len;
+      Ty := (Bp.Y - A.Y) / Len;
+   end Run_Of;
+
+   --  What every plan for housing ends with, its ground worked out: nothing
+   --  of it to take, no room for another zone, housing too large to be
+   --  worked out over as one (it is left as it is, and this is a zone
+   --  beside it), ground too far from the stake; and how many hovels it
+   --  would hold (Count: worked out by placing them, for a zoning and not
+   --  for every frame a pull is shown).
+   procedure Close_Housing_Plan (Count : Boolean) is
+   begin
+      if Plan_Refused = Lot_Ok and then Plan_N = 0 then
+         Plan_Refused := No_Ground;
+         Housing_Is_Housing := Plan_Join_N > 0;
+      elsif Plan_Refused = Lot_Ok and then Plan_Join_N = 0 and then not Zone_Room then
+         Plan_Refused := No_Room;
+      end if;
+      if Plan_Refused = Lot_Ok then
+         --  housing too large to be worked out over as one is left as it is, and this is a zone beside it
+         declare
+            Bx0, By0 : Integer := Integer'Last;
+            Bx1, By1 : Integer := Integer'First;
+         begin
+            for K in 1 .. Plan_N loop
+               Bx0 := Integer'Min (Bx0, Integer (Plan_Run (K).X0));
+               Bx1 := Integer'Max (Bx1, Integer (Plan_Run (K).X1));
+               By0 := Integer'Min (By0, Integer (Plan_Run (K).Y));
+               By1 := Integer'Max (By1, Integer (Plan_Run (K).Y));
+            end loop;
+            for J in 1 .. Plan_Join_N loop
+               Bx0 := Integer'Min (Bx0, Zones (Plan_Join (J)).Bx0);
+               Bx1 := Integer'Max (Bx1, Zones (Plan_Join (J)).Bx1);
+               By0 := Integer'Min (By0, Zones (Plan_Join (J)).By0);
+               By1 := Integer'Max (By1, Zones (Plan_Join (J)).By1);
+            end loop;
+            if Bx1 - Bx0 >= Max_Plan_B or else By1 - By0 >= Max_Plan_B then
+               Plan_Join_N := 0;
+               if not Zone_Room then
+                  Plan_Refused := No_Room;
+               end if;
+            end if;
+            Housing_Too_Far := Far_Of (Bx0, By0, Bx1, By1) > Far_Reach_Max_M;
+         end;
+      end if;
+      --  (how many hovels it would hold is worked out by placing them: for
+      --  a zoning, not for every frame a pull is shown)
+      if Plan_Refused = Lot_Ok and then not Housing_Too_Far and then Count then
+         Plan_Hovels := Planned_Hovels;
+      end if;
+      if Plan_Refused /= Lot_Ok or else Housing_Too_Far then      --  nothing to show of a strip that is refused
+         Plan_N := 0;
+         Plan_Blocks := 0;
+         Plan_Join_N := 0;
+      end if;
+   end Close_Housing_Plan;
+
+   --  The plan for housing begun at (X0, Y0) and pulled to (X1, Y1): a
+   --  strip along the straight run of the path nearest where it was begun,
+   --  on that side of it, from the path's edge as far back as a hovel takes
+   --  (Housing_Deep_M, and more beside a path that runs aslant, since a
+   --  house stands square to the block grid), between the two points along
+   --  the path, and no further than Housing_Past_B past an end or a turn of
+   --  it.  Its ground is every block column of that strip that is free;
+   --  those that are housing already, and any housing its ground touches,
+   --  are what it is to be combined with (Plan_Join).
+   procedure Plan_Housing_Lot (X0, Y0, X1, Y1 : Float; Count : Boolean := True) is
+      P0     : constant Vec3 := (X0, Y0, 0.0);
+      Half   : constant Float := Path_Width_M / 2.0;
+      Best   : Natural := 0;
+      Best_D : Float := Float'Last;
+      From   : Vec3;
+      Tx, Ty, Len : Float;
+   begin
       Housing_Too_Far := False;
+      Housing_Is_Housing := False;
+      Housing_Open := False;
+      Housing_No_Path := False;
       Plan_Hovels := 0;
-      Way_Of_Path ((X0, Y0, 0.0), (X1, Y1, 0.0), Ex, Ey, Gap);
+      Plan_Join_N := 0;
+      Plan_N := 0;
+      Plan_Blocks := 0;
+      Plan_Cells_N := 0;
+      Plan_Under_N := 0;
+      Plan_At_Path := False;
+      Plan_Turn := 0.0;
+      Plan_Corner := [others => P0];
+      for K in 1 .. N_Paths loop
+         if Seg_Dist (P0, Path_List (K)) < Best_D then
+            Best_D := Seg_Dist (P0, Path_List (K));
+            Best := K;
+         end if;
+      end loop;
+      if Best = 0 or else Best_D > Housing_Snap_M then
+         Plan_Refused := Off_Path;
+         return;
+      end if;
+      Run_Of (Best, From, Tx, Ty, Len);
       declare
-         A0 : constant Float := X0 * Ex + Y0 * Ey;
-         A1 : constant Float := X1 * Ex + Y1 * Ey;
-         B0 : constant Float := Y0 * Ex - X0 * Ey;
-         B1 : constant Float := Y1 * Ex - X1 * Ey;
+         function Along (X, Y : Float) return Float is ((X - From.X) * Tx + (Y - From.Y) * Ty);
+         function Left (X, Y : Float) return Float is ((Y - From.Y) * Tx - (X - From.X) * Ty);
+         Side : constant Float :=
+           (if abs Left (X0, Y0) > 0.05 then (if Left (X0, Y0) > 0.0 then 1.0 else -1.0)
+            elsif Left (X1, Y1) < 0.0 then -1.0 else 1.0);
+         Past : constant Float := Float (Housing_Past_B) * 0.25;
+         A0   : constant Float := Along (X0, Y0);
+         A1   : constant Float := Along (X1, Y1);
+         Lo   : Float := Float'Max (Float'Min (A0, A1), -Past);
+         Hi   : Float := Float'Min (Float'Max (A0, A1), Len + Past);
+         Deep : constant Float := Half + Housing_Deep_M * (abs Tx + abs Ty);
+         function Wx (A, Off : Float) return Float is (From.X + A * Tx - Off * Side * Ty);
+         function Wy (A, Off : Float) return Float is (From.Y + A * Ty + Off * Side * Tx);
       begin
-         Plan_Lot (Ex, Ey, Float'Floor (Float'Min (A0, A1)), Float'Ceiling (Float'Max (A0, A1)),
-                   Float'Floor (Float'Min (B0, B1)), Float'Ceiling (Float'Max (B0, B1)),
-                   Seed => (X0, Y0, 0.0), Step_B => Integer (Zone_Step_M * 4.0), Places => False);
-         if Plan_Refused = Too_Large then
+         if Hi - Lo > Housing_Long_M then           --  (pulled further than one zoning goes: as far as that)
+            if A0 <= A1 then
+               Hi := Lo + Housing_Long_M;
+            else
+               Lo := Hi - Housing_Long_M;
+            end if;
+         end if;
+         if Hi - Lo < 0.25 then                     --  begun and ended past the same end of the path
+            Plan_Refused := Off_Path;
             return;
          end if;
-         --  it has to come within a metre of a path (and is then drawn out to it)
-         if not Plan_At_Path then
-            Plan_Refused := Off_Path;
-         elsif Plan_Refused = Lot_Ok and then not Zone_Room then
-            Plan_Refused := No_Room;
+         Plan_Corner := [(Wx (Lo, Half), Wy (Lo, Half), 0.0), (Wx (Hi, Half), Wy (Hi, Half), 0.0),
+                         (Wx (Hi, Deep), Wy (Hi, Deep), 0.0), (Wx (Lo, Deep), Wy (Lo, Deep), 0.0)];
+         declare                                    --  the way it lies, within 45 degrees of east, as every lot's is
+            Dx : Float := Tx;
+            Dy : Float := Ty;
+            T  : Float;
+         begin
+            for Turn in 1 .. 3 loop
+               exit when Dx > 0.0 and then abs Dy <= Dx;
+               T := Dx;
+               Dx := Dy;
+               Dy := -T;
+            end loop;
+            Plan_Turn := Arctan (Dy, Dx);
+         end;
+         declare
+            X_Lo : constant Float := Float'Min (Float'Min (Wx (Lo, 0.0), Wx (Hi, 0.0)), Float'Min (Wx (Lo, Deep), Wx (Hi, Deep)));
+            X_Hi : constant Float := Float'Max (Float'Max (Wx (Lo, 0.0), Wx (Hi, 0.0)), Float'Max (Wx (Lo, Deep), Wx (Hi, Deep)));
+            Y_Lo : constant Float := Float'Min (Float'Min (Wy (Lo, 0.0), Wy (Hi, 0.0)), Float'Min (Wy (Lo, Deep), Wy (Hi, Deep)));
+            Y_Hi : constant Float := Float'Max (Float'Max (Wy (Lo, 0.0), Wy (Hi, 0.0)), Float'Max (Wy (Lo, Deep), Wy (Hi, Deep)));
+            Gx0  : constant Integer := B (X_Lo) - 1;
+            Gy0  : constant Integer := B (Y_Lo) - 1;
+            W    : constant Integer := B (X_Hi) + 1 - Gx0 + 1;
+            H    : constant Integer := B (Y_Hi) + 1 - Gy0 + 1;
+            G    : Plan_Grid renames Plan_G.all;
+            --  a block column of the strip, as it is worked out: nothing of
+            --  it (Not_It), housing already (Is_Housing; Was_Housing once the
+            --  fill has reached it), free ground not yet reached (Seen_Base
+            --  less the row of its top), or free ground reached (that row)
+            Not_It      : constant Integer_16 := -2;
+            Is_Housing  : constant Integer_16 := -3;
+            Was_Housing : constant Integer_16 := -4;
+            Seen_Base   : constant Integer_16 := -16;
+            Near_Seg : array (1 .. Max_Paths) of Positive;
+            N_Near   : Natural := 0;
+
+            function Mid (Bx, By : Integer) return Vec3 is ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25, 0.0);
+
+            function Path_Here (P : Vec3) return Boolean is
+              (for some K in 1 .. N_Near => Seg_Dist (P, Path_List (Near_Seg (K))) <= Half);
+
+            procedure Join (Z : Positive) is
+            begin
+               if Zones (Z).Kind = Habitation_Zone and then (for all J in 1 .. Plan_Join_N => Plan_Join (J) /= Z) then
+                  Plan_Join_N := Plan_Join_N + 1;
+                  Plan_Join (Plan_Join_N) := Z;
+               end if;
+            end Join;
+
+            --  the row of the free ground at a block column: nothing on it
+            --  but what grows and can be cut (-1: none)
+            function Free_Row (Bx, By, Near : Integer) return Integer is
+               Zr : constant Integer := Ground_Row (Bx, By, Near);
+            begin
+               return (if Zr < 0 or else Mat (Bx, By, Zr) in Trunk
+                         or else Mat (Bx, By, Zr + 1) not in Air | Tall_Grass | Wild_Grain | Wild_Vegetables
+                       then -1 else Zr);
+            end Free_Row;
+         begin
+            if W > Max_Plan_B or else H > Max_Plan_B then
+               Plan_Refused := Too_Large;
+               return;
+            end if;
+            for K in 1 .. N_Paths loop
+               declare
+                  S : Path_Seg renames Path_List (K);
+               begin
+                  if Float'Max (S.A.X, S.B.X) >= X_Lo - 1.0 and then Float'Min (S.A.X, S.B.X) <= X_Hi + 1.0
+                    and then Float'Max (S.A.Y, S.B.Y) >= Y_Lo - 1.0 and then Float'Min (S.A.Y, S.B.Y) <= Y_Hi + 1.0
+                  then
+                     N_Near := N_Near + 1;
+                     Near_Seg (N_Near) := K;
+                  end if;
+               end;
+            end loop;
+            --  what each block column of the strip is: free ground (the row
+            --  of its top), housing already (Is_Housing), or neither
+            for Y in 0 .. H - 1 loop
+               for X in 0 .. W - 1 loop
+                  declare
+                     P   : constant Vec3 := Mid (Gx0 + X, Gy0 + Y);
+                     A   : constant Float := Along (P.X, P.Y);
+                     Off : constant Float := Left (P.X, P.Y) * Side;
+                     Row : Integer := -1;
+                     Z, Zr : Integer;
+                  begin
+                     G (X, Y) := Not_It;
+                     if A >= Lo and then A < Hi and then Off > 0.0 and then Off < Deep then
+                        if Path_Here (P) then
+                           Plan_At_Path := True;
+                        else
+                           Zone_Of_Block (Gx0 + X, Gy0 + Y, Z, Zr);
+                           if Z /= 0 then
+                              if Zones (Z).Kind = Habitation_Zone then
+                                 G (X, Y) := Is_Housing;
+                              end if;
+                           else
+                              --  (the ground beside it is the best guess at where this column's is)
+                              if X > 0 and then G (X - 1, Y) <= Seen_Base then
+                                 Row := Free_Row (Gx0 + X, Gy0 + Y, Integer (Seen_Base - G (X - 1, Y)));
+                              elsif Y > 0 and then G (X, Y - 1) <= Seen_Base then
+                                 Row := Free_Row (Gx0 + X, Gy0 + Y, Integer (Seen_Base - G (X, Y - 1)));
+                              else
+                                 declare
+                                    Sz : constant Float := Castle.Nav.Surface_Z (P.X, P.Y);
+                                 begin
+                                    Row := (if Sz >= 0.0 then Free_Row (Gx0 + X, Gy0 + Y, B (Sz) - 1) else -1);
+                                 end;
+                              end if;
+                              if Row >= 0 then
+                                 G (X, Y) := Seen_Base - Integer_16 (Row);     --  free, not yet reached
+                              end if;
+                           end if;
+                        end if;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+            --  its ground is what of that can be got to from the edge of its
+            --  own path without crossing a path, another kind of zone or
+            --  anything standing: out from the strip's front, a block at a
+            --  time to the four sides, through free ground and housing.
+            --  The front is the ground beside the path itself, where no
+            --  other path lies nearer: what is past an end or a turn of the
+            --  path is reached from there or not at all (John, 2026-11-12:
+            --  "a slice of the habitation zone passes over the connecting
+            --  road": begun from the whole front, the seven blocks past a
+            --  turn were taken on the far side of the road that led off it)
+            declare
+               --  beside its own path, and no other path nearer
+               function Fronts_Own (P : Vec3) return Boolean is
+                  Own, Other : Float := Float'Last;
+               begin
+                  for K in 1 .. N_Near loop
+                     declare
+                        D : constant Float := Seg_Dist (P, Path_List (Near_Seg (K)));
+                     begin
+                        if Of_Run (Near_Seg (K)) then
+                           Own := Float'Min (Own, D);
+                        else
+                           Other := Float'Min (Other, D);
+                        end if;
+                     end;
+                  end loop;
+                  return Other >= Own;
+               end Fronts_Own;
+               Queue : Plan_Spots renames Plan_Q.all;
+               Head, Tail : Natural := 0;
+               procedure Reach (X, Y : Integer) is
+                  Z, Zr : Integer;
+               begin
+                  if X not in 0 .. W - 1 or else Y not in 0 .. H - 1 then
+                     return;
+                  end if;
+                  if G (X, Y) <= Seen_Base then
+                     G (X, Y) := Seen_Base - G (X, Y);             --  free, and reached: the row of its top
+                  elsif G (X, Y) = Is_Housing then
+                     G (X, Y) := Was_Housing;
+                     Zone_Of_Block (Gx0 + X, Gy0 + Y, Z, Zr);
+                     if Z /= 0 then
+                        Join (Z);
+                     end if;
+                  else
+                     return;
+                  end if;
+                  Tail := Tail + 1;
+                  Queue (Tail) := (Integer_16 (X), Integer_16 (Y));
+               end Reach;
+            begin
+               for Y in 0 .. H - 1 loop
+                  for X in 0 .. W - 1 loop
+                     if G (X, Y) <= Seen_Base or else G (X, Y) = Is_Housing then
+                        declare
+                           P : constant Vec3 := Mid (Gx0 + X, Gy0 + Y);
+                        begin
+                           if Left (P.X, P.Y) * Side < Half + 0.75 and then Along (P.X, P.Y) >= 0.0
+                             and then Along (P.X, P.Y) <= Len and then Fronts_Own (P)
+                           then
+                              Reach (X, Y);
+                           end if;
+                        end;
+                     end if;
+                  end loop;
+               end loop;
+               while Head < Tail loop
+                  Head := Head + 1;
+                  declare
+                     X : constant Integer := Integer (Queue (Head).X);
+                     Y : constant Integer := Integer (Queue (Head).Y);
+                  begin
+                     Reach (X + 1, Y);
+                     Reach (X - 1, Y);
+                     Reach (X, Y + 1);
+                     Reach (X, Y - 1);
+                  end;
+               end loop;
+            end;
+            --  housing that its ground touches from outside the strip is combined with it too
+            for Y in 0 .. H - 1 loop
+               for X in 0 .. W - 1 loop
+                  if G (X, Y) >= 0 then
+                     for D in 1 .. 4 loop
+                        declare
+                           Nx : constant Integer := X + (case D is when 1 => 1, when 2 => -1, when others => 0);
+                           Ny : constant Integer := Y + (case D is when 3 => 1, when 4 => -1, when others => 0);
+                           Z, Zr : Integer;
+                        begin
+                           if Nx not in 0 .. W - 1 or else Ny not in 0 .. H - 1 or else G (Nx, Ny) = Not_It then
+                              Zone_Of_Block (Gx0 + Nx, Gy0 + Ny, Z, Zr);
+                              if Z /= 0 then
+                                 Join (Z);
+                              end if;
+                           end if;
+                        end;
+                     end loop;
+                  end if;
+               end loop;
+            end loop;
+            --  its ground as strips: rows south to north, west to east in a row
+            Plan_Refused := Lot_Ok;
+            Rows :
+            for Y in 0 .. H - 1 loop
+               declare
+                  X : Integer := 0;
+               begin
+                  while X < W loop
+                     if G (X, Y) >= 0 then
+                        declare
+                           X_0 : constant Integer := X;
+                           Zr  : constant Integer_16 := G (X, Y);
+                        begin
+                           while X + 1 < W and then G (X + 1, Y) = Zr loop
+                              X := X + 1;
+                           end loop;
+                           if Plan_N = Max_Plan_Runs or else N_Runs + Plan_N >= Max_Zone_Runs then
+                              Plan_Refused := No_Room;
+                              exit Rows;
+                           end if;
+                           Plan_N := Plan_N + 1;
+                           Plan_Run (Plan_N) := (Y => Integer_16 (Gy0 + Y), X0 => Integer_16 (Gx0 + X_0),
+                                                 X1 => Integer_16 (Gx0 + X), Z => Zr);
+                           Plan_Blocks := Plan_Blocks + X - X_0 + 1;
+                        end;
+                     end if;
+                     X := X + 1;
+                  end loop;
+               end;
+            end loop Rows;
+         end;
+      end;
+      Close_Housing_Plan (Count);
+   end Plan_Housing_Lot;
+
+   --  The plan for housing all the ground inside a round of paths (John,
+   --  2026-11-12: "it would be nice if player had a fill option for closed
+   --  loop paths"): from the block column at (X, Y) out over free ground
+   --  and housing, a block at a time to the four sides, until paths, other
+   --  zones and whatever stands stop it on every side.  Ground it runs out
+   --  over without being stopped (as far as a lot can be worked out over,
+   --  or to ground that is not in) is not closed, and nothing is planned;
+   --  nor where no path lies beside it.  Housing it meets is what it is to
+   --  be combined with, as a strip's is.
+   procedure Plan_Housing_Fill (X, Y : Float; Count : Boolean := True) is
+      P0   : constant Vec3 := (X, Y, 0.0);
+      Half : constant Float := Path_Width_M / 2.0;
+      W    : constant := Max_Plan_B;
+      Gx0  : constant Integer := B (X) - W / 2;
+      Gy0  : constant Integer := B (Y) - W / 2;
+      G    : Plan_Grid renames Plan_G.all;
+      Unseen      : constant Integer_16 := -1;
+      Not_It      : constant Integer_16 := -2;
+      Was_Housing : constant Integer_16 := -4;
+      Near_Seg : array (1 .. Max_Paths) of Positive;
+      N_Near   : Natural := 0;
+      Queue    : Plan_Spots renames Plan_Q.all;
+      Head, Tail : Natural := 0;
+      Open     : Boolean := False;
+
+      function Mid (Bx, By : Integer) return Vec3 is ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25, 0.0);
+      function Path_Here (P : Vec3) return Boolean is
+        (for some K in 1 .. N_Near => Seg_Dist (P, Path_List (Near_Seg (K))) <= Half);
+
+      procedure Join (Z : Positive) is
+      begin
+         if (for all J in 1 .. Plan_Join_N => Plan_Join (J) /= Z) then
+            Plan_Join_N := Plan_Join_N + 1;
+            Plan_Join (Plan_Join_N) := Z;
          end if;
-         if Plan_Refused = Lot_Ok then
-            Plan_Hovels := Planned_Hovels;
-            Housing_No_Hovel := Plan_Hovels = 0;
+      end Join;
+
+      --  Block column (Gx0 + Cx, Gy0 + Cy), come to from ground whose top is at row Near.
+      procedure Reach (Cx, Cy, Near : Integer) is
+         Bx : constant Integer := Gx0 + Cx;
+         By : constant Integer := Gy0 + Cy;
+         Z, Zr, Row : Integer;
+      begin
+         if Cx not in 0 .. W - 1 or else Cy not in 0 .. W - 1 then
+            Open := True;                    --  out past what a lot can be worked out over
+            return;
          end if;
-         if Plan_Refused /= Lot_Ok or else Housing_No_Hovel then   --  nothing to show of a lot that is refused
-            Plan_N := 0;
-            Plan_Blocks := 0;
+         if G (Cx, Cy) /= Unseen then
+            return;
+         end if;
+         G (Cx, Cy) := Not_It;
+         --  (the player's plan: read from the ground that is held, the colony's own or not)
+         if Version_Src (Integer (Float'Floor (Float (Bx) / 32.0)), Integer (Float'Floor (Float (By) / 32.0))) = 0 then
+            Open := True;                    --  ground that is not in: nothing says what stops it there
+            return;
+         end if;
+         if Path_Here (Mid (Bx, By)) then
+            Plan_At_Path := True;
+            return;
+         end if;
+         Zone_Of_Block (Bx, By, Z, Zr);
+         if Z /= 0 then
+            if Zones (Z).Kind /= Habitation_Zone then
+               return;
+            end if;
+            Join (Z);
+            G (Cx, Cy) := Was_Housing;
+            Row := Zr;
+         else
+            Row := Ground_Row (Bx, By, Near);
+            if Row < 0 or else Mat (Bx, By, Row) in Trunk
+              or else Mat (Bx, By, Row + 1) not in Air | Tall_Grass | Wild_Grain | Wild_Vegetables
+            then
+               return;                       --  (whatever stands there: none of its ground, and not passed)
+            end if;
+            G (Cx, Cy) := Integer_16 (Row);
+         end if;
+         Tail := Tail + 1;
+         Queue (Tail) := (Integer_16 (Cx), Integer_16 (Cy));
+      end Reach;
+   begin
+      Housing_Too_Far := False;
+      Housing_Is_Housing := False;
+      Housing_Open := False;
+      Housing_No_Path := False;
+      Plan_Hovels := 0;
+      Plan_Join_N := 0;
+      Plan_N := 0;
+      Plan_Blocks := 0;
+      Plan_Cells_N := 0;
+      Plan_Under_N := 0;
+      Plan_At_Path := False;
+      Plan_Turn := 0.0;
+      Plan_Corner := [others => P0];
+      Plan_Refused := Lot_Ok;
+      for K in 1 .. N_Paths loop
+         declare
+            S  : Path_Seg renames Path_List (K);
+            R  : constant Float := Float (W) * 0.125 + 1.0;
+         begin
+            if Float'Max (S.A.X, S.B.X) >= X - R and then Float'Min (S.A.X, S.B.X) <= X + R
+              and then Float'Max (S.A.Y, S.B.Y) >= Y - R and then Float'Min (S.A.Y, S.B.Y) <= Y + R
+            then
+               N_Near := N_Near + 1;
+               Near_Seg (N_Near) := K;
+            end if;
+         end;
+      end loop;
+      for Cx in 0 .. W - 1 loop
+         for Cy in 0 .. W - 1 loop
+            G (Cx, Cy) := Unseen;
+         end loop;
+      end loop;
+      declare
+         Sz : constant Float := Castle.Nav.Surface_Z (X, Y);
+      begin
+         if Sz >= 0.0 then
+            Reach (W / 2, W / 2, B (Sz) - 1);
          end if;
       end;
-   end Plan_Housing_Lot;
+      while Head < Tail and then not Open loop
+         Head := Head + 1;
+         declare
+            Cx  : constant Integer := Integer (Queue (Head).X);
+            Cy  : constant Integer := Integer (Queue (Head).Y);
+            Z, Zr : Integer;
+            Row : Integer := Integer (G (Cx, Cy));
+         begin
+            if G (Cx, Cy) = Was_Housing then
+               Zone_Of_Block (Gx0 + Cx, Gy0 + Cy, Z, Zr);
+               Row := Zr;
+            end if;
+            Reach (Cx + 1, Cy, Row);
+            Reach (Cx - 1, Cy, Row);
+            Reach (Cx, Cy + 1, Row);
+            Reach (Cx, Cy - 1, Row);
+         end;
+      end loop;
+      if Tail = 0 then
+         Plan_Refused := No_Ground;          --  (begun on a path, another zone, or something standing)
+      elsif Open then
+         Plan_Refused := No_Ground;
+         Housing_Open := True;
+      elsif not Plan_At_Path then
+         Plan_Refused := No_Ground;
+         Housing_No_Path := True;
+      else
+         --  its ground as strips: rows south to north, west to east in a row
+         Rows :
+         for Cy in 0 .. W - 1 loop
+            declare
+               Cx : Integer := 0;
+            begin
+               while Cx < W loop
+                  if G (Cx, Cy) >= 0 then
+                     declare
+                        X_0 : constant Integer := Cx;
+                        Zr  : constant Integer_16 := G (Cx, Cy);
+                     begin
+                        while Cx + 1 < W and then G (Cx + 1, Cy) = Zr loop
+                           Cx := Cx + 1;
+                        end loop;
+                        if Plan_N = Max_Plan_Runs or else N_Runs + Plan_N >= Max_Zone_Runs then
+                           Plan_Refused := (if Plan_N = Max_Plan_Runs then Too_Large else No_Room);
+                           exit Rows;
+                        end if;
+                        Plan_N := Plan_N + 1;
+                        Plan_Run (Plan_N) := (Y => Integer_16 (Gy0 + Cy), X0 => Integer_16 (Gx0 + X_0),
+                                              X1 => Integer_16 (Gx0 + Cx), Z => Zr);
+                        Plan_Blocks := Plan_Blocks + Cx - X_0 + 1;
+                     end;
+                  end if;
+                  Cx := Cx + 1;
+               end loop;
+            end;
+         end loop Rows;
+      end if;
+      if Plan_Refused /= Lot_Ok then
+         Plan_Join_N := 0;
+      end if;
+      Close_Housing_Plan (Count);
+   end Plan_Housing_Fill;
 
    function Housing_Refusal return String is
      (if Housing_Too_Far
       then "it is too far from the homestake (the band's ground reaches" & Integer'Image (Integer (Far_Reach_Max_M))
            & " m at most)"
-      elsif Housing_No_Hovel
-      then "there is no room there for a hovel (it takes" & Integer'Image (Integer (Lot_M)) & " m along a path and"
-           & Integer'Image (Integer (Lot_M)) & " m back from it)"
+      elsif Housing_Open
+      then "the paths round that ground do not close (or it is more than"
+           & Integer'Image (Integer (Float (Max_Plan_B) * 0.125)) & " m from there to them)"
+      elsif Housing_No_Path
+      then "housing is marked along a path: no path lies beside that ground"
+      elsif Housing_Is_Housing and then Plan_Refused = No_Ground
+      then "that ground is housing already"
       else (case Plan_Refused is
                when Lot_Ok    => "",
-               when Off_Path  => "housing has to come within a metre of a path",
+               when Off_Path  => "housing is marked along a path: begin beside one, and pull along it",
                when No_Ground => "there is no clear ground there to build on",
-               when Too_Large => "it is too large (" & Integer'Image (Integer (Max_Lot_M)) & " m a side at most)",
+               when Too_Large => "it is too large",
                when No_Room   => "there is no room for another zone"));
 
-   function Plan_Housing (X0, Y0, X1, Y1 : Float) return Lot_Plan is
+   function Housing_Joined return Natural is (Joined_Last);
+
+   function Plan_Housing (X0, Y0, X1, Y1 : Float; Count : Boolean := True) return Lot_Plan is
       V : Lot_Plan;
    begin
-      Plan_Housing_Lot (X0, Y0, X1, Y1);
+      Plan_Housing_Lot (X0, Y0, X1, Y1, Count);
       V := Plan_View;
-      V.Ok := Plan_Refused = Lot_Ok and then not Housing_No_Hovel;
+      V.Ok := Plan_Refused = Lot_Ok and then not Housing_Too_Far;
       V.Cells := Plan_Hovels;
       return V;
    end Plan_Housing;
 
-   procedure Zone_Housing (X0, Y0, X1, Y1 : Float; Lots : out Natural) is
+   function Plan_Housing_Inside (X, Y : Float; Count : Boolean := True) return Lot_Plan is
+      V : Lot_Plan;
+   begin
+      Plan_Housing_Fill (X, Y, Count);
+      V := Plan_View;
+      V.Ok := Plan_Refused = Lot_Ok and then not Housing_Too_Far;
+      V.Cells := Plan_Hovels;
+      return V;
+   end Plan_Housing_Inside;
+
+   --  The planned strip and the housing zones it meets (Plan_Join) become
+   --  one zone, the first of them: its ground is theirs and the strip's
+   --  together, and the houses of the others are its houses.  The runs of
+   --  every zone are packed again (a zone's own lie together), and the
+   --  zones after one that is gone move down a place, with whatever is kept
+   --  by a zone's number (a stockpile's places, the camp, the houses).
+   procedure Join_Plan is
+      Keep : Positive := Plan_Join (1);
+      function Joined (Z : Positive) return Boolean is (for some J in 1 .. Plan_Join_N => Plan_Join (J) = Z);
+      function Before (L, R : Run_Rec) return Boolean is (L.Y < R.Y or else (L.Y = R.Y and then L.X0 < R.X0));
+      procedure Sort is new Ada.Containers.Generic_Array_Sort (Positive, Run_Rec, Run_List, Before);
+      N_All : Natural := Plan_N;
+   begin
+      for J in 1 .. Plan_Join_N loop
+         Keep := Positive'Min (Keep, Plan_Join (J));
+         N_All := N_All + Zones (Plan_Join (J)).N;
+      end loop;
+      declare
+         type Run_List_Access is access Run_List;
+         procedure Free is new Ada.Unchecked_Deallocation (Run_List, Run_List_Access);
+         All_Runs : Run_List_Access := new Run_List (1 .. N_All);
+         N : Natural := 0;
+         M : Natural := 0;
+         Packed : Natural := 0;
+      begin
+         for K in 1 .. Plan_N loop
+            N := N + 1;
+            All_Runs (N) := Plan_Run (K);
+         end loop;
+         for J in 1 .. Plan_Join_N loop
+            for K in Zones (Plan_Join (J)).First + 1 .. Zones (Plan_Join (J)).First + Zones (Plan_Join (J)).N loop
+               N := N + 1;
+               All_Runs (N) := Runs (K);
+            end loop;
+         end loop;
+         Sort (All_Runs.all);
+         for K in 1 .. N loop                 --  strips that carry on from one another at one level are one
+            if M > 0 and then All_Runs (M).Y = All_Runs (K).Y and then All_Runs (M).Z = All_Runs (K).Z
+              and then Integer (All_Runs (M).X1) + 1 = Integer (All_Runs (K).X0)
+            then
+               All_Runs (M).X1 := All_Runs (K).X1;
+            else
+               M := M + 1;
+               All_Runs (M) := All_Runs (K);
+            end if;
+         end loop;
+         --  the other zones' runs moved down over the gaps, then this zone's
+         for Z in 1 .. N_Zones loop
+            if not Joined (Z) then
+               declare
+                  First_Was : constant Natural := Zones (Z).First;
+               begin
+                  Zones (Z).First := Packed;
+                  for K in 1 .. Zones (Z).N loop
+                     Runs (Packed + K) := Runs (First_Was + K);
+                  end loop;
+                  Packed := Packed + Zones (Z).N;
+               end;
+            end if;
+         end loop;
+         Zones (Keep).First := Packed;
+         Zones (Keep).N := M;
+         for K in 1 .. M loop
+            Runs (Packed + K) := All_Runs (K);
+         end loop;
+         N_Runs := Packed + M;
+         Free (All_Runs);
+      end;
+      for Z in reverse 1 .. N_Zones loop      --  the zones taken into it are gone
+         if Z /= Keep and then Joined (Z) then
+            for K in Z .. N_Zones - 1 loop
+               Zones (K) := Zones (K + 1);
+            end loop;
+            N_Zones := N_Zones - 1;
+            for K in 1 .. N_Cells loop
+               if Cells (K).Zone > Z then
+                  Cells (K).Zone := Cells (K).Zone - 1;
+               end if;
+            end loop;
+            if Camp_Zone_N > Z then
+               Camp_Zone_N := Camp_Zone_N - 1;
+            end if;
+            for H in 1 .. N_Houses loop
+               if Houses (H).Zone = Z then
+                  Houses (H).Zone := Keep;
+               elsif Houses (H).Zone > Z then
+                  Houses (H).Zone := Houses (H).Zone - 1;
+               end if;
+            end loop;
+            for J in 1 .. Plan_Join_N loop
+               if Plan_Join (J) > Z then
+                  Plan_Join (J) := Plan_Join (J) - 1;
+               elsif Plan_Join (J) = Z then
+                  Plan_Join (J) := Keep;
+               end if;
+            end loop;
+         end if;
+      end loop;
+      Measure_Zone (Keep);
+      Zoned_Last := Keep;
+      Zones_Ver := Zones_Ver + 1;
+   end Join_Plan;
+
+   --  The housing last planned is taken: a zone of its own, or one with
+   --  the housing it meets.
+   procedure Take_Housing_Plan (Lots : out Natural) is
    begin
       Lots := 0;
-      Plan_Housing_Lot (X0, Y0, X1, Y1);
-      if Plan_Refused /= Lot_Ok or else Housing_No_Hovel then
+      Joined_Last := 0;
+      if Plan_Refused /= Lot_Ok or else Housing_Too_Far then
          return;
       end if;
-      N_Zones := N_Zones + 1;
-      Zones (N_Zones) := (Kind => Habitation_Zone, others => <>);
-      Take_Plan (N_Zones);
+      Joined_Last := Plan_Join_N;
+      if Plan_Join_N = 0 then
+         N_Zones := N_Zones + 1;
+         Zones (N_Zones) := (Kind => Habitation_Zone, others => <>);
+         Take_Plan (N_Zones);
+         Zoned_Last := N_Zones;
+      else
+         Join_Plan;
+      end if;
       Count_Housing;
-      Lots_Full := False;
-      Lots := Plan_Hovels;
+      --  the lots of every house still to begin, laid out now (and not
+      --  while the band is at its work)
+      Plan_Lots;
+      for K in 1 .. N_Lots loop
+         if Castle.Colony.Lots (K).Zone = Zoned_Last then
+            Lots := Lots + 1;
+         end if;
+      end loop;
+   end Take_Housing_Plan;
+
+   procedure Zone_Housing (X0, Y0, X1, Y1 : Float; Lots : out Natural) is
+   begin
+      Plan_Housing_Lot (X0, Y0, X1, Y1, Count => False);
+      Take_Housing_Plan (Lots);
    end Zone_Housing;
+
+   procedure Zone_Housing_Inside (X, Y : Float; Lots : out Natural) is
+   begin
+      Plan_Housing_Fill (X, Y, Count => False);
+      Take_Housing_Plan (Lots);
+   end Zone_Housing_Inside;
 
    ------------------------------------------------------------------ zones
 
@@ -4528,13 +7334,20 @@ package body Castle.Colony is
               Work => Work_Of (I),
               Resting => not M.Is_Dead and then M.Job /= Unassigned and then M.State in Idle | Strolling
                          and then M.Why in Enough_Wood | Enough_Meat | Enough_Food | Stocks_Full,
-              Trade => Trade_Of (I), Site => Site_Of (I), Home => Home_Of (I), Housed => Housed (I));
+              Trade => Trade_Of (I), Site => Site_Of (I), Home => Home_Of (I), Housed => Housed (I),
+              Has_Bed => Has_Bed (I));
    end Person;
 
    ------------------------------------------------------------------ saves
 
-   Save_Version : constant := 19;   --  19: housing: the houses, and the house each builder is at (18 was its
-                                    --  first layout, on the stage's branch only: refused)
+   Save_Version : constant := 25;   --  25: housing: the houses (their front yards and their stone with them), the
+                                    --  house each builder is at, the lots laid out for the houses still to
+                                    --  begin, each one's place by the fire, what the pass's fourth round
+                                    --  added, and on its end whether a hole under a path is filled and the
+                                    --  lord's cart pulled into a stockpile (18 to 24 were housing before that, before the pass's fourth round, before the band chose
+                                    --  where to lie, before its lots were laid out beforehand and its houses
+                                    --  drawn for by lot, before its ground was walled, the hovel of plank and
+                                    --  then of daub: refused)
    --  17: nothing of the colony's own: the herds' blob is its version 2
    --  (whether the herds scatter as they were, each deer's start)
    --  16: extra tasks' hands and stretches; the camp's floor levelled; earth
@@ -4555,7 +7368,8 @@ package body Castle.Colony is
    subtype V8_Kinds is Item_Kind range Vegetables .. Sticks;                   --  those 8 added
    subtype To_V8_Kinds is Item_Kind range Nothing .. Sticks;
    subtype V9_Kinds is Item_Kind range Grain .. Grain;                         --  and 9
-   subtype V16_Kinds is Item_Kind range Earth .. Item_Kind'Last;               --  and 16 (the next kind closes this range)
+   subtype V16_Kinds is Item_Kind range Earth .. Earth;                        --  and 16
+   subtype V23_Kinds is Item_Kind range Salt .. Item_Kind'Last;                --  and 23 (the next kind closes this range)
 
    function F32_Bits is new Ada.Unchecked_Conversion (Float, Unsigned_32);
    function Bits_F32 is new Ada.Unchecked_Conversion (Unsigned_32, Float);

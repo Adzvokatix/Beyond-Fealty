@@ -138,7 +138,27 @@ to its level. Water is kept in saves.
 * **Drawing.** Open-sky water (the top stretch of a column, live or
   resting) is drawn as surface cells from a texture that wraps round the
   camera: previous and current level and the floor, blended between ticks,
-  so a change in level needs no new mesh. It is drawn **stepped** (John,
+  so a change in level needs no new mesh. **The texture is a window of the
+  world, 64 stacks across (128 for a wide view), and a slot of it is its
+  window stack's alone** (`Castle.Render.Set_Surface_Focus`,
+  `In_Surface_Window`, `Owns_Surface`; John, 2026-11-13: "water surface
+  stop rendering around the homesteak and some a little distance away,
+  water was still there, surface rendered when activated"). Two stacks
+  512 m apart share a slot. The view's own stacks never do, but the
+  colony's ground stays loaded wherever the camera is: with the camera far
+  enough away (520 m in the run that showed it; 150 m did nothing), the
+  stacks loaded there were written over the kept stacks' texels and hid
+  them when they were unloaded (the river by the stake a dry bed on coming
+  back, since a kept stack is never loaded again), and whatever was
+  written of the colony's ground meanwhile (a stack meshed again after the
+  band's work) was written over the far view's water (a river 512 m from a
+  working band's ground, dry along a stretch). Now a stack outside the window is not written, a
+  stack hides only a slot it owns, a slot whose owner leaves the window is
+  hidden, and every loaded stack the window comes back to has its texels
+  written again (the game's `Own_Texels`: an awake stack's last tick, a
+  resting one's pool). The debug build checks after every `Stream` that
+  each loaded stack inside the window owns its slot. The fault was as old
+  as the kept ground (the far end was run on `main` and shows there). It is drawn **stepped** (John,
   2026-11-10: "rippling by stepping the water instead of smoothing"): each
   column stands flat at its own level, taken to the nearest eighth of a
   block (3 cm), with a riser down to any lower neighbour, lit as falling

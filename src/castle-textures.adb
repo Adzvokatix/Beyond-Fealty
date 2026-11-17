@@ -67,6 +67,13 @@ package body Castle.Textures is
                            if Ty = 0 or else (Tx + 2 * V) mod 5 = 0 then
                               K := K * 0.74;                  --  overlap and splits
                            end if;
+                        when Fieldstone =>
+                           --  stones of all sizes laid dry: each texel its own grey, dark joints between courses
+                           --  and here and there down through one
+                           K := 0.8 + 0.4 * H;
+                           if Ty = 0 or else (Tx + 3 * V) mod 4 = 0 then
+                              K := K * 0.62;
+                           end if;
                         when Daub =>
                            --  a hand-laid plaster: mottled, a crack here and there
                            K := 0.93 + 0.12 * H;

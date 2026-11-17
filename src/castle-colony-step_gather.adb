@@ -89,7 +89,24 @@ begin
 
       when Storing =>
          M.Work := M.Work + Tick_S * Work_Rate (M, Handling);
-         if M.Work >= Store_S then
+         if M.Work >= Store_S and then M.Carry = Wood and then M.Carried = Ladder_Wood and then Wants_Ladder_Log (I) then
+            --  a builder home with a log of its own, its roof waiting for a
+            --  ladder and none to be had: the log is not stacked, the ladder
+            --  is made of it here
+            declare
+               C : Cell renames Cells (M.Cell);
+            begin
+               C.Incoming := C.Incoming - Natural'Min (C.Incoming, M.Carried);
+               if C.Count = 0 and then C.Incoming = 0 and then C.Outgoing = 0 then
+                  C.Kind := Nothing;
+               end if;
+            end;
+            M.Cell := 0;
+            M.Use_For := For_Ladder;
+            M.State := Making;
+            M.Work := 0.0;
+            M.Spot := M.Pos + (0.0, 0.0, 0.6);
+         elsif M.Work >= Store_S then
             declare
                C : Cell renames Cells (M.Cell);
             begin

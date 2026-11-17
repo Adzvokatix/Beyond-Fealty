@@ -2,7 +2,9 @@ separate (Castle.Colony)
 function Go_Eat (I : Positive) return Boolean is
    M : Member renames Band (I);
    Desperate : constant Boolean := M.Fed < Very_Hungry and then (Failed (M, Fend_Id) or else Winter_Now);
-   function Limit (K : Item_Kind) return Natural is (if Desperate then Free_Stock (K) else Usable (K));
+   --  (what the winter store holds and what the cook keeps for the pot are
+   --  left alone, but not by the starving with nothing to gather)
+   function Limit (K : Item_Kind) return Natural is (if Desperate then Free_Stock (K) else Raw_Free (K));
 begin
    for K of Raw_Order loop
       for Attempt in 1 .. 3 loop

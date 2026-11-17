@@ -594,6 +594,182 @@ begin
       end if;
    end;
 
+   ------------------------------------------------------------ a way that cannot be, remembered
+   Put_Line ("a herd's way over a river by a ford further off than its budget, asked again and again:");
+   Test_World.Attach;                    --  (the made-up world again: the part before this may have been the real one's)
+   Meadow;
+   Fill (0.0, 30.0, 64.0, 36.0, Ground_Row - 8, Ground_Row - 1, Air);
+   Fill (0.0, 30.0, 64.0, 36.0, Ground_Row - 8, Ground_Row - 2, Castle.Blocks.Water);
+   Fill (50.0, 30.0, 52.0, 36.0, Ground_Row - 8, Ground_Row - 3, Gravel);            --  a ford, a hand deep
+   Fill (50.0, 30.0, 52.0, 36.0, Ground_Row - 2, Ground_Row - 2, Castle.Blocks.Water);
+   declare
+      A  : constant Vec3 := P (30.0, 10.0);
+      Z  : constant Vec3 := P (30.0, 50.0);
+      T0 : constant Totals_Rec := Totals;
+      --  (going no deeper than a hand of water: the ford is its way too, and the pieces of
+      --  ground for that going say so; kept dry there is no way, which they say at once, and
+      --  nothing is searched to a budget: the next part)
+      R1 : constant Route := Plan (A, Z, Budget => 2_000, Wade => 1);
+      T1 : constant Totals_Rec := Totals;
+      R2 : constant Route := Plan (A, Z, Budget => 2_000, Wade => 1);
+      T2 : constant Totals_Rec := Totals;
+      function Same (L, R : Route) return Boolean is
+        (L.Result = R.Result and then L.N = R.N and then L.N_Stamps = R.N_Stamps
+         and then (for all K in 1 .. L.N => L.Pts (K).P = R.Pts (K).P));
+   begin
+      Check (Plan (A, Z).Result = Found, "a serf's way is there, by the ford");
+      Check (R1.Result = Partial and then T1.Spent_Plans = T0.Spent_Plans + 1 and then T1.Remembered = T0.Remembered
+             and then not Last_Stats.Out_Of_Reach,
+             "no deeper than a hand, with a budget too small to come to the ford: searched for to it, and ends short");
+      Check (T2.Remembered = T1.Remembered + 1 and then T2.Spent_Plans = T1.Spent_Plans and then Same (R1, R2),
+             "asked again of the same ground: answered from memory, the same way point for point");
+      Check (Plan (A, Z, Budget => 2_000).Result = Partial and then Totals.Remembered = T2.Remembered,
+             "asked as a serf goes: not from that memory");
+      Check (Plan (A, Z, Budget => 2_000, Wade => 1, Refuse => True).Result = Partial and then Totals.Remembered = T2.Remembered
+             and then Plan (A, Z, Budget => 2_000, Wade => 1, Within => Within_M (32.0, 32.0, 60.0)).Result = Partial
+             and then Totals.Remembered = T2.Remembered,
+             "nor asked to be refused, nor kept to a region");
+      Fill (28.0, 12.0, 28.25, 12.25, Ground_Row, Ground_Row + 3, Plank);            --  a post put up near its start
+      declare
+         T3 : constant Totals_Rec := Totals;
+         R3 : constant Route := Plan (A, Z, Budget => 2_000, Wade => 1);
+         T4 : constant Totals_Rec := Totals;
+      begin
+         Check (R3.Result = Partial and then T4.Spent_Plans = T3.Spent_Plans + 1 and then T4.Remembered = T3.Remembered,
+                "the ground it read having moved: searched for again");
+      end;
+      Set_Spent_Memos (False);
+      declare
+         T5 : constant Totals_Rec := Totals;
+         R5 : constant Route := Plan (A, Z, Budget => 2_000, Wade => 1);
+         R6 : constant Route := Plan (A, Z, Budget => 2_000, Wade => 1);
+         T6 : constant Totals_Rec := Totals;
+      begin
+         Check (T6.Spent_Plans = T5.Spent_Plans + 2 and then T6.Remembered = T5.Remembered and then Same (R5, R6),
+                "with the memory switched off: searched for each time, and the same way");
+      end;
+      Set_Spent_Memos (True);
+   end;
+
+   ------------------------------------------------------------ dry going: water blocks it
+   --  (John, 2026-11-13, of the herds: "let them know that water blocks them")
+   Put_Line ("dry going: its own pieces of ground, and a way that water blocks:");
+   Test_World.Attach;
+   Meadow;
+   Fill (0.0, 30.0, 64.0, 36.0, Ground_Row - 8, Ground_Row - 1, Air);                --  the river again, bank to bank,
+   Fill (0.0, 30.0, 64.0, 36.0, Ground_Row - 8, Ground_Row - 2, Castle.Blocks.Water);
+   Fill (50.0, 30.0, 52.0, 36.0, Ground_Row - 8, Ground_Row - 3, Gravel);            --  and its ford, a hand deep
+   Fill (50.0, 30.0, 52.0, 36.0, Ground_Row - 2, Ground_Row - 2, Castle.Blocks.Water);
+   declare
+      A : constant Vec3 := P (30.0, 10.0);
+      Z : constant Vec3 := P (30.0, 50.0);
+      function Same (L, R : Route) return Boolean is
+        (L.Result = R.Result and then L.N = R.N and then (for all K in 1 .. L.N => L.Pts (K).P = R.Pts (K).P));
+      function Its_Bank (X, Y, Zz : Float) return Boolean is (Y < 30.01);
+      function On_Its_Bank is new Every_Spot (Its_Bank);
+      function West_Of_48 (X, Y, Zz : Float) return Boolean is (X < 48.01);
+      function Keeps_West is new Every_Spot (West_Of_48);
+      function East_Of_24 (X, Y, Zz : Float) return Boolean is (X > 23.99);
+      function Keeps_East is new Every_Spot (East_Of_24);
+      T0 : constant Totals_Rec := Totals;
+      Hand : constant Route := Plan (A, Z, Wade => 1);
+      T1 : constant Totals_Rec := Totals;
+      Dry : constant Route := Plan (A, Z, Wade => 0);
+      Dry_S : constant Stats := Last_Stats;
+      T2 : constant Totals_Rec := Totals;
+      No : constant Route := Plan (A, Z, Wade => 0, Refuse => True);
+      No_S : constant Stats := Last_Stats;
+      T3 : constant Totals_Rec := Totals;
+   begin
+      Check (Plan (A, Z).Result = Found and then not Last_Stats.Out_Of_Reach, "a serf's way is there, by the ford");
+      Check (Hand.Result = Found and then Length (Hand) > 50.0 and then T1.Spent_Plans = T0.Spent_Plans
+             and then T1.Dry_Labellings > T0.Dry_Labellings,
+             "going no deeper than a hand of water it is there too: " & Img (Length (Hand), 1) & " m, by the ford");
+      Check (Dry.Result = Partial and then Dry_S.Out_Of_Reach and then Dry_S.Looked_At < 2_000
+             and then not Dry_S.Cut_Short and then T2.Spent_Plans = T1.Spent_Plans and then T2.Unreached = T1.Unreached + 1
+             and then On_Its_Bank (Dry) and then Dry.Pts (Dry.N).P.Y > 29.0,
+             "kept dry, its pieces of ground say out of reach at once: it makes for the bank and looks at"
+             & Dry_S.Looked_At'Image & " floors, where its budget is 300,000");
+      Check (No.Result = None and then No.N = 0 and then No_S.Out_Of_Reach and then No_S.Looked_At = 0
+             and then T3.Refused = T2.Refused + 1 and then T3.Spent_Plans = T2.Spent_Plans,
+             "and asked to be refused, it is not made for at all: no route, no floor looked at");
+      Check (Same (Plan (A, Z, Wade => 1, Refuse => True), Hand) and then Totals.Refused = T3.Refused,
+             "a way that is there is not refused: the same way point for point");
+      Use_Labels (False);
+      Check (Plan (A, Z, Wade => 0).Result = Partial and then not Last_Stats.Cut_Short and then not Last_Stats.Out_Of_Reach
+             and then Last_Stats.Looked_At > 10 * Dry_S.Looked_At,
+             "searched for with the pieces off, over all it can go on: not there (" & Last_Stats.Looked_At'Image
+             & " floors looked at)");
+      Use_Labels (True);
+      --  the proof that colony_run --prove-dry runs on the real world
+      Prove_Dry := True;
+      declare
+         T4 : constant Totals_Rec := Totals;
+      begin
+         Check (Plan (A, Z, Wade => 0, Refuse => True).Result = None and then Plan (A, Z, Wade => 0).Result = Partial
+                and then Totals.Proved = T4.Proved + 2 and then Totals.Unproved = T4.Unproved
+                and then Totals.Refused = T4.Refused + 1 and then Totals.Plans = T4.Plans + 2,
+                "with the proving on, each answer of out of reach is searched for whole and borne out");
+      end;
+      --  the ground changes: a causeway laid across, and taken away
+      Fill (10.0, 30.0, 12.0, 36.0, Ground_Row - 8, Ground_Row - 1, Dirt);
+      declare
+         Over : constant Route := Plan (A, Z, Wade => 0, Refuse => True);
+      begin
+         Check (Over.Result = Found and then not Last_Stats.Out_Of_Reach and then Length (Over) > 50.0,
+                "a causeway laid across: the dry pieces are worked out again, and the way is found over it ("
+                & Img (Length (Over), 1) & " m)");
+      end;
+      Fill (10.0, 30.0, 12.0, 36.0, Ground_Row - 8, Ground_Row - 1, Air);
+      Fill (10.0, 30.0, 12.0, 36.0, Ground_Row - 8, Ground_Row - 2, Castle.Blocks.Water);
+      Check (Plan (A, Z, Wade => 0, Refuse => True).Result = None and then Last_Stats.Out_Of_Reach,
+             "taken away again: out of reach again");
+      Prove_Dry := False;
+      --  a plan kept to a region
+      declare
+         Near : constant Vec3 := P (30.0, 20.0);
+         Far  : constant Vec3 := P (30.0, 44.0);
+         T5 : constant Totals_Rec := Totals;
+         R_In : constant Route := Plan (Near, Far, Wade => 1, Within => Within_M (30.0, 30.0, 30.0), Refuse => True);
+         T6 : constant Totals_Rec := Totals;
+         R_Out : constant Route := Plan (Near, Far, Wade => 1, Within => Within_M (30.0, 30.0, 14.0), Refuse => True);
+         S_Out : constant Stats := Last_Stats;
+         T7 : constant Totals_Rec := Totals;
+         Serf_Out : constant Route := Plan (Near, Far, Within => Within_M (30.0, 30.0, 14.0), Refuse => True);
+         T8 : constant Totals_Rec := Totals;
+         Edge : constant Route := Plan (Near, P (60.0, 20.0), Within => Within_M (30.0, 20.0, 10.0));
+      begin
+         Check (R_In.Result = Found and then T6.Refused = T5.Refused,
+                "kept to the ground within 30 m of the river's middle, which holds the ford: found");
+         Check (R_Out.Result = None and then S_Out.Out_Of_Reach and then S_Out.Looked_At = 0
+                and then T7.Refused = T6.Refused + 1,
+                "kept to the ground within 14 m, which does not: out of reach there, whatever lies beyond");
+         Check (Serf_Out.Result = None and then T8.Refused = T7.Refused + 1 and then Plan (Near, Far).Result = Found,
+                "and so for a serf kept to it, who is there by the ford when kept to nothing");
+         Check (Edge.Result = Partial and then Keeps_West (Edge) and then Edge.Pts (Edge.N).P.X > 44.0
+                and then Plan (Near, P (60.0, 20.0)).Result = Found,
+                "a plan kept to a region never leaves it: to a place outside, it ends at the region's edge ("
+                & Img (Edge.Pts (Edge.N).P.X, 1) & " m east)");
+         --  (the ford lies across stacks (6, 3) and (6, 4): three off, and three and one)
+         Check (Plan (Near, Far, Wade => 1, Within => Within_Stacks (3, 3, 4), Refuse => True).Result = Found
+                and then Plan (Near, Far, Wade => 1, Within => Within_Stacks (3, 3, 3), Refuse => True).Result = None
+                and then Last_Stats.Out_Of_Reach and then Last_Stats.Looked_At = 0,
+                "a region counted in stacks does the same: kept to the stacks within four of the middle's, the ford is"
+                & " found; within three, which hold half of it, it is out of reach");
+         --  a nearer crossing, outside the region: the way found keeps to the region all the same
+         Fill (20.0, 30.0, 22.0, 36.0, Ground_Row - 8, Ground_Row - 1, Dirt);
+         declare
+            Short : constant Route := Plan (Near, Far, Wade => 1);
+            Kept  : constant Route := Plan (Near, Far, Wade => 1, Within => Within_M (40.0, 30.0, 14.0), Refuse => True);
+         begin
+            Check (Short.Result = Found and then Length (Short) < 40.0 and then Kept.Result = Found
+                   and then Length (Kept) > 45.0 and then Keeps_East (Kept),
+                   "with a nearer crossing outside its region, a plan goes by the ford inside it (" & Img (Length (Kept), 1)
+                   & " m; " & Img (Length (Short), 1) & " m kept to nothing)");
+         end;
+      end;
+   end;
+
    New_Line;
    if Fails = 0 then
       Put_Line ("all checks passed");

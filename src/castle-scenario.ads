@@ -13,8 +13,10 @@ with Castle.Bodies;
 --    --stone-from M         for measuring: the camp's builders take no stone from nearer the stake
 --                           than M metres, as if the nearest lay that far off
 --    --stockpile X0 Y0 X1 Y1   a stockpile (up to 8)
---    --housing X0 Y0 X1 Y1  a housing zone (up to 8): the band builds a hovel there for each of
---                           its people, its foresters turning builder
+--    --housing X0 Y0 X1 Y1  housing (up to 8): begun beside a path at X0 Y0, on that side of it, and
+--                           pulled along the path as far as X1 Y1; combined with housing it meets.
+--                           The band builds a hovel there for each of its people, its foresters
+--                           turning builder
 --    --homes-built          a hovel for everyone those zones have room for, built on the spot
 --    --camp X Y             the camp, its fire there (marked: the band builds it)
 --    --camp-built           that camp built on the spot (--stoke H builds it too, and lights its fire)
@@ -44,6 +46,19 @@ with Castle.Bodies;
 --                           them before its job, and a path is laid a metre at a time by whoever
 --                           is nearest, not a stretch to a serf
 --    --no-level             the camp's floor left as it lies, as before the band levelled it
+--    --no-beds              nobody makes itself a bed of straw, as before they did
+--    --no-cook-hold         the cook keeps nothing in the stores for the pot, as before it did:
+--                           whoever is hungry with no stew eats raw whatever is stored
+--    --no-curing            the band as it was before the lord's cart: no cart, no salt, and meat
+--                           counted in joints (a doe 8, thirty points each in the pot)
+--    --cart-salt LB         the salt in the lord's cart at the start (0: a band whose salt has
+--                           run out)
+--    --no-ladders           every roof thatched from the ground, its builder walking round the
+--                           house from bout to bout, as before they made ladders
+--    --no-path-holes        a path laid down into a hole in the ground, as it was, not over it
+--                           with the hole filled
+--    --no-cart-pull         the lord's cart left where it stood by the stake, as it was, not
+--                           pulled into the nearest stockpile
 --    --deer-scatter         the herds as they were before they fled together: each deer bolting on
 --                           a heading of its own and trotting back, wading wherever a serf can (a
 --                           colony loaded from a save keeps the switch it was saved with)
@@ -67,6 +82,9 @@ package Castle.Scenario is
       Pile_N           : Natural := 0;
       Housing          : Rects (1 .. 8, 1 .. 4) := [others => [others => 0.0]];
       Housing_N        : Natural := 0;
+      Inside           : Rects (1 .. 8, 1 .. 2) := [others => [others => 0.0]];   --  --housing-inside X Y
+      Inside_N         : Natural := 0;
+      Pace             : Float := 0.0;       --  --pace P (0: the colony's own, Castle.Colony.Serf_Pace)
       Homes_Built      : Boolean := False;   --  --homes-built: no waiting for the band to build them
       Camp             : Boolean := False;
       Camp_X, Camp_Y   : Float := 0.0;
@@ -77,6 +95,13 @@ package Castle.Scenario is
       Extra_Hands      : Natural := 0;       --  --extra-hands N (0: the colony's rule)
       All_Hands        : Boolean := False;   --  --all-hands
       No_Level         : Boolean := False;   --  --no-level
+      No_Beds          : Boolean := False;   --  --no-beds: the band as it was before it made itself beds of straw
+      No_Cook_Hold     : Boolean := False;   --  --no-cook-hold: the stores as they were before the cook kept a pot's fill
+      No_Curing        : Boolean := False;   --  --no-curing: no cart, no salt, meat in joints, as it was
+      No_Ladders       : Boolean := False;   --  --no-ladders: roofs thatched from the ground, as they were
+      No_Path_Holes    : Boolean := False;   --  --no-path-holes: paths laid down into holes, as they were
+      No_Cart_Pull     : Boolean := False;   --  --no-cart-pull: the lord's cart left where it stood, as it was
+      Cart_Salt        : Integer := -1;      --  --cart-salt LB: the salt in the lord's cart at the start (-1: the colony's own)
       Deer_Scatter     : Boolean := False;   --  --deer-scatter
       Gatherers, Foresters, Porters, Hunters, Cooks : Natural := 0;
       Supply           : Castle.Colony.Per_Kind := [others => 0];
@@ -114,6 +139,15 @@ package Castle.Scenario is
    --  The colony line (with After_Colony_Line on its end), the camp's, the
    --  cook's and (with skills on) the skills', on standard output.
    function Housing_Line return String;
+   function Ladders_Line return String;
+   --  "ladders: 2 made, 1 standing at a house, 1 stored, 0 carried, 0 lost"
+   --  ("": none has been made).
+   function Cart_Line return String;
+   --  "salt: 220 lb in the cart, 14 stored; 3 deer salted, 0 not, 0 lb of
+   --  meat lost" ("": with no curing, or no stake).
+   function Beds_Line return String;
+   --  Who of the living has a bed of straw where it sleeps, and the straw
+   --  in them all ("": nobody makes beds, or there is no camp).
    --  "housing: 2 standing, 1 being built, 4 without a home, 2 at home;
    --  Agnes's: the walls 41 %, wood 12 of 25, straw 0 of 28, built by Wat"
    --  ("" with no house begun and no housing zone).  At home: inside its
@@ -126,6 +160,10 @@ package Castle.Scenario is
    --  "skills: gathering 0.31 (2), ...": for each working skill, the mean
    --  level of the living whose job it is, and how many they are.
    function Food_Line (Hours : Long_Float) return String;
+   procedure Put_Who;
+   --  A line for each of the living: its name, how full its belly is and
+   --  what it is doing (its status).  For measuring: colony_run --who puts
+   --  them under each of its --log-hours lines.
    --  One line on the band's food at game clock Hours (--log-hours).
 
 end Castle.Scenario;

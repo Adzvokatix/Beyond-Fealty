@@ -1,4 +1,5 @@
 with Ada.Command_Line; use Ada.Command_Line;
+with Ada.Numerics.Elementary_Functions;
 with Ada.Text_IO;      use Ada.Text_IO;
 with Castle.Actions;
 with Castle.Climate;
@@ -44,6 +45,14 @@ package body Castle.Scenario is
             end loop;
          end if;
          I := I + 5;
+      elsif A = "--housing-inside" then
+         if S.Inside_N < S.Inside'Last (1) then
+            S.Inside_N := S.Inside_N + 1;
+            for K in 1 .. 2 loop
+               S.Inside (S.Inside_N, K) := Float'Value (Arg (K));
+            end loop;
+         end if;
+         I := I + 3;
       elsif A = "--homes-built" then
          S.Homes_Built := True;
          I := I + 1;
@@ -150,6 +159,22 @@ package body Castle.Scenario is
          S.All_Hands := True; I := I + 1;
       elsif A = "--no-level" then
          S.No_Level := True; I := I + 1;
+      elsif A = "--no-beds" then
+         S.No_Beds := True; I := I + 1;
+      elsif A = "--no-cook-hold" then
+         S.No_Cook_Hold := True; I := I + 1;
+      elsif A = "--no-curing" then
+         S.No_Curing := True; I := I + 1;
+      elsif A = "--no-ladders" then
+         S.No_Ladders := True; I := I + 1;
+      elsif A = "--no-path-holes" then
+         S.No_Path_Holes := True; I := I + 1;
+      elsif A = "--no-cart-pull" then
+         S.No_Cart_Pull := True; I := I + 1;
+      elsif A = "--cart-salt" then
+         S.Cart_Salt := Integer'Value (Arg (1)); I := I + 2;
+      elsif A = "--pace" then
+         S.Pace := Float'Value (Arg (1)); I := I + 2;
       elsif A = "--deer-scatter" then
          S.Deer_Scatter := True; I := I + 1;
       elsif A = "--by-skill" then
@@ -194,9 +219,21 @@ package body Castle.Scenario is
       end if;
       Castle.Herds.Set_Scatter (S.Deer_Scatter);     --  (before the stake: the herds are placed by it)
       Set_Arrivals (S.Band, Castle.Hash.Derive (Seed, 7));
+      Set_Curing (not S.No_Curing);                  --  (before the stake: the cart comes with the band)
+      if S.Cart_Salt >= 0 then
+         Set_Cart_Salt (S.Cart_Salt);
+      end if;
       Order_It ((What => Raise_Stake, By => The_Player, Stake_At => P));
       Set_Stone_From (S.Stone_From);
       Set_Levelling (not S.No_Level);
+      Set_Beds (not S.No_Beds);
+      Set_Cook_Hold (not S.No_Cook_Hold);
+      Set_Ladders (not S.No_Ladders);
+      Set_Path_Holes (not S.No_Path_Holes);
+      Set_Cart_Pull (not S.No_Cart_Pull);
+      if S.Pace > 0.0 then
+         Set_Pace (S.Pace);
+      end if;
       if S.All_Hands then
          Set_Extra_Hands (Max_Members);
          Set_Stretches (False);
@@ -247,10 +284,19 @@ package body Castle.Scenario is
       for K in 1 .. S.Housing_N loop
          Order_It ((What => Zone_Housing, By => The_Player, X0 => S.Housing (K, 1), Y0 => S.Housing (K, 2),
                     X1 => S.Housing (K, 3), Y1 => S.Housing (K, 4)));
-         Put_Line (if R.Count = 0 then "housing refused: " & Housing_Refusal
-                   else "housing zoned: room for" & R.Count'Image & (if R.Count = 1 then " hovel" else " hovels"));
+         Put_Line (if not R.Done then "housing refused: " & Housing_Refusal
+                   else (if Housing_Joined > 0 then "housing extended: room for" else "housing zoned: room for")
+                        & R.Count'Image & (if R.Count = 1 then " hovel" else " hovels")
+                        & (if Housing_Joined > 0 then " now" else ""));
       end loop;
-      if S.Homes_Built and then S.Housing_N > 0 then
+      for K in 1 .. S.Inside_N loop
+         Order_It ((What => Fill_Housing, By => The_Player, Inside => (S.Inside (K, 1), S.Inside (K, 2), 0.0)));
+         Put_Line (if not R.Done then "housing refused: " & Housing_Refusal
+                   else (if Housing_Joined > 0 then "housing extended: room for" else "housing zoned: room for")
+                        & R.Count'Image & (if R.Count = 1 then " hovel" else " hovels")
+                        & (if Housing_Joined > 0 then " now" else ""));
+      end loop;
+      if S.Homes_Built and then S.Housing_N + S.Inside_N > 0 then
          Build_Homes_Now;                            --  houses from nowhere, like the goods below
          Put_Line ("homes built:" & House_Count'Image);
       end if;
@@ -324,7 +370,7 @@ package body Castle.Scenario is
       Put_Line ("the band:");
       for I in 1 .. Members loop
          Put_Line ("  " & Name_Of (I) & ", "
-                   & Castle.Bodies.Describe (Genome_Of (I), (Job => Body_Job (Job_Of (I)), Winter => False))
+                   & Castle.Bodies.Describe (Genome_Of (I), (Job => Body_Job (Job_Of (I)), Winter => False, Cloak_Off => False))
                    & (if Skills and then Has_Skill (Job_Of (I))
                       then "; " & Name (Job_Skill (Job_Of (I))) & " " & Img (Skill_Of (I, Job_Skill (Job_Of (I))), 2)
                            & " (learns x" & Img (Aptitude_Of (I, Job_Skill (Job_Of (I))), 1) & ")"
@@ -416,7 +462,69 @@ package body Castle.Scenario is
       if Housing_Line /= "" then
          Put_Line (Housing_Line);
       end if;
+      if Beds_Line /= "" then
+         Put_Line (Beds_Line);
+      end if;
+      if Cart_Line /= "" then
+         Put_Line (Cart_Line);
+      end if;
+      if Ladders_Line /= "" then
+         Put_Line (Ladders_Line);
+      end if;
    end Put_Report;
+
+   --  Ladders ("": none has been made).
+   function Ladders_Line return String is
+      Carried_N : Natural := 0;
+   begin
+      if Ladders_Made = 0 then
+         return "";
+      end if;
+      for I in 1 .. Members loop
+         if Carrying (I) = Ladder then
+            Carried_N := Carried_N + Carried (I);
+         end if;
+      end loop;
+      return "ladders:" & Ladders_Made'Image & " made," & Ladders_Standing'Image & " standing at a house,"
+        & Stored (Ladder)'Image & " stored," & Carried_N'Image & " carried," & Ladders_Lost'Image & " lost";
+   end Ladders_Line;
+
+   --  The lord's cart and the salt ("": no curing, or no stake yet).
+   function Cart_Line return String is
+   begin
+      if not Curing or else not Has_Stake then
+         return "";
+      end if;
+      return "salt:" & (if Cart.Here then Cart.Salt'Image & " lb in the cart" else " no cart") & ","
+        & Stored (Salt)'Image & " stored;" & Deer_Salted'Image & " deer salted," & Deer_Unsalted'Image
+        & " not," & Meat_Lost'Image & " lb of meat lost"
+        & (if Cart_Pull and then Cart.Here
+           then "; the cart " & (if Cart.Towed then "in tow by " & Name_Of (Cart.By)
+                                 elsif Cart_In_Stockpile then "in a stockpile" else "where it stood")
+           else "");
+   end Cart_Line;
+
+   --  Beds: who of the living has one where it sleeps, and the straw in
+   --  them all ("": nobody makes beds, or there is no camp yet).
+   function Beds_Line return String is
+      Have : Natural := 0;
+      --  whoever has none where it sleeps, once the camp stands, and what it is at
+      function Without (I : Positive) return String is
+        (if I > Members then ""
+         else (if not Dead (I) and then not Has_Bed (I) then "; without one: " & Name_Of (I) & " (" & Status (I) & ")" else "")
+              & Without (I + 1));
+   begin
+      if not Beds or else not Has_Camp then
+         return "";
+      end if;
+      for I in 1 .. Members loop
+         if not Dead (I) and then Has_Bed (I) then
+            Have := Have + 1;
+         end if;
+      end loop;
+      return "beds:" & Have'Image & " of" & Living'Image & " have one," & Straw_In_Beds'Image & " sheaves in them"
+        & (if Camp_State.Built then Without (1) else "");
+   end Beds_Line;
 
    function Housing_Line return String is
       Standing_N, Building_N, Home_N : Natural := 0;
@@ -430,21 +538,29 @@ package body Castle.Scenario is
          begin
             return
               (if V.Phase = Standing then ""
-               else "; " & (if V.Owner in 1 .. Members then Name_Of (V.Owner) & "'s" else "nobody's") & ": "
+               else "; a hovel: "
                     & (case V.Phase is
                           when Ground => "the ground", when Flooring => "the floor", when Framing => "the frame",
                           when Walling => "the walls",
-                          when Roofing | Standing => "the roof")
+                          when Roofing => "the roof", when Trimming | Standing => "the roof's trimming")
                     & " " & Img (Integer (100.0 * Float (V.Placed) / Float (Integer'Max (1, V.Blocks)))) & " %, wood "
                     & Img (V.Got (Wood)) & " of " & Img (V.Takes (Wood)) & ", straw " & Img (V.Got (Straw)) & " of "
                     & Img (V.Takes (Straw))
+                    & (if V.Takes (Stone) > 0 then ", stone " & Img (V.Got (Stone)) & " of " & Img (V.Takes (Stone)) else "")
                     & (if V.Builder in 1 .. Members then ", built by " & Name_Of (V.Builder) else ", no builder")
                     & (case V.Waits is
                           when Not_Waiting | For_A_Builder => "", when For_Wood => ", waits for wood",
-                          when For_Straw => ", waits for straw", when For_A_Way => ", no way to it"))
+                          when For_Straw => ", waits for straw", when For_A_Way => ", no way to it",
+                          when For_Stone => ", waits for stone"))
               & From (H + 1);
          end;
       end From;
+      --  with some at home, whoever has a home and is not in it, and what it is at
+      function Away (I : Positive) return String is
+        (if I > Members then ""
+         else (if Housed (I) and then not Dead (I) and then not At_Home (I)
+               then "; not at home: " & Name_Of (I) & " (" & Status (I) & ")" else "")
+              & Away (I + 1));
    begin
       if House_Count = 0 and then not (for some Z in 1 .. Zone_Count => Zone_At (Z).Kind = Habitation_Zone) then
          return "";
@@ -462,7 +578,9 @@ package body Castle.Scenario is
          end if;
       end loop;
       return "housing:" & Standing_N'Image & " standing," & Building_N'Image & " being built," & Homeless'Image
-        & " without a home," & Home_N'Image & " at home" & From (1);
+        & " without a home," & Home_N'Image & " at home, room for" & Lot_Count'Image & " more"
+        & (if Room_Short then " (no room for the next)" else "") & From (1)
+        & (if Home_N > 0 then Away (1) else "");
    end Housing_Line;
 
    function Resting_N return Natural is
@@ -512,6 +630,25 @@ package body Castle.Scenario is
    begin
       return "skills:" & From (Working_Skill'First);
    end Skills_Line;
+
+   procedure Put_Who is
+   begin
+      for I in 1 .. Members loop
+         if not Dead (I) then
+            Put_Line ("  who: " & Name_Of (I) & "," & Integer (100.0 * Fed_Of (I))'Image & " % fed: " & Status (I)
+                      & (if Aloft (I) then " (up its ladder, " & Img (Shown_At (I).Z - Where (I).Z, 1) & " m)" else ""));
+         end if;
+      end loop;
+      for H in 1 .. House_Count loop                 --  (and each ladder standing: how far its foot is under the eave)
+         if Ladder_At (H).Standing then
+            Put_Line ("  ladder: at house" & H'Image & " (" & Img (House_At (H).Door.X, 0) & ", " & Img (House_At (H).Door.Y, 0)
+                      & "), side" & Ladder_At (H).Side'Image & ", its foot " & Img (Ladder_At (H).Top.Z - Ladder_At (H).Foot.Z, 2)
+                      & " m under the eave and "
+                      & Img (Ada.Numerics.Elementary_Functions.Sqrt ((Ladder_At (H).Top.X - Ladder_At (H).Foot.X) ** 2
+                                   + (Ladder_At (H).Top.Y - Ladder_At (H).Foot.Y) ** 2), 2) & " m out from it");
+         end if;
+      end loop;
+   end Put_Who;
 
    function Food_Line (Hours : Long_Float) return String is
       Min_Fed  : Float := 1.0;
@@ -566,6 +703,8 @@ package body Castle.Scenario is
         & (if Looking_M > 0.0 then "; looking as far as " & Img (Looking_M, 0) & " m" else "")
         & (if Paths_To_Lay > 0 then "; path to lay:" & Paths_To_Lay'Image & " m" else "")
         & (if Housing_Line /= "" then "; " & Housing_Line else "")
+        & (if Beds_Line /= "" then "; " & Beds_Line else "")
+        & (if Cart_Line /= "" then "; " & Cart_Line else "")
         & (if Labour and then At_Extra > 0 and then Extra_Hands < Members      --  (while there is a limit)
            then "; at extra tasks" & At_Extra'Image & " (of" & Extra_Hands'Image & " at most)" else "");
    end Food_Line;

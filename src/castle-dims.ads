@@ -5,7 +5,7 @@ package Castle.Dims with Pure is
    Size_M           : constant := 2_048;                         --  map edge
    Height_M         : constant := 256;                           --  256 one-metre layers
    Size_B           : constant := Size_M * Blocks_Per_Meter;     --  8192
-   Height_B         : constant := Height_M * Blocks_Per_Meter;   --  256
+   Height_B         : constant := Height_M * Blocks_Per_Meter;   --  1,024
    Chunk_B          : constant := 32;                            --  8 m chunk edge
    Chunks_XY        : constant := Size_B / Chunk_B;              --  256
    Chunks_Z         : constant := Height_B / Chunk_B;            --  8

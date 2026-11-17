@@ -12,7 +12,7 @@ project Castle is
       when "release" => for Exec_Dir use "bin";
    end case;
    for Main        use ("worldgen_preview.adb", "probe.adb", "village_preview.adb",
-                        "terrain_stats.adb", "climate_year.adb", "camera_check.adb", "edit_check.adb", "water_check.adb", "water_sim_check.adb", "fall_find.adb", "ui_check.adb", "water_probe.adb", "dynamics_check.adb", "serf_check.adb", "path_check.adb", "colony_check.adb", "deer_check.adb", "pick_check.adb", "flora_stats.adb", "colony_run.adb",
+                        "terrain_stats.adb", "lod_stats.adb", "climate_year.adb", "camera_check.adb", "edit_check.adb", "water_check.adb", "water_sim_check.adb", "fall_find.adb", "ui_check.adb", "water_probe.adb", "dynamics_check.adb", "serf_check.adb", "path_check.adb", "colony_check.adb", "deer_check.adb", "pick_check.adb", "flora_stats.adb", "colony_run.adb",
                         "castle_game.adb");
 
    --  -ffp-contract=off: never fuse a*b+c into FMA.  World generation must

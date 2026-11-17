@@ -91,6 +91,7 @@ begin
          elsif Walk (M, Bed_Spot (I), 0.3) then
             M.Route.N := 0;
             M.State := Sleeping;
+            Lie_On_Bed (I);
             M.Spot := Bed_Facing (I);                 --  feet to the fire (at home: along its house)
          end if;
 

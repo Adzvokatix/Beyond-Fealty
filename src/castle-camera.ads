@@ -32,6 +32,7 @@ package Castle.Camera is
    procedure Update (C : in out State; W : World; Dt : Float);
 
    function Eye (C : State) return Vec3;
-   function View_Proj (C : State; Aspect : Float) return Mat4;
+   function View_Proj (C : State; Aspect : Float; Far : Float := Far_M) return Mat4;
+   --  (Far: the far plane; the renderer must be told the same, Castle.Render.Far_Plane)
 
 end Castle.Camera;

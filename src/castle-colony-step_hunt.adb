@@ -184,10 +184,28 @@ begin
          M.Work := M.Work + Tick_S * Work_Rate (M, Butchering);
          if M.Work >= Butcher_S then
             declare
-               N : constant Positive := Meat_Of (Carcasses (M.Prize).Class);
+               Full : constant Positive := Meat_Of (Carcasses (M.Prize).Class);
+               N    : Natural := Full;
             begin
+               --  salted as it is butchered, with the salt in the stockpiles:
+               --  all of it kept; with none, only what is eaten before it turns
+               if Curing_On then
+                  declare
+                     Need : constant Natural := Salt_For (Full);
+                     Got  : constant Natural := Natural'Min (Need, Free_Stock (Salt));
+                  begin
+                     N := Kept_Of (Full, Got);
+                     Use_Salt (Got);
+                     if Got >= Need then
+                        N_Salted := N_Salted + 1;
+                     else
+                        N_Unsalted := N_Unsalted + 1;
+                     end if;
+                     N_Meat_Lost := N_Meat_Lost + (Full - N);
+                  end;
+               end if;
                Cells (M.Cell).Count := Cells (M.Cell).Count + N;
-               Cells (M.Cell).Incoming := Cells (M.Cell).Incoming - N;
+               Cells (M.Cell).Incoming := Cells (M.Cell).Incoming - Full;
                Cells (M.Cell2).Count := Cells (M.Cell2).Count + 1;
                Cells (M.Cell2).Incoming := Cells (M.Cell2).Incoming - 1;
             end;
@@ -199,6 +217,37 @@ begin
             M.Carried := 0;
             M.State := Idle;
             M.Wait := 0.5;
+         end if;
+
+      when To_Cart =>
+         Keep_Route_Good (M, Ok);
+         if not Ok or else not Cart_Set or else Cart_Salt_N = 0 then
+            if not Ok then
+               Remember_Failure (M, Cart_Id, Seconds => 120);
+            end if;
+            M.State := Idle;
+            M.Wait := 1.0;
+         elsif Walk_On (M, 0.6) then
+            M.State := At_Cart;
+            M.Work := 0.0;
+            M.Spot := Cart_P + (0.0, 0.0, 0.9);
+         end if;
+
+      when At_Cart =>
+         M.Work := M.Work + Tick_S * Work_Rate (M, Handling);
+         if M.Work >= Take_S then
+            declare
+               N : constant Natural := Natural'Min (Carry_Limit (Salt), Cart_Salt_N);
+            begin
+               Cart_Salt_N := Cart_Salt_N - N;
+               if N > 0 then
+                  M.Carry := Salt;
+                  M.Carried := N;
+                  M.Use_For := For_Store;
+               end if;
+            end;
+            M.State := Idle;
+            M.Wait := 0.2;
          end if;
 
       when others =>

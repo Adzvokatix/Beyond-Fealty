@@ -27,7 +27,9 @@ view() {  # NAME OPTIONS...
   "$BIN" $BASE "$@" "${EXTRA[@]}" --shot "$TMP/$name.png" > "$TMP/$name.log" 2>&1 \
     || { echo "$name: failed"; tail -3 "$TMP/$name.log"; return; }
   local gpu quads
-  gpu=$(sed -n 's/^after the fill:.* gpu \([0-9.]*\) ms.*/\1/p' "$TMP/$name.log")
+  # (once nothing more is coming in, where the build says so: the whole map held, the far view whole)
+  gpu=$(sed -n 's/^settled .*frames, gpu \([0-9.]*\) ms.*/\1/p' "$TMP/$name.log")
+  [ -z "$gpu" ] && gpu=$(sed -n 's/^after the fill:.* gpu \([0-9.]*\) ms.*/\1/p' "$TMP/$name.log")
   quads=$(sed -n 's/^view filled.* stacks, *\([0-9]*\) quads.*/\1/p' "$TMP/$name.log")
   printf "%-16s %6s ms   %9s quads\n" "$name" "$gpu" "$quads"
   grep -i "render:" "$TMP/$name.log"

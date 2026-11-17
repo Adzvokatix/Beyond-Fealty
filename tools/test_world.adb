@@ -93,7 +93,7 @@ package body Test_World is
       Castle.Colony.Set_World (Block_At'Access, Write_Block'Access, Version'Access);
    end Attach;
 
-   function Stops_Ray (X, Y, Z : Integer) return Boolean is (Castle.Rays.Pickable (Get (X, Y, Z)));
+   function Stops_Ray (X, Y, Z : Integer) return Boolean is (Castle.Rays.Stops (Get (X, Y, Z), X, Y, Z));
    function Walk_Blocks is new Castle.Rays.Walk (Stops_Ray);
    function Cast (From, Dir : Vec3; Max_M : Float) return Castle.Rays.Hit is (Walk_Blocks (From, Dir, Max_M));
 

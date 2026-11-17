@@ -1,9 +1,27 @@
 with Castle.Dims; use Castle.Dims;
+with Castle.Cutaway;
 
 package body Castle.Rays is
 
    function Pickable (M : Material) return Boolean is
      (Class_Of (M) = Solid or else M in Crown | Berry_Bush | Bare_Bush);
+
+   function Stops (M : Material; X, Y, Z : Integer) return Boolean is
+      Px : constant Float := (Float (X) + 0.5) / Float (Blocks_Per_Meter);
+      Py : constant Float := (Float (Y) + 0.5) / Float (Blocks_Per_Meter);
+      Pz : constant Float := (Float (Z) + 0.5) / Float (Blocks_Per_Meter);
+   begin
+      if not Pickable (M) then
+         return False;
+      elsif Castle.Cutaway.Count = 0 then
+         return True;
+      elsif M = Thatch then
+         return Castle.Cutaway.Cover_At (Px, Py, Pz) >= 0.5;
+      else
+         --  (a cleared wall, by its place: whatever it is made of)
+         return Class_Of (M) /= Solid or else Castle.Cutaway.Wall_Cover_At (Px, Py, Pz) >= 0.5;
+      end if;
+   end Stops;
 
    function Walk (From, Dir : Vec3; Max_M : Float) return Hit is
       Inf : constant Float := 1.0E30;

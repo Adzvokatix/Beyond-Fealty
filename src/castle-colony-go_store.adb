@@ -10,11 +10,8 @@ begin
          for K in 1 .. N_Cells loop
             declare
                C : Cell renames Cells (K);
-               Takes : constant Boolean :=
-                 (C.Kind = M.Carry and then C.Count + C.Incoming + M.Carried <= Cell_Limit (M.Carry))
-                 or else (C.Kind = Nothing and then C.Incoming = 0);
             begin
-               if Takes and then not Failed (M, Cell_Base + K) then
+               if Takes (K, M.Carry, M.Carried) and then not Failed (M, Cell_Base + K) then
                   declare
                      D : constant Float := Flat_Dist (M.Pos, C.Centre);
                   begin

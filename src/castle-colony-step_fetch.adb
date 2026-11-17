@@ -64,7 +64,9 @@ begin
                M.Carry := M.Fetch;
                M.Carried := M.Carried + 1;
             end if;
-            if M.Carried >= Carry_Limit (M.Fetch) or else Has_Its_Fill (M) then
+            if M.Carried >= Carry_Limit (M.Fetch) or else Has_Its_Fill (M)
+              or else (M.Use_For = For_Bed and then M.Carried >= Bed_Straw)       --  (a bed's worth, and no more)
+            then
                M.State := Idle;
                M.Wait := 0.3;
             elsif Next_Near (M) then

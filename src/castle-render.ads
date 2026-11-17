@@ -246,7 +246,10 @@ package Castle.Render is
    --  zone filled in) is drawn at night, of its colour by day: it is no
    --  light of its own.
 
-   procedure Upload (CX, CY : Integer; M : Mesh);    --  replaces any old mesh
+   procedure Upload (CX, CY : Integer; M : Mesh; Edited : Boolean := False);
+   --  Edited: the stack's land is no longer as it was made (it has been dug
+   --  into or built on, or its neighbour has along their edge): the far
+   --  land is not drawn under its mesh.    --  replaces any old mesh
    procedure Unload (CX, CY : Integer);
 
    --  Surface water: every loaded stack's open-sky water, per block column,
@@ -281,6 +284,25 @@ package Castle.Render is
    procedure Set_Water_Reach (Metres : Float);              --  before Init: the view radius
    procedure Set_Surface (Bx0, By0 : Integer; S : Surface_Block);
    procedure Hide_Surface (Bx0, By0 : Integer);             --  its stack was unloaded
+   --  The surface texture wraps: it is a window of the world 64 stacks
+   --  across (128 for a wide view) round the stack the camera looks at, and
+   --  two stacks that far apart share a slot of it (a stack's 32 x 32
+   --  texels).  The view's own stacks never do; the colony's ground does,
+   --  staying loaded wherever the camera is (John, 2026-11-13: "water
+   --  surface stop rendering around the homesteak": a far stack written,
+   --  and hidden when it was unloaded, over the kept stack's texels, and the
+   --  band's dug ground written over a far lake's).  So **a slot is its
+   --  window stack's alone**: Set_Surface writes only for a stack inside
+   --  the window and makes it the slot's owner, Hide_Surface hides only a
+   --  slot its caller owns, and when the window moves every slot whose
+   --  owner has left it is hidden.  Whoever keeps stacks loaded outside the
+   --  view then writes again every loaded stack inside the window that does
+   --  not own its slot (the game's Stream: Own_Texels).
+   procedure Set_Surface_Focus (CX, CY : Integer; Moved : out Boolean);
+   --  The stack the camera looks at, every frame; Moved: the window has
+   --  moved (slots whose owners left it are hidden now).
+   function In_Surface_Window (CX, CY : Integer) return Boolean;
+   function Owns_Surface (CX, CY : Integer) return Boolean;   --  its slot holds its own texels
    procedure Set_Water_Blend (B : Float);                   --  0 previous .. 1 current
 
    --  The current (m/s) on the 1 m flow map, which the water's ripples
@@ -331,6 +353,15 @@ package Castle.Render is
    --  corner are open, none on a flat side), so a crown's outline frays.
    --  Nothing moves with time: the shadows are held still.  The texels are
    --  as they were, laid on the block grid before it is moved.
+   Boulder_Cut     : constant := 0.5;
+   --  A boulder's faces are soft quads too (Castle.Mesher.Round_Boulders;
+   --  John, 2026-11-16: "Let's smooth the boulders"): a corner open on two
+   --  axes or three is drawn in this much of a block along each, and a
+   --  corner of a hollow in the rock drawn out as much, which together
+   --  make a step of one block one slope; with no straying; and the light
+   --  at a moved corner goes by the way out of the rock there, the same
+   --  for every face that meets it, so the rock is lit as a round thing
+   --  and not by its facets.
    Foliage_Cut     : constant := 0.30;
    Foliage_Jitter  : constant := 0.14;
    Foliage_Bend    : constant := 0.6;
@@ -407,8 +438,253 @@ package Castle.Render is
 
    procedure Draw (Eye, Focus : Vec3; View_Proj : Mat4; Width, Height : Natural;
                    Fog_Distance : Float);
-   --  Fog thickens with ground distance from Focus and is complete at
-   --  Fog_Distance, the edge of what is streamed in.
+   --  Fog thickens with ground distance from Focus; Fog_Distance is the
+   --  edge of what is streamed in.  With the far land (next) the land is
+   --  Far_Haze haze there and all haze at Far_Whole_M; without it, all haze
+   --  at Fog_Distance, as it was.
+
+   --  The far land (John, 2026-11-14: "far mountains need a texture, they
+   --  don't need detail, but something has to be there").  The whole world
+   --  as one coarse sheet (Castle.Far: a corner every 4 m from the
+   --  generator's map, a cell coloured by the ground or the tree on it),
+   --  drawn wherever no stack's own mesh is drawn: past the edge of what is
+   --  streamed in, and under a view that is still coming in.  It takes the
+   --  day's light, the clouds' shadows, snow, the autumn and the air as the
+   --  land does, at a tap or two; it casts nothing and takes no shadow, and
+   --  shows the world as it was made: nothing dug, laid or built.  It lies
+   --  under the land as it was made, so a stack's mesh hides it; where a
+   --  mesh is drawn it is dropped only in a stack that has been edited (so
+   --  it is never seen in a pit or through a cut) and at open water (a flag
+   --  a stack, kept by Upload and Unload).
+   --  Far_Land off is the picture as it was: nothing drawn past the loaded
+   --  land and the haze whole at its edge.  **It is off unless asked for
+   --  (--far)**: John, having tried it (2026-11-15): "far is ugly with the
+   --  flat terrain and popping assets, the fog works better in that state".
+   --  What replaced it is the far view, below.  **Out of the game since
+   --  the far view was merged** (John, 2026-11-15: "remove the old far land,
+   --  but keep the functionality just comment it out or something, just in
+   --  case"): the game's option for it is commented out, and none of it is
+   --  made (its program, its two textures, a fifth of a second at the
+   --  start) unless this is set before Init.  All of it still compiles, and
+   --  edit_check still proves Castle.Far.  Not tried together with the far
+   --  view.
+   Far_Land    : Boolean := False;
+   Far_Haze    : constant := 0.45;       --  how much of the land is haze at the edge of what is streamed in
+   Far_Whole_M : constant := 1_100.0;    --  and how far from the focus it is all haze
+   --  (within the camera's far plane, Castle.Math.Far_M, from as far out as
+   --  the camera goes: change the one with the other)
+   Far_Crown   : constant := 0.55;       --  a crown far off against its leaves' own colour: the shade between leaves
+   Far_Mirror  : constant := 0.35;       --  how much of far water is the sky in it, looked down on
+   Far_Rim_M   : constant := 200.0;      --  over this far from the map's edge the far land goes into the haze
+
+   --  The far view (John, 2026-11-15: "let's figure out how to get
+   --  everything in view"; of his list: voxel distance LODs in progressive
+   --  rings, a dithered cross-fade, hysteresis).  Past the edge of what is
+   --  streamed in at full detail the land is drawn from tiles of coarser
+   --  cells (Castle.Lod: the world itself, reduced), in rings about the
+   --  focus: the stacks' own meshes to the fog distance, level 1 (cells of
+   --  half a metre) to twice that, each level after to twice as far again,
+   --  the last to the map's edge.  A cell so stays about the size on the
+   --  screen that a block is at the view's edge.
+   --
+   --  Which level a fragment may show is decided fragment by fragment, by
+   --  how far it is from the focus and by which levels are loaded there (a
+   --  byte for every 16 m of the map, a bit a level, kept by Upload_Far and
+   --  Unload_Far; and the stacks' own flags): the level whose ring it is,
+   --  or, while that is not loaded, the finest coarser one that is, so
+   --  that nothing is a hole while it streams in; a tile just come takes its
+   --  pixels a few more each frame (Far_Arrive_Frames).  Over the last Far_Fade
+   --  of a ring (in doublings of distance) the ring's level and the next
+   --  are both drawn, each pixel taking one or the other by a fixed
+   --  pattern (never by the frame), the share going over from the one to
+   --  the other: there is no line where the detail steps.
+   --
+   --  The tiles are drawn with the land's own shader, lit as it is (their
+   --  shadows: Far_Shadows, below).  With the far view the land
+   --  has no haze within the view and is all haze Far_Haze_M from the
+   --  focus.  Far_View off (--no-lod) is the picture as it was.
+   Far_View   : Boolean := True;
+   Far_Fade   : constant := 0.15;        --  the cross-fade: this much of a doubling of distance (the last 16 m of 160)
+   Far_Lap    : constant := 0.075;
+   --  ... of which this much is overlap: the coarser level has all its
+   --  pixels that much before the finer has given up its last.  The two
+   --  levels' surfaces do not lie in one place (a cell is as high as its
+   --  upper half is full), so the two fragments of one pixel stand a little
+   --  apart on the ground and read the fade a little apart; with no
+   --  overlap some pixel in a hundred was given up by both, and the sky
+   --  showed through it (John, 2026-11-15: "the white dot dithering for the
+   --  LOD rings").  Where both keep it the nearer is seen.
+   Far_Arrive_Frames : Natural := 20;
+   --  A tile that has just come in takes its pixels over this many frames,
+   --  by the same pattern, from whatever stood in for it (0: at once, as a
+   --  recording that wants every frame whole may ask).
+   Far_Haze_M : constant := 3_600.0;     --  with the far view, the land is all haze this far from the focus
+   Far_Plane  : Float := Castle.Math.Far_M;
+   --  The camera's far plane, as the projection handed to Draw was made
+   --  with (Castle.Camera.View_Proj): the water's mirror turns depths back
+   --  into distances with it.  A host that draws the far view sets it
+   --  further (the map's corner from an eye 450 m off is 3.4 km).
+
+   Far_Shadows : Boolean := True;
+   --  The sun's shadows past the view's edge (John, 2026-11-15: "Keep the
+   --  shadows pst the view's edge it doesn't seem too expensive and it keeps
+   --  other issues from arising with visuals, sometimes you can see shadows
+   --  when you can't see what is making them and then shaddows start
+   --  popping"; first values).  Two more depth maps, one for each held
+   --  direction of the sun, over the whole map (0.77 m to a texel): into
+   --  them go the stacks' own meshes and every tile of the far view that
+   --  lies in its own ring.  They are drawn again when their direction
+   --  moves, and otherwise not more often than every Far_Shadow_Every frames
+   --  while tiles come and go (Far_Shadow_Slow for a change to the stacks
+   --  alone, or a tile made again for an edit, which a far shadow hardly
+   --  shows), one map in a frame.
+   --
+   --  Who reads which: past the fog distance the far maps alone, four
+   --  filtered taps each (an edge 2 m wide: with one tap the edge crept
+   --  as the sun went from one held direction to the next, the two maps'
+   --  texels not lying alike on the ground); inside Far_Shadow_Blend of it the near maps, as
+   --  ever; between the two, the one going over to the other.  By the
+   --  place, never by the level, so the rings' cross-fade does not speckle
+   --  it.  And the near maps hold more than they did: they reach as far up
+   --  the light as the map goes, and the far view's tiles that stand in
+   --  the light's way are drawn into them with the stacks, so a mountain's
+   --  shadow reaches into the view and a shadow no longer comes into being
+   --  as what casts it comes into the view.  Off (--no-far-shadows), or
+   --  with no far view: past the view's edge nothing casts and nothing takes
+   --  a shadow, as it was.
+   Far_Shadow_Every : constant := 20;
+   --  (frames: a third of a second at sixty a second, which is how long a
+   --  tile takes to come in, Far_Arrive_Frames: its shadow comes with it)
+   Far_Shadow_Slow  : constant := 300;
+   Far_Shadow_Blend : constant := 0.85;
+   Far_Shadow_Bias_M : constant := 0.5;
+   --  What stands this little nearer the light than a point does not shade
+   --  it in the far maps (a step of the ground inside one texel).
+
+   --  The ground haze (John, 2026-11-15, having tried the far view: "Haze,
+   --  let's cover the ground around the camera in a haze 1m or so the trees
+   --  poke above, transparent but enough to cover loading at a distance and
+   --  the white dot dithering for the LOD rings ... Let's do an opaque
+   --  boundary haze so the edges of the map, ramping from the transparent
+   --  to the opaque in a 12m ring around the map, can we have the haze
+   --  follow the terrain of the mountains so the tops are still visible but
+   --  look natural, like the mist is climbing the mountains with fingers
+   --  between the saddles and ridges?"; first values, but for his two
+   --  figures).  With the far view, a layer of haze lies on the land in the
+   --  sky's own colour at the horizon:
+   --
+   --  Where its top is: Haze_Deep_M up (his "1m or so": a trunk's foot is
+   --  in it and its crown is not), over open water as over level ground;
+   --  the steeper the land thereabouts (its mean over 65 m, from a rise of
+   --  Haze_Slope_Lo to one of Haze_Slope_Hi in one) the less of that, and
+   --  none in the mountains (the generator's mountain mask, from
+   --  Haze_Mountain_Lo of it to Haze_Mountain_Hi: the foot of the
+   --  mountains, as the boulders have it), open water excepted.  (John,
+   --  2026-11-16, having seen it: "let's remove the fingers and haze off
+   --  the mountains": it filled every gully to the land's mean round it,
+   --  8 m deep at most, so it ran up the mountains in white fingers; that
+   --  is gone.)  How deep it lies on the ground is worked out once from
+   --  the generator's map, a number for every 2 m, and a thing is in it by
+   --  how far it stands over the land as it was made (a tile of the far
+   --  view, whose cells stand up to half a cell over the ground they stand
+   --  for, is forgiven that half cell: or far land would be striped with
+   --  it, a band to every cell of height).  What is built stands in it as
+   --  a tree does; a pit is no deeper in it than its rim.
+   --
+   --  How thick it is: by how far the place is from the focus, across the
+   --  ground.  (John, the same day: "the 85% as snow, the subtle mist above
+   --  the far water was better": the water's haze, a third as deep as the
+   --  land's, was 2.9 %, 21.5 % and 38.4 % of a metre's; those are now the
+   --  land's and the water's alike, so the water is as it was and far land
+   --  is under the mist far water was.  The land's were 8 %, 50 % and 75 %.)
+   --  Level ground at the focus is Haze_Near of it haze; from
+   --  Haze_From of the fog distance it thickens to Haze_Edge at Haze_Edge_At
+   --  of it, which is before the grass ends and the first ring's cross-fade
+   --  begins, and on to Haze_Far at Haze_Far_At fog distances; deeper haze
+   --  hides more, by the same rule.  (The nearer of the focus and the
+   --  ground under the eye counts: what one stands over is as clear as what
+   --  one looks at.)  Looked at from any angle alike: it is not thicker for
+   --  being looked along, so the ground at one's feet stays clear from a low
+   --  camera.  Haze_Amount scales all three (--haze X; 1: as written here).
+   --
+   --  The map's rim: over the last Haze_Rim_M (his "12m") to the map's edge
+   --  everything goes into the haze, the ground and what stands on it.
+   --  All of it is in the one routine for the air (air, in the shared sky
+   --  source): two taps.  Off (--no-ground-haze, --rim 0), or with no far
+   --  view: none.
+   Ground_Haze      : Boolean := True;
+   Haze_Deep_M      : constant := 1.0;
+   Haze_Near        : constant := 0.0288;
+   Haze_Edge        : constant := 0.215;
+   Haze_Far         : constant := 0.384;
+   Haze_Amount      : Float := 1.0;
+   Haze_From        : constant := 0.30;
+   Haze_Edge_At     : constant := 0.85;
+   Haze_Far_At      : constant := 3.0;
+   Haze_Slope_Lo    : constant := 0.20;
+   Haze_Slope_Hi    : constant := 0.55;
+   Haze_Mountain_Lo : constant := 0.1;
+   Haze_Mountain_Hi : constant := 0.2;
+   Haze_Rim_M       : Float := 12.0;
+
+   Low_Horizon : Boolean := True;
+   --  The sun and the moon go down behind the map's edge (John, 2026-11-16:
+   --  "let's lower the line of the horizon below the edge of the map, so
+   --  it it's harsh edge with the sun and moon can't be seen as easily from
+   --  a high view angle or vantage point").  From high up the map's edge
+   --  lies under eye level, and between the two the sky was the haze, with
+   --  the sun and the moon cut off at eye level by a straight line in it.
+   --  The haze stays (the land and its rim go into that colour), but the
+   --  sun and the moon are drawn on it down to where the map's edge is in
+   --  that direction (the land's height where the line of sight leaves the
+   --  map, less Horizon_Under_M, so the edge is surely over it), fading out
+   --  by the last Sun_Gone under eye level, as the sun's light on the land
+   --  fades when the sun goes that far down.  So with the edge within
+   --  Sun_Gone of eye level (an eye some 25 m up, 200 m back) the land cuts
+   --  the sun off; from higher (440 m back the edge is 4 degrees down) the
+   --  sun fades out in the haze above the land, with no line, and its last
+   --  is seen for its own breadth after its light has left the land.  Over
+   --  eye level nothing is changed.  Off (--no-low-horizon): cut at eye
+   --  level, as it was.
+   Horizon_Under_M : constant := 10.0;
+   Sun_Gone        : constant := -0.03;
+   --  How far under the horizon (the sine of it) the sun is when its light
+   --  is gone from the land (and the moon's takes over).
+
+   Far_Reflections : Boolean := True;
+   --  Far water mirrors the world as water in the view does (John,
+   --  2026-11-15, of the shadows past the view's edge: "If we can do the
+   --  same with the water mirror that would be nice"): the same walk through
+   --  the picture, in strides as many times longer as the tile's cells are
+   --  larger than a block.  Off (--no-far-mirror): the sky alone, as it was.
+
+   Ground_Floor : Boolean := True;
+   --  With the far view, a floor under the land (John, of the white dots:
+   --  "even just making them dark grey would be cool too"): where the land
+   --  leaves a pixel open below the horizon, over the map, the sky's pass
+   --  draws dark ground at the land's level thereabouts with the air
+   --  between, and not the sky.  It is what shows through a crack between
+   --  two quads (there are a few in any view, a pixel each; under the old
+   --  haze they were the haze's own colour) and through anything not yet
+   --  come in.  Off (--no-floor): the sky's colour, as it was.
+   Floor_Under_M : constant := 3.0;
+   --  The floor lies this far under the land's level thereabouts (the mean
+   --  over 80 m), so a line of sight that skims a rise is not stopped short
+   --  of land that is drawn beyond it.
+
+   procedure Upload_Far (Level : Positive; TX, TY : Integer; M : Mesh);
+   procedure Unload_Far (Level : Positive; TX, TY : Integer);
+   --  A tile of the far view (Castle.Lod.Build_Tile's mesh, in cells), in
+   --  place of the one it had.
+   function Far_Loaded (Level : Positive; TX, TY : Integer) return Boolean;
+   function Far_Tiles_Resident return Natural;
+   function Far_Shadow_Draws return Natural;         --  far shadow maps drawn so far (see Far_Shadows)
+   function Far_Quads_Resident return Natural;
+   function Far_Draws_Last_Frame return Natural;
+   function Far_Sent_Last_Frame return Natural;      --  solid quads of the far view sent in the last frame
+   Far_Cull : Boolean := True;
+   --  Off (--no-far-cull, measuring): every quad of a far tile in the view
+   --  is sent, the faces that look away from the eye too.
 
    procedure Set_Outline (Lo, Hi : Vec3; Visible : Boolean);
    --  A wire box (metres) drawn over the world: what an edit would touch.

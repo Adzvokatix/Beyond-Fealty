@@ -164,6 +164,11 @@ invent:
    stockpile's own demand: the 5c brief left "a stockpile with kinds and demand of its own" for "when
    there is a second kind of store").
 
+What he has said of it since (2026-11-13, answering what a serf with nowhere to put its load should
+do: twenty of a crowd of forty-eight stand holding theirs from the second day): **"when we get to the
+stockpile mechanics we will reserve a portion of the stockpile for overflow"**. Not built. Still to
+ask: how large a portion, whether by kind, and what a serf does when the overflow is full too.
+
 ## State and saves
 
 - Colony blob 19: the houses (zone, seed, place, the way it faces, pad, its door's way, how far

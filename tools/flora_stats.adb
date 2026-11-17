@@ -1,6 +1,7 @@
 with Ada.Command_Line;  use Ada.Command_Line;
 with Ada.Text_IO;       use Ada.Text_IO;
 with Castle.Dims;       use Castle.Dims;
+with Castle.Fields;
 with Castle.Hash;       use type Castle.Hash.U64;
 with Castle.Maps;
 with Castle.Worldgen;
@@ -287,6 +288,54 @@ begin
          Put_Line ("tall grass over the map: a tuft on " & Img (100.0 * Float (Tufts) / Float'Max (1.0, Float (Turf)))
                    & " % of the turf's columns, " & Img (100.0 * Float (Long) / Float'Max (1.0, Float (Tufts)))
                    & " % of them two blocks high");
+      end;
+      --  boulders: every cell of their grid, by how much of a mountain the generator's own mask
+      --  calls the place (0 open land .. 1 mountain), and those within 60 m of the spot
+      declare
+         use Castle.Fields;
+         Bands : constant := 10;
+         Cells, Rocks : array (0 .. Bands - 1) of Natural := [others => 0];
+         Near_Rocks, All_Rocks, All_Cells : Natural := 0;
+         Last : constant Integer := Size_B / Rock_Cell - 1;
+         function One (V : Float) return String is
+            T : constant Integer := Integer (Float'Rounding (V * 10.0));
+            D : constant String := Integer'Image (abs T mod 10);
+            H : constant String := Integer'Image (abs T / 10);
+         begin
+            return (if T < 0 then "-" else "") & H (H'First + 1 .. H'Last) & "." & D (D'First + 1 .. D'Last);
+         end One;
+      begin
+         for I in 0 .. Last loop
+            for J in 0 .. Last loop
+               declare
+                  Xm : constant Float := Center_M (I * Rock_Cell + Rock_Cell / 2);
+                  Ym : constant Float := Center_M (J * Rock_Cell + Rock_Cell / 2);
+                  B  : constant Integer :=
+                    Integer'Min (Bands - 1, Integer (Float'Floor (Sample (W.Mountain.all, Xm, Ym) * Float (Bands))));
+                  L  : constant Lump := Boulder_At (W, I, J);
+               begin
+                  Cells (B) := Cells (B) + 1;
+                  All_Cells := All_Cells + 1;
+                  if L.Valid then
+                     Rocks (B) := Rocks (B) + 1;
+                     All_Rocks := All_Rocks + 1;
+                     if (Center_M (L.Cx) - Sx) ** 2 + (Center_M (L.Cy) - Sy) ** 2 <= 60.0 ** 2 then
+                        Near_Rocks := Near_Rocks + 1;
+                     end if;
+                  end if;
+               end;
+            end loop;
+         end loop;
+         Put_Line ("boulders: " & Img (All_Rocks) & " over the map (a place for one every" & Integer'Image (Rock_Cell / 4)
+                   & " m: " & One (100.0 * Float (All_Rocks) / Float (All_Cells)) & " % of them hold one); "
+                   & Img (Near_Rocks) & " within 60 m of" & Integer (Sx)'Image & Integer (Sy)'Image);
+         Put_Line ("  by the mountain mask (0 open land .. 1 mountain), the share of the map, its boulders, and how"
+                   & " many of its places hold one:");
+         for B in Cells'Range loop
+            Put_Line ("    " & One (Float (B) / Float (Bands)) & " to " & One (Float (B + 1) / Float (Bands)) & ": "
+                      & One (100.0 * Float (Cells (B)) / Float (All_Cells)) & " % of the map, " & Img (Rocks (B))
+                      & " boulders, " & One (100.0 * Float (Rocks (B)) / Float'Max (1.0, Float (Cells (B)))) & " %");
+         end loop;
       end;
       for S in Species loop
          if Nearest (S).Valid then

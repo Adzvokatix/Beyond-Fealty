@@ -50,17 +50,42 @@ package body Castle.Nav is
       L             : Link_Array;
    end record;
 
-   type Stack_Nav is record
-      Version : Natural := 0;            --  the ground's version it is read at
-      Shape   : Natural := 0;            --  moves only when a cell of it changes (borders go by this)
-      Cells   : Cell_Grid;
+   --  A stack's pieces of ground for one kind of going: a serf's (walking
+   --  and wading, to Wade_B rows), or going no deeper than fewer rows (a
+   --  herd's dry ways).  Shape: for the dry ones, the stack's Shape they
+   --  were worked out at (0: not yet).
+   type Label_Set is record
       Comp    : Comp_Grid := [others => [others => [others => 0]]];
       N_Comp  : Natural := 0;
       Edges   : Edge_Masks := [others => 0];
       East, North : Border;
+      Shape   : Natural := 0;
+   end record;
+   type Label_Set_Access is access all Label_Set;
+   procedure Free_Set is new Ada.Unchecked_Deallocation (Label_Set, Label_Set_Access);
+   type Dry_Sets is array (0 .. Wade_B - 1) of Label_Set_Access;
+
+   type Stack_Nav is record
+      Version : Natural := 0;            --  the ground's version it is read at
+      Shape   : Natural := 0;            --  moves only when a cell of it changes (borders and dry pieces go by this)
+      Cells   : Cell_Grid;
+      Walk    : aliased Label_Set;       --  a serf's pieces, worked out with the cells
+      Dry     : Dry_Sets := [others => null];   --  by rows of water gone through: when a plan first asks
    end record;
    type Stack_Nav_Access is access Stack_Nav;
-   procedure Free is new Ada.Unchecked_Deallocation (Stack_Nav, Stack_Nav_Access);
+   procedure Free_Stack is new Ada.Unchecked_Deallocation (Stack_Nav, Stack_Nav_Access);
+
+   procedure Free (P : in out Stack_Nav_Access) is
+   begin
+      if P /= null then
+         for D of P.Dry loop
+            if D /= null then
+               Free_Set (D);
+            end if;
+         end loop;
+         Free_Stack (P);
+      end if;
+   end Free;
 
    Stacks_XY : constant := Cells_XY / Cells_Per_Stack;
    type Nav_Grid is array (0 .. Stacks_XY - 1, 0 .. Stacks_XY - 1) of Stack_Nav_Access;
@@ -206,7 +231,7 @@ package body Castle.Nav is
       end loop;
    end Build_Cell;
 
-   procedure Label_Stack (P : in out Stack_Nav);   --  (below, with the steps)
+   procedure Label (Cells : Cell_Grid; S : in out Label_Set; W : Natural);   --  (below, with the steps)
 
    procedure Read_Whole (SX, SY : Integer; P : in out Stack_Nav) is
    begin
@@ -228,19 +253,31 @@ package body Castle.Nav is
          Free (Q);
          raise Program_Error with "Castle.Nav: stack" & SX'Image & SY'Image & " mended is not the stack read whole";
       end if;
-      Label_Stack (Q.all);
-      if Q.Comp /= P.Comp or else Q.N_Comp /= P.N_Comp then
+      Label (Q.Cells, Q.Walk, Wade_B);
+      if Q.Walk.Comp /= P.Walk.Comp or else Q.Walk.N_Comp /= P.Walk.N_Comp then
          Free (Q);
          raise Program_Error with "Castle.Nav: stack" & SX'Image & SY'Image & " mended has other pieces of ground";
       end if;
       Free (Q);
    end Check_Mended;
 
+   --  The stacks a plan reads, as a box (for the memo of a plan that ran
+   --  out of budget: see the spec, Set_Spent_Memos).
+   Box_X0, Box_Y0 : Integer := Integer'Last;
+   Box_X1, Box_Y1 : Integer := Integer'First;
+
+   procedure Touch (SX, SY : Integer) is
+   begin
+      Box_X0 := Integer'Min (Box_X0, SX);  Box_X1 := Integer'Max (Box_X1, SX);
+      Box_Y0 := Integer'Min (Box_Y0, SY);  Box_Y1 := Integer'Max (Box_Y1, SY);
+   end Touch;
+
    function Stack (SX, SY : Integer) return Stack_Nav_Access is
    begin
       if Version_Src = null or else SX not in Nav_Grid'Range (1) or else SY not in Nav_Grid'Range (2) then
          return null;
       end if;
+      Touch (SX, SY);
       declare
          V : constant Natural := Version_Src (SX, SY);
          P : Stack_Nav_Access renames Navs (SX, SY);
@@ -267,7 +304,7 @@ package body Castle.Nav is
                end if;
                if All_Of_It then
                   Read_Whole (SX, SY, P.all);
-                  Label_Stack (P.all);
+                  Label (P.Cells, P.Walk, Wade_B);
                   Shapes := Shapes + 1;
                   P.Shape := Shapes;
                   Tot.Stacks_Built := Tot.Stacks_Built + 1;
@@ -302,7 +339,7 @@ package body Castle.Nav is
                         end;
                      end loop;
                      if Changed then
-                        Label_Stack (P.all);
+                        Label (P.Cells, P.Walk, Wade_B);
                         Shapes := Shapes + 1;
                         P.Shape := Shapes;
                         Tot.Labellings := Tot.Labellings + 1;
@@ -319,6 +356,25 @@ package body Castle.Nav is
          return P;
       end;
    end Stack;
+
+   --  The ground the plan being made keeps to (Plan's Within): a stack is
+   --  inside if any part of it is within Bound.R of (Bound.X, Bound.Y).
+   --  What is outside is no ground to that plan.
+   Bound_On : Boolean := False;
+   Bound    : Region := Everywhere;
+   Stack_M  : constant := Float (Cells_Per_Stack) * Cell_M;
+
+   function Inside (SX, SY : Integer) return Boolean is
+      Dx : constant Float :=
+        Float'Max (0.0, Float'Max (Float (SX) * Stack_M - Bound.X, Bound.X - Float (SX + 1) * Stack_M));
+      Dy : constant Float :=
+        Float'Max (0.0, Float'Max (Float (SY) * Stack_M - Bound.Y, Bound.Y - Float (SY + 1) * Stack_M));
+   begin
+      if Bound.Stacks > 0 then
+         return (SX - Bound.SX) ** 2 + (SY - Bound.SY) ** 2 <= Bound.Stacks ** 2;
+      end if;
+      return Dx * Dx + Dy * Dy <= Bound.R * Bound.R;
+   end Inside;
 
    --  The last stack looked at: neighbours mostly share it.  Valid only
    --  within one call (between calls the ground may change).
@@ -342,7 +398,7 @@ package body Castle.Nav is
          SY : constant Integer := Cy / Cells_Per_Stack;
       begin
          if SX /= Cache_SX or else SY /= Cache_SY then
-            Cache_P := Stack (SX, SY);
+            Cache_P := (if Bound_On and then not Inside (SX, SY) then null else Stack (SX, SY));
             Cache_SX := SX;
             Cache_SY := SY;
          end if;
@@ -363,9 +419,12 @@ package body Castle.Nav is
       Forget;
    end Set_Source;
 
+   procedure Forget_Memos;      --  (below, with them)
+
    procedure Forget is
    begin
       Reset_Cache;
+      Forget_Memos;
       for P of Navs.all loop
          if P /= null then
             Free (P);
@@ -461,7 +520,12 @@ package body Castle.Nav is
 
    ---------------------------------------------------------------- pieces of ground
 
-   procedure Label_Stack (P : in out Stack_Nav) is
+   --  A floor is of the going no deeper than W rows (Wade_B: a serf's; a
+   --  floor under more than that has no speed at all).
+   function Of_Going (F : Packed_Floor; W : Natural) return Boolean is
+     (F.Speed > 0.0 and then Natural (F.Water) <= W);
+
+   procedure Label (Cells : Cell_Grid; S : in out Label_Set; W : Natural) is
       N_Ids  : constant := Max_Comps;
       Parent : array (0 .. N_Ids - 1) of Integer;
       Num    : array (0 .. N_Ids - 1) of Unsigned_16 := [others => 0];
@@ -490,16 +554,16 @@ package body Castle.Nav is
       for I in 0 .. Last loop
          for J in 0 .. Last loop
             declare
-               C : Cell renames P.Cells (I, J);
+               C : Cell renames Cells (I, J);
             begin
                for F in 1 .. C.N loop
-                  if C.F (F).Speed > 0.0 then
+                  if Of_Going (C.F (F), W) then
                      if I < Last then
                         declare
-                           E : Cell renames P.Cells (I + 1, J);
+                           E : Cell renames Cells (I + 1, J);
                         begin
                            for G in 1 .. E.N loop
-                              if E.F (G).Speed > 0.0
+                              if Of_Going (E.F (G), W)
                                 and then (Step_Free (C.F (F), E.F (G)) or else Step_Free (E.F (G), C.F (F)))
                               then
                                  Join (Id (I, J, F), Id (I + 1, J, G));
@@ -509,10 +573,10 @@ package body Castle.Nav is
                      end if;
                      if J < Last then
                         declare
-                           E : Cell renames P.Cells (I, J + 1);
+                           E : Cell renames Cells (I, J + 1);
                         begin
                            for G in 1 .. E.N loop
-                              if E.F (G).Speed > 0.0
+                              if Of_Going (E.F (G), W)
                                 and then (Step_Free (C.F (F), E.F (G)) or else Step_Free (E.F (G), C.F (F)))
                               then
                                  Join (Id (I, J, F), Id (I, J + 1, G));
@@ -525,23 +589,23 @@ package body Castle.Nav is
             end;
          end loop;
       end loop;
-      P.N_Comp := 0;
-      P.Comp := [others => [others => [others => 0]]];
+      S.N_Comp := 0;
+      S.Comp := [others => [others => [others => 0]]];
       for I in 0 .. Last loop
          for J in 0 .. Last loop
-            for F in 1 .. P.Cells (I, J).N loop
-               if P.Cells (I, J).F (F).Speed > 0.0 then
+            for F in 1 .. Cells (I, J).N loop
+               if Of_Going (Cells (I, J).F (F), W) then
                   declare
                      R : constant Integer := Root (Id (I, J, F));
                   begin
                      if Num (R) = 0 then
-                        P.N_Comp := P.N_Comp + 1;
-                        Num (R) := Unsigned_16 (P.N_Comp);
-                        P.Edges (P.N_Comp) := 0;
+                        S.N_Comp := S.N_Comp + 1;
+                        Num (R) := Unsigned_16 (S.N_Comp);
+                        S.Edges (S.N_Comp) := 0;
                      end if;
-                     P.Comp (I, J, F) := Num (R);
+                     S.Comp (I, J, F) := Num (R);
                      declare
-                        E : Unsigned_8 renames P.Edges (Integer (Num (R)));
+                        E : Unsigned_8 renames S.Edges (Integer (Num (R)));
                      begin
                         if I = Last then E := E or 1; end if;
                         if I = 0 then E := E or 2; end if;
@@ -553,20 +617,61 @@ package body Castle.Nav is
             end loop;
          end loop;
       end loop;
-      P.East.Valid := False;
-      P.North.Valid := False;
-   end Label_Stack;
+      S.East.Valid := False;
+      S.North.Valid := False;
+   end Label;
 
    --  Mapped, and mapped as the ground is now.
    function Current (SX, SY : Integer) return Boolean is
      (SX in Nav_Grid'Range (1) and then SY in Nav_Grid'Range (2) and then Navs (SX, SY) /= null
       and then Version_Src (SX, SY) > 0 and then Navs (SX, SY).Version = Version_Src (SX, SY));
 
-   --  Stack (SX, SY)'s east or north border, worked out again if either
-   --  stack has changed since (both must be current).
-   procedure Fresh_Border (SX, SY : Integer; North : Boolean) is
+   --  Stack (SX, SY)'s pieces for going no deeper than W rows, as its
+   --  floors are now (the stack must be current).  A serf's are kept with
+   --  the floors; the dry ones are worked out here when first asked for and
+   --  when the stack's shape has moved since.
+   function Set_Of (SX, SY : Integer; W : Natural) return Label_Set_Access is
+      P : constant Stack_Nav_Access := Navs (SX, SY);
+   begin
+      if W >= Wade_B then
+         return P.Walk'Unchecked_Access;
+      end if;
+      if P.Dry (W) = null then
+         P.Dry (W) := new Label_Set;
+      end if;
+      if P.Dry (W).Shape /= P.Shape then
+         Label (P.Cells, P.Dry (W).all, W);
+         P.Dry (W).Shape := P.Shape;
+         Tot.Dry_Labellings := Tot.Dry_Labellings + 1;
+      elsif Prove_Dry then
+         --  kept ones used again: they must be what the floors give now
+         declare
+            Q    : Label_Set_Access := new Label_Set;
+            Same : Boolean;
+         begin
+            Label (P.Cells, Q.all, W);
+            Same := Q.Comp = P.Dry (W).Comp and then Q.N_Comp = P.Dry (W).N_Comp
+              and then Q.Edges (1 .. Q.N_Comp) = P.Dry (W).Edges (1 .. Q.N_Comp);
+            Free_Set (Q);
+            if not Same then
+               raise Program_Error with "Castle.Nav: stack" & SX'Image & SY'Image
+                 & " kept other pieces for dry going than its floors give";
+            end if;
+         end;
+      end if;
+      return P.Dry (W);
+   end Set_Of;
+
+   --  Stack (SX, SY)'s east or north border for that going, worked out
+   --  again if either stack has changed since (both must be current; both
+   --  stacks' pieces are made fresh first).
+   procedure Fresh_Border (SX, SY : Integer; North : Boolean; W : Natural) is
+      TX    : constant Integer := (if North then SX else SX + 1);
+      TY    : constant Integer := (if North then SY + 1 else SY);
       Here  : Stack_Nav renames Navs (SX, SY).all;
-      There : Stack_Nav renames Navs ((if North then SX else SX + 1), (if North then SY + 1 else SY)).all;
+      There : Stack_Nav renames Navs (TX, TY).all;
+      Mine  : constant Label_Set_Access := Set_Of (SX, SY, W);
+      Their : constant Label_Set_Access := Set_Of (TX, TY, W);
       Last  : constant Integer := Cells_Per_Stack - 1;
 
       procedure Work_Out (B : in out Border) is
@@ -586,11 +691,11 @@ package body Castle.Nav is
             begin
                for F in 1 .. CA.N loop
                   for G in 1 .. CB.N loop
-                     if CA.F (F).Speed > 0.0 and then CB.F (G).Speed > 0.0
+                     if Of_Going (CA.F (F), W) and then Of_Going (CB.F (G), W)
                        and then (Step_Free (CA.F (F), CB.F (G)) or else Step_Free (CB.F (G), CA.F (F)))
                      then
                         declare
-                           L : constant Link := (Here.Comp (A_I, A_J, F), There.Comp (B_I, B_J, G));
+                           L : constant Link := (Mine.Comp (A_I, A_J, F), Their.Comp (B_I, B_J, G));
                            Seen : Boolean := False;
                         begin
                            for M in 1 .. B.N loop
@@ -612,9 +717,9 @@ package body Castle.Nav is
       end Work_Out;
    begin
       if North then
-         Work_Out (Here.North);
+         Work_Out (Mine.North);
       else
-         Work_Out (Here.East);
+         Work_Out (Mine.East);
       end if;
    end Fresh_Border;
 
@@ -635,9 +740,10 @@ package body Castle.Nav is
       Met    : Boolean := False;   --  came to the other end's piece
    end record;
 
-   --  Every piece joined to (SX, SY)'s piece C, through mapped stacks only,
+   --  Every piece joined to (SX, SY)'s piece C for going no deeper than W
+   --  rows, through mapped stacks only (and only those the plan keeps to),
    --  until Other is met.
-   procedure Gather (SX, SY : Integer; C : Unsigned_16; Other : Unsigned_64; S : in out Spread) is
+   procedure Gather (SX, SY : Integer; C : Unsigned_16; Other : Unsigned_64; S : in out Spread; W : Natural) is
       type Item is record
          X, Y : Integer;
          C    : Unsigned_16;
@@ -688,16 +794,24 @@ package body Castle.Nav is
       while Head <= Tail and then not S.Met and then not S.Full loop
          declare
             It : constant Item := Q (Head);
-            E  : constant Unsigned_8 := Navs (It.X, It.Y).Edges (Integer (It.C));
+            E  : constant Unsigned_8 := Set_Of (It.X, It.Y, W).Edges (Integer (It.C));
          begin
             Head := Head + 1;
+            Touch (It.X, It.Y);
             for Side in 0 .. 3 loop
                if (E and Shift_Left (Unsigned_8'(1), Side)) /= 0 then
                   declare
                      NX : constant Integer := It.X + (case Side is when 0 => 1, when 1 => -1, when others => 0);
                      NY : constant Integer := It.Y + (case Side is when 2 => 1, when 3 => -1, when others => 0);
                   begin
-                     if NX in Nav_Grid'Range (1) and then NY in Nav_Grid'Range (2) and then Version_Src (NX, NY) > 0 then
+                     if NX in Nav_Grid'Range (1) and then NY in Nav_Grid'Range (2)
+                       and then (not Bound_On or else Inside (NX, NY))
+                     then
+                        Touch (NX, NY);
+                     end if;
+                     if NX in Nav_Grid'Range (1) and then NY in Nav_Grid'Range (2)
+                       and then (not Bound_On or else Inside (NX, NY)) and then Version_Src (NX, NY) > 0
+                     then
                         --  (ground loaded but not mapped as it is now is mapped, or
                         --  mended, here and now: it used to leave the question open,
                         --  and an open question is a search of everything in reach)
@@ -709,17 +823,17 @@ package body Castle.Nav is
                         else
                            case Side is
                               when 0 =>              --  this stack's own east or north border
-                                 Fresh_Border (It.X, It.Y, North => False);
-                                 Follow (Navs (It.X, It.Y).East, It.C, False, NX, NY);
+                                 Fresh_Border (It.X, It.Y, North => False, W => W);
+                                 Follow (Set_Of (It.X, It.Y, W).East, It.C, False, NX, NY);
                               when 2 =>
-                                 Fresh_Border (It.X, It.Y, North => True);
-                                 Follow (Navs (It.X, It.Y).North, It.C, False, NX, NY);
+                                 Fresh_Border (It.X, It.Y, North => True, W => W);
+                                 Follow (Set_Of (It.X, It.Y, W).North, It.C, False, NX, NY);
                               when 1 =>              --  the neighbour's, read backwards
-                                 Fresh_Border (NX, NY, North => False);
-                                 Follow (Navs (NX, NY).East, It.C, True, NX, NY);
+                                 Fresh_Border (NX, NY, North => False, W => W);
+                                 Follow (Set_Of (NX, NY, W).East, It.C, True, NX, NY);
                               when others =>
-                                 Fresh_Border (NX, NY, North => True);
-                                 Follow (Navs (NX, NY).North, It.C, True, NX, NY);
+                                 Fresh_Border (NX, NY, North => True, W => W);
+                                 Follow (Set_Of (NX, NY, W).North, It.C, True, NX, NY);
                            end case;
                         end if;
                      end if;
@@ -732,6 +846,71 @@ package body Castle.Nav is
    end Gather;
 
    From_Side, To_Side : Spread;
+
+   --  Plans that ran out of budget, remembered (the spec, Set_Spent_Memos).
+   Memos_On : Boolean := True;
+   Max_Box  : constant := 40;             --  stacks a side of the box kept at most (a wider plan is not remembered)
+   type Version_Box is array (0 .. Max_Box * Max_Box - 1) of Natural;
+   type Memo is record
+      From, To : Vec3 := (0.0, 0.0, 0.0);
+      Budget   : Positive := 1;
+      Weight   : Float := 0.0;
+      Wade     : Natural := 0;
+      Labels   : Boolean := True;
+      On_Way   : Boolean := True;
+      Within   : Region := Everywhere;
+      Refuse   : Boolean := False;
+      X0, Y0, X1, Y1 : Integer := 0;      --  the box, a stack more each way than what was read
+      V        : Version_Box := [others => 0];
+      R        : Route;
+      S        : Stats;
+   end record;
+   type Memo_Access is access Memo;
+   procedure Free_Memo is new Ada.Unchecked_Deallocation (Memo, Memo_Access);
+   Memos     : array (1 .. 16) of Memo_Access;
+   Memo_Next : Positive := 1;
+
+   procedure Forget_Memos is
+   begin
+      for M of Memos loop
+         if M /= null then
+            Free_Memo (M);
+         end if;
+      end loop;
+   end Forget_Memos;
+
+   procedure Set_Spent_Memos (On : Boolean) is
+   begin
+      Memos_On := On;
+      if not On then
+         Forget_Memos;
+      end if;
+   end Set_Spent_Memos;
+
+   function Spent_Memos return Boolean is (Memos_On);
+
+   --  The ground in M's box is as it was when M was made.
+   function Still (M : Memo) return Boolean is
+      K : Natural := 0;
+   begin
+      for X in M.X0 .. M.X1 loop
+         for Y in M.Y0 .. M.Y1 loop
+            if (if X in Nav_Grid'Range (1) and then Y in Nav_Grid'Range (2) then Version_Src (X, Y) else 0) /= M.V (K) then
+               return False;
+            end if;
+            K := K + 1;
+         end loop;
+      end loop;
+      return True;
+   end Still;
+
+   Spent_Counts : Answer_Counts := [others => 0];
+   Spent_Call   : Spent_Hook := null;
+   function Spent_By return Answer_Counts is (Spent_Counts);
+   procedure On_Spent (Hook : Spent_Hook) is
+   begin
+      Spent_Call := Hook;
+   end On_Spent;
 
    Labels_On : Boolean := True;
    procedure Use_Labels (On : Boolean) is
@@ -1028,9 +1207,9 @@ package body Castle.Nav is
    Dirs : constant array (1 .. 8, 1 .. 2) of Integer :=
      [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-   function Plan (From, To : Vec3; Budget : Positive := 300_000; Weight : Float := Heuristic_Weight;
-                  Wade : Natural := Wade_B)
-                  return Route is
+   function Plan_It (From, To : Vec3; Budget : Positive; Weight : Float;
+                     Wade : Natural; Within : Region; Refuse : Boolean)
+                     return Route is
       use Ada.Real_Time;
       Began  : constant Time := Clock;
       Sx, Sy, Sf, Gx, Gy, Gf : Integer;
@@ -1042,7 +1221,10 @@ package body Castle.Nav is
       Looked  : Natural := 0;
       N_Raw   : Natural := 0;
       Out_Of_Reach : Boolean := False;   --  the labels showed it: heading for the nearest floor instead
+      Cut    : Boolean := False;          --  the search stopped with ground still to look at
+      Answer : Label_Answer := Not_Asked;  --  (for measuring: what the pieces said)
       CPS : constant := Cells_Per_Stack;
+      Lv  : constant Natural := Natural'Min (Wade, Wade_B);   --  whose pieces are asked: its own going's
 
       function H (Cx, Cy, Z : Integer) return Float is
          Dx  : constant Float := Float (abs (Cx - Gx));
@@ -1058,8 +1240,12 @@ package body Castle.Nav is
       procedure Done is
       begin
          Wade_Now := Wade_B;
+         if Bound_On then
+            Reset_Cache;           --  (it may hold no stack for one that was only outside the region)
+            Bound_On := False;
+         end if;
          Last := (Looked_At => Looked, Seconds => Float (To_Duration (Clock - Began)), Stacks => Built,
-                  Out_Of_Reach => Out_Of_Reach);
+                  Out_Of_Reach => Out_Of_Reach, Cut_Short => Cut);
          Tot.Plans := Tot.Plans + 1;
          Tot.Plan_Floors := Tot.Plan_Floors + Long_Integer (Looked);
          Tot.Plan_Seconds := Tot.Plan_Seconds + Long_Float (Last.Seconds);
@@ -1070,6 +1256,46 @@ package body Castle.Nav is
          end if;
          if Looked >= Budget then
             Tot.Spent_Plans := Tot.Spent_Plans + 1;
+            Spent_Counts (Answer) := Spent_Counts (Answer) + 1;
+            if Spent_Call /= null then
+               declare
+                  E : constant Vec3 := (if Work.N > 0 then Work.Pts (Work.N).P else From);
+               begin
+                  Spent_Call ((From => From, To => To, Budget => Budget, Wade => Wade, Answer => Answer,
+                               Result => Work.Result, Reached_M => Sqrt ((E.X - To.X) ** 2 + (E.Y - To.Y) ** 2),
+                               Seconds => Last.Seconds));
+               end;
+            end if;
+            --  remembered, by the ground it read (not one the pieces called out of reach: the
+            --  floor it then made for was picked from stacks far round its goal, read apart)
+            if Memos_On and then Answer /= Castle.Nav.Out_Of_Reach and then Box_X0 <= Box_X1
+              and then Box_X1 - Box_X0 + 3 <= Max_Box and then Box_Y1 - Box_Y0 + 3 <= Max_Box
+            then
+               if Memos (Memo_Next) = null then
+                  Memos (Memo_Next) := new Memo;
+               end if;
+               declare
+                  M : Memo renames Memos (Memo_Next).all;
+                  K : Natural := 0;
+               begin
+                  M.From := From;  M.To := To;  M.Budget := Budget;  M.Weight := Weight;  M.Wade := Wade;
+                  M.Labels := Labels_On;
+                  M.On_Way := Map_On_The_Way;
+                  M.Within := Within;
+                  M.Refuse := Refuse;
+                  M.X0 := Box_X0 - 1;  M.Y0 := Box_Y0 - 1;  M.X1 := Box_X1 + 1;  M.Y1 := Box_Y1 + 1;
+                  for X in M.X0 .. M.X1 loop
+                     for Y in M.Y0 .. M.Y1 loop
+                        M.V (K) := (if X in Nav_Grid'Range (1) and then Y in Nav_Grid'Range (2)
+                                    then Version_Src (X, Y) else 0);
+                        K := K + 1;
+                     end loop;
+                  end loop;
+                  M.R := Work;
+                  M.S := Last;
+               end;
+               Memo_Next := Memo_Next mod Memos'Length + 1;
+            end if;
          end if;
          if Work.Result /= Found then
             Tot.Short_Plans := Tot.Short_Plans + 1;
@@ -1093,11 +1319,13 @@ package body Castle.Nav is
       end Done;
 
       function Piece (Cx, Cy, Fi : Integer) return Unsigned_16 is
-        (Navs (Cx / CPS, Cy / CPS).Comp (Cx mod CPS, Cy mod CPS, Fi));
+        (Set_Of (Cx / CPS, Cy / CPS, Lv).Comp (Cx mod CPS, Cy mod CPS, Fi));
 
-      --  Whether the goal is out of reach, by the pieces of ground: true
-      --  only when the start's pieces or the goal's are all known and don't
-      --  meet.  Start_Known: it was the start's (From_Side) that were.
+      --  Whether the goal is out of reach, by the pieces of ground for the
+      --  plan's own going: true only when the start's pieces or the goal's
+      --  are all known and don't meet (a plan that keeps to a region knows
+      --  all of them that matter: what is outside or not loaded is no ground
+      --  to it).  Start_Known: it was the start's (From_Side) that were.
       procedure Look_Over (Start_Known : out Boolean) is
          PS : constant Unsigned_16 := Piece (Sx, Sy, Sf);
          PG : constant Unsigned_16 := Piece (Gx, Gy, Gf);
@@ -1106,21 +1334,25 @@ package body Castle.Nav is
       begin
          Start_Known := False;
          if PS = 0 or else PG = 0 or else KS = KG then
+            Answer := (if PS = 0 or else PG = 0 then No_Piece else Same_Piece);
             return;
          end if;
-         Gather (Sx / CPS, Sy / CPS, PS, KG, From_Side);
+         Gather (Sx / CPS, Sy / CPS, PS, KG, From_Side, Lv);
          if From_Side.Met then
+            Answer := Met;
             return;
          end if;
-         if not From_Side.Open and then not From_Side.Full then
+         if (Bound_On or else not From_Side.Open) and then not From_Side.Full then
             Out_Of_Reach := True;
             Start_Known := True;
+            Answer := Castle.Nav.Out_Of_Reach;
             return;
          end if;
-         Gather (Gx / CPS, Gy / CPS, PG, KS, To_Side);
-         if not To_Side.Met and then not To_Side.Open and then not To_Side.Full then
+         Gather (Gx / CPS, Gy / CPS, PG, KS, To_Side, Lv);
+         if not To_Side.Met and then (Bound_On or else not To_Side.Open) and then not To_Side.Full then
             Out_Of_Reach := True;
          end if;
+         Answer := (if Out_Of_Reach then Castle.Nav.Out_Of_Reach elsif To_Side.Met then Met else Unknown);
       end Look_Over;
 
       --  Out of reach: the floor nearest the goal (by the estimate, as a
@@ -1147,18 +1379,20 @@ package body Castle.Nav is
             for DX in -R .. R loop
                for DY in -R .. R loop
                   if (abs DX = R or else abs DY = R) and then Current (GSX + DX, GSY + DY)
+                    and then (not Bound_On or else Inside (GSX + DX, GSY + DY))
                     and then (not Start_Known
                               or else Stacks_In.Contains (Unsigned_64 ((GSX + DX) * Stacks_XY + (GSY + DY))))
                   then
                      declare
                         P : Stack_Nav renames Navs (GSX + DX, GSY + DY).all;
+                        L : constant Label_Set_Access := Set_Of (GSX + DX, GSY + DY, Lv);
                      begin
                         for I in 0 .. CPS - 1 loop
                            for J in 0 .. CPS - 1 loop
                               for F in 1 .. P.Cells (I, J).N loop
-                                 if P.Comp (I, J, F) /= 0 then
+                                 if L.Comp (I, J, F) /= 0 then
                                     declare
-                                       K  : constant Unsigned_64 := Piece_Key (GSX + DX, GSY + DY, P.Comp (I, J, F));
+                                       K  : constant Unsigned_64 := Piece_Key (GSX + DX, GSY + DY, L.Comp (I, J, F));
                                        Ok : constant Boolean :=
                                          (if Start_Known then From_Side.Set.Contains (K)
                                           else not To_Side.Set.Contains (K));
@@ -1197,6 +1431,32 @@ package body Castle.Nav is
          Done;
          return Work;
       end if;
+      --  one that ran out of budget, asked again of the same ground: from memory
+      if Memos_On then
+         for M of Memos loop
+            if M /= null and then M.From = From and then M.To = To and then M.Budget = Budget
+              and then M.Weight = Weight and then M.Wade = Wade and then M.Labels = Labels_On
+              and then M.On_Way = Map_On_The_Way and then M.Within = Within and then M.Refuse = Refuse
+              and then Still (M.all)
+            then
+               Wade_Now := Wade_B;
+               Last := M.S;
+               Last.Seconds := Float (To_Duration (Clock - Began));
+               Last.Stacks := 0;
+               Tot.Plans := Tot.Plans + 1;
+               Tot.Remembered := Tot.Remembered + 1;
+               Tot.Plan_Seconds := Tot.Plan_Seconds + Long_Float (Last.Seconds);
+               if M.R.Result /= Found then
+                  Tot.Short_Plans := Tot.Short_Plans + 1;
+               end if;
+               return M.R;
+            end if;
+         end loop;
+      end if;
+      Box_X0 := Integer'Last;   Box_Y0 := Integer'Last;
+      Box_X1 := Integer'First;  Box_Y1 := Integer'First;
+      Bound := Within;
+      Bound_On := Within.R > 0.0 or else Within.Stacks > 0;
       if Table = null then
          Table := new Slot_Array;
          Heap := new Heap_Array;
@@ -1223,6 +1483,11 @@ package body Castle.Nav is
       --  a goal the pieces of ground show to be out of reach: head for the
       --  floor nearest it that can be reached instead of searching everywhere
       if Labels_On and then Have_G and then Start /= Goal
+        and then not (Current (Sx / CPS, Sy / CPS) and then Current (Gx / CPS, Gy / CPS))
+      then
+         Answer := Stale;
+      end if;
+      if Labels_On and then Have_G and then Start /= Goal
         and then Current (Sx / CPS, Sy / CPS) and then Current (Gx / CPS, Gy / CPS)
       then
          declare
@@ -1230,6 +1495,12 @@ package body Castle.Nav is
             Tx, Ty, Tf : Integer;
          begin
             Look_Over (Start_Known);
+            if Out_Of_Reach and then Refuse then
+               Tot.Refused := Tot.Refused + 1;      --  not made for at all
+               Done;
+               Tot.Refused_Seconds := Tot.Refused_Seconds + Long_Float (Last.Seconds);
+               return Work;
+            end if;
             if Out_Of_Reach then
                Nearest_Reachable (Start_Known, Tx, Ty, Tf, Got);
                if not Got or else Make (Tx, Ty, Tf) = Start then
@@ -1275,8 +1546,10 @@ package body Castle.Nav is
                   Best_H := It.F - It.G;
                   Best := It.N;
                end if;
-               exit Search when Looked >= Budget or else Entries > Table_Size * 7 / 10
-                 or else Heap_N > Heap_Max - 64;
+               if Looked >= Budget or else Entries > Table_Size * 7 / 10 or else Heap_N > Heap_Max - 64 then
+                  Cut := Heap_N > 0;
+                  exit Search;
+               end if;
                declare
                   Cx : constant Integer := Cx_Of (It.N);
                   Cy : constant Integer := Cy_Of (It.N);
@@ -1438,6 +1711,56 @@ package body Castle.Nav is
       end loop;
       Done;
       return Work;
+   end Plan_It;
+
+   function Plan (From, To : Vec3; Budget : Positive := 300_000; Weight : Float := Heuristic_Weight;
+                  Wade : Natural := Wade_B; Within : Region := Everywhere; Refuse : Boolean := False)
+                  return Route is
+   begin
+      if not (Prove_Dry and then Wade < Wade_B) then
+         return Plan_It (From, To, Budget, Weight, Wade, Within, Refuse);
+      end if;
+      --  proving (checks and measuring only): an answer of out of reach is
+      --  searched for with the pieces off and no budget, on the same ground
+      declare
+         R    : constant Route := Plan_It (From, To, Budget, Weight, Wade, Within, Refuse);
+         Mine : constant Stats := Last;
+      begin
+         if Mine.Out_Of_Reach then
+            declare
+               Tot_Was    : constant Totals_Rec := Tot;
+               Spent_Was  : constant Answer_Counts := Spent_Counts;
+               Slow_Was   : constant Slow_List := Slow;
+               Hook_Was   : constant Spent_Hook := Spent_Call;
+               Labels_Was : constant Boolean := Labels_On;
+               Memos_Was  : constant Boolean := Memos_On;
+               Got, Whole : Boolean;
+            begin
+               Labels_On := False;
+               Memos_On := False;
+               Spent_Call := null;
+               Got := Plan_It (From, To, Positive'Last, Weight, Wade, Within, False).Result = Found;
+               Whole := not Last.Cut_Short;
+               Labels_On := Labels_Was;
+               Memos_On := Memos_Was;
+               Spent_Call := Hook_Was;
+               Tot := Tot_Was;
+               Spent_Counts := Spent_Was;
+               Slow := Slow_Was;
+               Last := Mine;
+               if Got then
+                  raise Program_Error with "Castle.Nav: a way of dry going the pieces of ground call out of reach"
+                    & " can be gone: from" & From.X'Image & From.Y'Image & " to" & To.X'Image & To.Y'Image
+                    & ", wade" & Wade'Image;
+               elsif Whole then
+                  Tot.Proved := Tot.Proved + 1;
+               else
+                  Tot.Unproved := Tot.Unproved + 1;
+               end if;
+            end;
+         end if;
+         return R;
+      end;
    end Plan;
 
    ---------------------------------------------------------------- after edits
@@ -1514,6 +1837,7 @@ package body Castle.Nav is
    procedure Reset_Totals is
    begin
       Tot := (others => <>);
+      Spent_Counts := [others => 0];
    end Reset_Totals;
 
 end Castle.Nav;

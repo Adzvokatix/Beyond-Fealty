@@ -85,8 +85,15 @@ package Castle.Bodies is
 
    type Outfit is record
       Job    : Job_Kind := Idle;
-      Winter : Boolean  := False;   --  cloak and hood
+      Winter : Boolean  := False;   --  winter clothes (long sleeves, leg wraps, a hood), and its cloak over them
+      Cloak_Off : Boolean := False; --  its cloak is not on its back (asleep, it lies under it)
    end record;
+   --  Everyone has a cloak (John, 2026-11-12: "can we add cloaks, they can set
+   --  down next to their bed during the summer, wear it during with their
+   --  winter clothes in the winter, and use it as a blanket when they
+   --  sleep?").  It is worn in winter; the rest of the year it lies folded by
+   --  its owner's bed, and asleep its owner lies under it (whatever shows the
+   --  band puts it there: Rig.Cloak is its colour, worn or not).
 
    --  A box is drawn with its edges and corners rounded off and, if asked,
    --  narrowing toward one end: the models are still made of boxes on the
@@ -137,6 +144,7 @@ package Castle.Bodies is
       Ankle     : Float   := 0.0; --  ankle joint above the soles
       Hip_Half  : Float   := 0.0; --  each hip joint out from the middle
       Thigh, Shin, Upper_Arm, Forearm : Float := 0.0;   --  joint to joint
+      Cloak     : RGB;            --  the colour of its cloak (worn or not)
    end record;
 
    Skin_W : constant := 128;

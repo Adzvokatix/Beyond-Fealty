@@ -47,7 +47,23 @@ begin
 
       when To_Camp =>
          Keep_Route_Good (M, Ok);
-         if not Ok or else not Camp_Set then
+         if M.Use_For = For_Bed then                 --  come to where it sleeps, with straw for its bed
+            if not Ok then
+               Remember_Failure (M, No_Way_Id, Seconds => 600);
+               M.Use_For := For_Store;
+               M.State := Idle;
+               M.Wait := 0.5;
+            elsif Walk_On (M, 0.3) then
+               if Flat_Dist (M.Pos, Bed_Spot (I)) > Home_M then
+                  M.State := Idle;                    --  (where it sleeps has changed on its way: there with it)
+                  M.Wait := 0.1;
+               else
+                  M.Work := 0.0;
+                  M.State := Putting_In;
+                  M.Spot := Bed_Spot (I) + (0.0, 0.0, 0.1);
+               end if;
+            end if;
+         elsif not Ok or else not Camp_Set then
             Remember_Failure (M, Camp_Id, Seconds => 20);
             M.State := Idle;
             M.Wait := 2.0;
@@ -66,7 +82,8 @@ begin
                              when For_Fire => (if M.Carry = Sticks then Camp_At + (0.0, 0.0, 0.1)
                                                else Camp_At + Camp_Off (Stack_Off.X, Stack_Off.Y)),
                              when For_Seat => Seat_Log (Integer'Min (Seat_Logs, Seats_Laid + 1)),
-                             when For_Ring | For_Frame | For_Floor | For_House => Camp_At + (0.0, 0.0, 0.1),
+                             when For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder =>
+                               Camp_At + (0.0, 0.0, 0.1),
                              when For_Pot | For_Store | For_Stoke => Camp_At + (0.0, 0.0, 0.5));
             end if;
          end if;
@@ -94,6 +111,19 @@ begin
             Check_Built;
             M.State := Idle;
             M.Wait := 0.3;
+         elsif M.Work >= Put_In_S and then M.Use_For = For_Bed then
+            --  its bed is made; what straw is over (and the grain that came
+            --  with what it cut) goes on to a stockpile
+            declare
+               Made : Boolean;
+            begin
+               Make_Bed (I, Made);
+               if Made then
+                  M.Use_For := For_Store;
+               end if;                                --  (else it has it still, for its bed where that is now)
+            end;
+            M.State := Idle;
+            M.Wait := 0.3;
          elsif M.Work >= Put_In_S then
             case M.Use_For is
                when For_Pot =>
@@ -119,7 +149,7 @@ begin
                   else
                      Fire_Logs := Fire_Logs + M.Carried;
                   end if;
-               when For_Store | For_Stoke | For_Ring | For_Frame | For_Floor | For_House =>
+               when For_Store | For_Stoke | For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder =>
                   null;
             end case;
             M.Carry := Nothing;

@@ -1,3 +1,5 @@
+with Castle.Cloth;
+with Castle.Bodies;
 with Castle.Figures;
 with Castle.Poses;
 with Castle.Math; use Castle.Math;
@@ -25,6 +27,23 @@ package Castle.Props is
    --  A fieldstone 20 x 15 x 15 cm.
    function Clod return Castle.Figures.Look_Id;
    --  A clod of earth 25 x 25 x 20 cm: a heap of them is earth in store.
+   function Cloak_Folded (C : Castle.Bodies.RGB) return Castle.Figures.Look_Id;
+   --  A cloak of that colour folded and set down: 45 x 30 x 8 cm, its
+   --  middle at the origin.
+   function Cloak_Spread (C : Castle.Bodies.RGB) return Castle.Figures.Look_Id;
+   procedure Put_Cloth (C : Castle.Cloth.Cloth_Id; Colour : Castle.Bodies.RGB);
+   --  A sheet of cloth as it lies now (Castle.Cloth), in that wool: a thin
+   --  panel of it between each four points, each panel a box on a bone of
+   --  its own (two figures; the bow's way), sharp-edged so that they meet.
+   --  After Castle.Serfs.Submit, like Put.
+   --  The same cloak spread over a sleeper who lies on its side: a low mound
+   --  along the prop's X, highest over the shoulders (toward +X) and lower
+   --  over the legs, for someone 1.7 m tall (Put_In it in a frame scaled for
+   --  the rest); the origin is on the ground under the middle of the sleeper
+   --  at its hips.  The head lies out of it, past its +X end.
+   function Pallet return Castle.Figures.Look_Id;
+   --  A bed of straw: loose straw trodden flat, 1.9 m long (along the
+   --  prop's X) and 0.8 m across, a hand deep; its middle at the origin.
    function Bucket return Castle.Figures.Look_Id;
    --  A stave bucket 25 cm across and tall, two iron bands, full of water;
    --  its base at the ground point.
@@ -95,6 +114,39 @@ package Castle.Props is
    function Smoke_Bit (Shade : Smoke_Shade) return Castle.Figures.Look_Id;
    --  A puff of smoke: 1 grey, fresh off the fire, 3 pale, thinning.  Lit
    --  like anything else, half seen through, and it casts no shadow.
+
+   --  The lord's cart (the colony stands its bed in the world as a slab of
+   --  timber, 2 m by 1 m, its top 0.75 m over the ground: this is drawn
+   --  round that).
+   procedure Put_Cart (Ground : Vec3; Turn : Float; Sacks : Natural; Towed : Boolean := False);
+   --  A four-wheeled cart along Turn, its middle over Ground: boards over
+   --  the bed and round it (their tops at 1.05 m), a post at each corner,
+   --  two axles and four wheels under it, two shafts out of its front end
+   --  resting on a prop, and Sacks sacks lying in it (six at most).  After
+   --  Castle.Serfs.Submit, like Put.  Towed: its shafts held up, the prop
+   --  they rest on not under them.
+   Cart_Axle_M  : constant := 0.65;     --  the axles are this far before and behind its middle,
+   Cart_Track_M : constant := 0.62;     --  the wheels this far either side of it,
+   Cart_Bed_M   : constant := 0.77;     --  and its bed's top this far over the ground
+   function Wheel return Castle.Figures.Look_Id;
+   --  A cart wheel 90 cm across and 10 cm thick, standing on the ground
+   --  point in the plane of the prop's X and Z: an iron tyre, wooden
+   --  felloes, eight spokes and a hub.
+   function Sack return Castle.Figures.Look_Id;
+   --  A sack of salt, 60 x 35 x 25 cm, lying along X, tied at one end; its
+   --  underside at the ground point.
+
+   function Ladder return Castle.Figures.Look_Id;
+   --  A ladder 3.4 m long and 40 cm wide lying along the prop's X, its
+   --  middle at the origin: two rails and ten rungs.
+   procedure Put_Ladder (Foot, Top : Vec3);
+   --  One leaning from Foot, on the ground, against Top (an eave): it
+   --  stands out past Top by what is left of its length.
+   procedure Put_Ladder_Stood (Ground : Vec3; Turn : Float; Nth : Positive := 1);
+   --  One put by in a stockpile's place: stood all but upright against a
+   --  pole, the two an A 80 cm across along Turn over the middle of the
+   --  place (lying, its 3.4 m ran through the goods of the places beside
+   --  it).  Nth: a second in the same place leans beside the first.
 
    procedure Put (L : Castle.Figures.Look_Id; Ground : Vec3; Turn : Float);
    --  One prop standing on Ground this frame, turned Turn radians.  After

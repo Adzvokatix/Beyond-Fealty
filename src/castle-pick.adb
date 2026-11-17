@@ -230,6 +230,21 @@ package body Castle.Pick is
                Best_T := T;
                Best := Camp_Zone;
             end if;
+            --  the lord's cart: the ray lands on its bed, or on the ground under it
+            if Best = 0 and then Ground.Found and then Cart.Here
+              and then Cart_On (Gp.X + 0.05 * Dir.X, Gp.Y + 0.05 * Dir.Y)
+              and then Gp.Z >= Cart.At_P.Z - 2.0 * Level_M and then Gp.Z <= Cart.At_P.Z + 1.5
+            then
+               R.Kind := A_Cart;
+               R.Index := 1;
+               R.Dist := Ground.Dist;
+               R.Point := Gp;
+               if R.Dist > Reach then
+                  R.Kind := Nothing;
+                  R.Index := 0;
+               end if;
+               return R;
+            end if;
             --  a house: what the ray lands on is of it (a wall, the roof, the
             --  ground its walls are to stand on)
             if Best = 0 and then Ground.Found and then House_Count > 0 then

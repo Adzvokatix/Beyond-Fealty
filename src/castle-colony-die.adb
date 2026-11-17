@@ -18,8 +18,12 @@ begin
    if M.Carry = Carcass then
       Drop_Carcass (M);
    end if;
+   if M.Carry = Ladder and then M.Carried > 0 then
+      N_Ladders_Lost := N_Ladders_Lost + M.Carried;      --  (lost with the rest of what it carried)
+   end if;
    Release (M, I);
    M.Site := 0;
+   M.Ladder_Of := 0;
    M.Use_For := For_Store;
    M.Prey := 0;
    M.Carry := Nothing;

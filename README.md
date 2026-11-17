@@ -1,21 +1,19 @@
-[README.md](https://github.com/user-attachments/files/34827949/README.md)
-# Castle Game engine now Fief Engine — world generation and the 3D view
-# Engine for upcoming game for "Beyond Fealty".
+# Castle Game engine — world generation and the 3D view
 
 Procedural voxel world for the castle colony game, in Ada 2022.
 2048 m x 2048 m x 256 m, 0.25 m blocks.  Mountains peak around 160 m.
 
 ## The project
 
-"Beyond Fealty", is a colony game on a generated voxel world. The player says
+Castle Game is a colony game on a generated voxel world. The player says
 where (a homestake, paths, stockpiles, a camp, reserves and protections);
 the people decide what and when, feed themselves, and say why when they
 can't. Today a band of six gathers, fells, hunts, cooks and lives through
 the seasons at a camp; point at a person, a stockpile, the camp or a deer
 and a tooltip says what it is and is doing, and a right click offers what
 may be done with it. People have skills that grow with the work they do
-(stage 5b). Housing, trades, an economy and lordship are ahead (the phases 
-are in the framework).
+(stage 5b). Housing, trades, an
+economy and lordship are ahead (the phases are in the framework).
 
 Where to read:
 
@@ -29,7 +27,7 @@ Where to read:
 |---|---|---|---|
 | The world | `docs/systems/world.md` | Terrain, Geology, Deposits, Hydrology, Flora, Chunks, Worldgen, Maps | the preview's checksum; `flora_stats`, `terrain_stats`, `probe` measure |
 | Climate | `docs/systems/climate.md` | Climate | `climate_year` prints a year |
-| Rendering | `docs/systems/rendering.md` | Streaming, Mesher, Textures, Render, Camera, Colors, Currents | `camera_check` (needs a window); `tools/shadow_still.sh` measures |
+| Rendering | `docs/systems/rendering.md` | Streaming, Mesher, Textures, Render, Camera, Colors, Currents, Lod, Far | `camera_check` (needs a window); `tools/shadow_still.sh` measures; `edit_check` has the far view's tiles and the far land |
 | The interface | `docs/systems/interface.md` | Font, UI, HUD, Input, Views, Pick, Rays | `ui_check`, `pick_check` |
 | Editing and saves | `docs/systems/edits_and_saves.md` | Edits, World_Blocks, Saves | `edit_check` |
 | Live water | `docs/systems/water.md` | Water | `water_sim_check` |
@@ -86,7 +84,7 @@ Options: `--seed N`, `--at X Y` (start focus, metres), `--view M` (stream
 radius, metres), `--size W H`, `--float` (a window that can't be resized:
 Sway and other tiling compositors float it at exactly `--size` instead of
 tiling it; the app id is `castle` for window rules), `--workers N`,
-`--novsync`, `--msaa N`
+`--novsync`, `--no-lod` (no far view: nothing drawn past the view and the haze whole at its edge, the picture as it was before the far view: `docs/systems/rendering.md`, "The far view"), and of the far view's parts `--no-far-shadows` (nothing past the view's edge casts or takes the sun's shadow), `--no-far-mirror` (far water mirrors the sky alone), `--no-ground-haze` (no haze on the ground and none at the map's rim), `--haze X` (the ground haze X times as thick), `--rim M` (the map's rim goes into the haze over M metres, 12 as built), `--no-floor` (holes in the land show the sky), `--no-low-horizon` (the sun and the moon cut off at eye level, not gone down behind the map's edge), `--no-round-boulders` (a boulder's edges and corners in steps), `--no-whole-map` (a stack's blocks are dropped with its mesh, as before 2026-11-14: the game holds every stack's blocks and streams the meshes alone, `docs/systems/world.md`, "The whole map held"), `--msaa N`
 (default 4, 0 to switch off),
 `--cam YAW PITCH DIST`, `--clouds C` (force cloud cover 0-1), `--day D` (0-59) and `--time HOUR` (0-24) to start at,
 `--timescale H` (game hours per real second, default 1/60: a game minute a
@@ -97,11 +95,12 @@ ground is), `--moon PHASE` (0 new, 0.5 full: hold the moon there), `--nostars`, 
 round the start, to see and to cost many lights), `--hitch MS` (a frame that takes the CPU longer says where the time went; at the end, how many stacks of the walking map were read whole and how many mended),
 `--msaa N`, `--watersteps N` (open water drawn in steps of 1/N
 block, default 8; 0 for one smooth sheet), `--nofalls` (falls drawn as they were: a curtain on the face, a film down a slope), `--throw S` (the share of
-the lip's speed a fall's sheet leaves with), and for headless checks `--frames N --shot FILE.png`
+the lip's speed a fall's sheet leaves with), and for headless checks `--hold-wait` (a scripted run does not end before the whole map is held), `--far-wait` (nor before the far view is whole; a recording given it begins only then), `--settle N` (nor before N frames with nothing more coming in: their GPU and CPU times are said apart, and `tools/look_cost.sh` reads those), `--no-far-cull` (every face of a far tile sent), `--drawn-still` (drawn time holds still: clouds, ripples and flames do not move, so two builds' pictures of one view can be compared pixel by pixel; with `--workers 1 --timescale 0 --no-whole-map`, which make the stacks arrive in one order and stop the sun), `--mem` (what the process holds, at the end), `--save-at F PATH`, `--load-at F PATH` and `--probe-block X Y Z` (a save and a load at a frame after the view filled, and what block the simulation reads at a place at the end: the proofs of what is held), `--frames N --shot FILE.png`
 (render until the view has streamed in, save, exit; a run with `--frames`
 or `--record` takes no keyboard or mouse input, so its window can't be
 steered by keys meant for another) with `--pan DX DY`
-(glide the camera once the view is full, to exercise re-streaming).
+(glide the camera once the view is full, to exercise re-streaming; with `--pan-back`, back again once
+the far view has filled: the way to see what a look kept by place does when the camera has been away).
 `--pointer "FRAME:COMMAND, ..."` drives the cursor in such a run (move to a
 pixel, follow a member or a deer, a point of the ground, click, right
 click, wheel, Esc): `docs/systems/interface.md`, "A scripted pointer".
@@ -131,7 +130,7 @@ vein next to the default view, saved and loaded back:
 | Scrub hours | [ and ] |
 | Scrub days | , and . |
 | Point at a person, a zone, a deer | rest the cursor on it: a tooltip says what it is and is doing |
-| What you may do with it | right click: a menu (a person's job, follow; a stockpile's reserves; the ground: path, stockpile, camp, housing) |
+| What you may do with it | right click: a menu (a person's job, follow; a stockpile's reserves; the ground: path, stockpile, camp, housing along a path, housing inside the paths round it) |
 | Dig | left click: the brush box round the block under the cursor (yellow outline) |
 | Place | Ctrl + left click: fills the brush box in front of the face pointed at |
 | Brush size | B: 25 cm, 1 m, 2 m |
@@ -140,6 +139,7 @@ vein next to the default view, saved and loaded back:
 | Panels | F1 keys, F2 survey, F3 debug, F4 hide all |
 | Interface smaller / larger | F10 / F11: a quarter of a step at a time, remembered in `saves/settings.txt` (`--uiscale 2.5` for one run) |
 | Serfs' routes, the walking map, the aquifer | F6, F7, F8 |
+| Houses opened (roof and near walls): where the camera and the pointer are, all of them, none | H |
 | Pause, game speed | Space; 1, 2, 3 |
 | The band | Tab: tabs for the Band (a scroll list), Stores, Camp, Orders |
 | Colony tools | the Tools panel: Homestake, then Path, Stockpile, Campfire and Housing; or the ground's menu |
@@ -181,7 +181,9 @@ src/castle-math.*          matrices and frustum culling
 src/castle-camera.*        orbit camera that rides the ground and keeps clear of it
 src/castle-textures.*      5 x 5 procedural block textures
 src/castle-mesher.*        greedy mesher, stack to packed quads; foliage's edges as soft quads, the fringe between turf and bare earth
-src/castle-streaming.*     worker pool: generate and mesh stacks nearest-first
+src/castle-streaming.*     worker pool: generate and mesh stacks nearest-first (or a stack's blocks alone, for what is held and not drawn)
+src/castle-far.*           the far land: the whole world as one coarse sheet, from the generator's map (out of the game since 2026-11-16, kept and still compiled: rendering.md, "The far land")
+src/castle-lod.*           the far view: a tile of the world at coarser blocks, reduced from its stacks and meshed
 src/castle-render.*        shaders, quad arena, culling, indirect draws, edit outline, figures
 src/castle-edits.*         the player's edits: blocks and whole bricks, generations
 src/castle-world_blocks.*  packed copies of loaded stacks: block lookups, ray picking, ground versions
@@ -210,32 +212,38 @@ src/castle-actions.*       the action table: what an actor may do to what, one d
 src/castle-views.*         data views: a person, a zone or a deer as a sheet of named lines, for panels and tooltips
 src/castle-rays.*          a ray walked into the blocks (the loaded world's, or a check's)
 src/castle-pick.*          what a ray points at: a person, a deer, a zone, else the block; reach
+src/castle-cloth.*         cloth: a sheet of particles hung from points or laid over a body, stepped by drawn time (the cloaks)
+src/castle-cutaway.*       roofs cleared on the camera's ray: which, how much, faded by drawn time (drawing and pointing only)
 src/castle-props.*         things set down in the world, drawn as figures: basket, log, sheaf, stone, clod of earth, bucket, the camp's
 src/castle-fire.*          a fire as it is seen: flames, sparks and smoke out of small pieces, and where its light comes from
 src/castle-deer.*          deer: classes, boxes and painted coats on the fifteen bones, the four-legged pose
 src/castle-animals.*       animals on screen: the gait-locked stepper, walk, trot and bound, grazing
-src/castle-herds.*         herds: a node that grazes, travels and flees, deer wandering round it and fleeing with it, out of water, fear, fawns, saves
+src/castle-herds.*         herds: a node that grazes, travels and flees (in a chain, never where water blocks it), deer wandering round it and fleeing with it, out of water, fear (of one who walks, not of one who stands), fawns, saves
 game/castle_game.adb       the game executable
 tools/worldgen_preview.adb command-line driver
 tools/probe.adb            point queries for debugging the generator
 tools/village_preview.adb  the first habitation prototype: a village drawn from above (Castle.Buildings.Layout)
 tools/terrain_stats.adb    heights, mountain slopes and cliff faces, for tuning the terrain
 tools/colony_run.adb       the colony on the real world with no window, on fixed steps: gates, measurements, the reference run
-                           (--nav-stats: what the colony's steps, the walking map and the routes cost)
+                           (--nav-stats: what the colony's steps, the walking map and the routes cost;
+                           --prove-dry: every dry way the pieces of ground call out of reach searched for whole)
 tools/reference_run.sh     the reference run's command line
-tools/reference_check.sh   the 41-day reference run eight ways (everything on; --deer-scatter; and with it --all-hands --no-level; --paths-built; --no-labour; --no-demand; --no-skills; and with housing and a porter), each its kept log, line for line
+tools/reference_check.sh   the 41-day reference run eight ways (seven with --no-beds --pace 1: nothing else off; --deer-scatter; and with it --all-hands --no-level; --paths-built; --no-labour; --no-demand; --no-skills; and one with beds, housing, a porter, a second stockpile, the band's pace of today, the cook's hold, the lord's cart and ladders; the seven also with --no-cook-hold --no-curing), each its kept log, line for line
 tools/demo_stage5a.sh, demo_stage5b.sh   the stage demos, recorded with a scripted pointer (need ffmpeg)
-tools/flora_stats.adb      trees by kind, forest cover and density, lone trees, berry bushes, wild vegetables, tall grass,
+tools/demo_stage6.sh, demo_housing_pass.sh   stage 6a's, and the pass after it (housing pulled along a path and filled inside a round of paths, a path drawn on its ground, walled ground, roofs trimmed, the wall as one behind a row, beds on level ground across the way to the fire, cloaks, sleepers)
+tools/flora_stats.adb      trees by kind, forest cover and density, lone trees, berry bushes, wild vegetables, tall grass, boulders by the mountain mask,
                            for tuning; draws three thousand trees of each kind alone and fails if one reaches past Tree_Reach
 tools/climate_year.adb     a year of weather, snow, ice and mist, for tuning the climate
 tools/camera_check.adb     pans the camera over the tallest mountain and reports jolts,
                            tilt and zoom swings and ground clipping (all should stay tiny)
 tools/edit_check.adb       editing and saves end to end, without a window
+tools/lod_stats.adb        what the far view costs: quads and worker time a tile at each level, and whole rings of them
 tools/water_sim_check.adb  the water simulation on made-up ground: basin, dam, river, tunnel, save; source water opened,
                            closed, built in; a flow established
 tools/demo_water.sh        records the water demo (a lake cut into and closed again, the tarn)
 tools/demo_shadows_fire.sh records the shadows and fire demo (morning, afternoon, dusk into night at the camp, the fire close up)
 tools/demo_camp_zones.sh   records the camp and zones demo (a stockpile along a path at an angle, the band building the camp, the fire dying down)
+tools/demo_herd_chain.sh, demo_herds_still.sh   the herds: a flight going down a herd in a chain; one of the band left standing among a herd, which grazes on
 tools/demo_paths_reach.sh  records the paths and reach demo (a path planned and laid by the band, one 150 m out, the band looking far for stone)
 tools/demo_hands_level.sh  records the hands and levelling demo (two at a time laying a path a stretch each, a camp's floor levelled on a slope, earth heaped in the stockpile)
 tools/shadow_still.sh      do the shadows hold still?  records a still view with the clock running and measures the change

@@ -32,7 +32,8 @@ package Castle.Actions is
       Set_Winter_Store,   --  days of food held back for winter
       Spare_Apples,       --  a protection: apple trees are not felled
       Spare_Deer,         --  a protection: deer are not hunted
-      Zone_Housing);      --  housing, corner to corner: where the band may build its homes
+      Zone_Housing,       --  housing, corner to corner: where the band may build its homes
+      Fill_Housing);      --  housing, all the ground inside a round of paths
 
    --  What an action is done to.  The reserves belong to the stockpiles
    --  (every stockpile stands for the colony's stores until zones have
@@ -64,6 +65,8 @@ package Castle.Actions is
             X0, Y0, X1, Y1 : Float := 0.0;           --  corners, in either order
          when Zone_Camp =>
             Fire_At : Vec3 := (0.0, 0.0, 0.0);
+         when Fill_Housing =>
+            Inside : Vec3 := (0.0, 0.0, 0.0);        --  a point of the ground to be filled
          when Give_Job | Follow =>
             Whom : Natural := 0;                     --  the member (Follow 0: nobody any more)
             Job  : Job_Kind := Unassigned;           --  Give_Job

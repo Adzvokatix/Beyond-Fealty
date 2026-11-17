@@ -13,10 +13,13 @@ with Castle.Colors;
 with Castle.Figures;
 with Castle.Marks;
 with Castle.Currents;
+with Castle.Cutaway;
 with Castle.Fields;
 with Castle.Hash;
 with Castle.Dims;             use Castle.Dims;
+with Castle.Far;
 with Castle.GL;               use Castle.GL;
+with Castle.Lod;
 with Castle.PNG;
 with Castle.Textures;
 
@@ -72,6 +75,7 @@ package body Castle.Render is
      "flat out int v_face;" & LF &
      "flat out uint v_ao;" & LF &
      "flat out uint v_fr;" & LF &              --  the fringe's bits (Castle.Mesher)
+     "flat out int v_lod;" & LF &              --  0: a stack's own mesh; else the level of a tile of the far view
      "flat out float v_depth;" & LF &          --  open water: blocks of it in this column (-1: not known)
      --  A hash of a corner of the block grid, for moving foliage: by place
      --  alone, so every face that meets a corner moves it alike, in the
@@ -131,6 +135,7 @@ package body Castle.Render is
      "  vec3 p;" & LF &
      "  v_depth = -1.0;" & LF &
      "  v_bend = vec4(0.0);" & LF &
+     "  v_lod = a_origin.w;" & LF &
      --  A surface cell (bit 28): one column of open-sky water.  Its top
      --  sits at the column's level, blended between the last two ticks;
      --  a side runs from whatever stands beside it (the neighbour's water
@@ -231,18 +236,51 @@ package body Castle.Render is
      "  else if (face < 2) p = vec3(float(x + 1 - face), float(y) + k.x * w, float(z) + k.y * h);" & LF &
      "  else if (face < 4) p = vec3(float(x) + k.x * w, float(y + 3 - face), float(z) + k.y * h);" & LF &
      "  else               p = vec3(float(x) + k.x * w, float(y) + k.y * h, float(z + 5 - face));" & LF &
-     "  vec3 g = vec3(a_origin.xyz) + p;" & LF &
+     --  (a tile of the far view: its quads are in cells of 2 ** level blocks)
+     "  vec3 g = vec3(a_origin.xyz) + p * float(1 << a_origin.w);" & LF &
      "  v_grid = g * 0.25;" & LF &
      --  Foliage (see the spec): this corner's six bits say which way the
      --  foliage lies from it on each axis, if it is open on two or three: an
      --  edge or a corner of a clump, which is cut back and strays a little.
-     "  if (soft) {" & LF &
+     --  A dressed roof (see the spec): the corner is moved just as far as
+     --  its bits say, and the light goes by the face as it then lies (its
+     --  four corners moved, and the turn of the face from where it was).
+     "  if (soft && (q.x & 0x80000000u) != 0u) {" & LF &
+     "    uint bits = ((q.y >> 16u) & 0xFFFFu) | ((q.y & 0xFFu) << 16u);" & LF &
+     "    vec3 cn[4];" & LF &
+     "    for (int i = 0; i < 4; i++) {" & LF &
+     "      vec2 kk = vec2((i == 1 || i == 2) ? 1.0 : 0.0, (i >= 2) ? 1.0 : 0.0);" & LF &
+     "      vec3 pp;" & LF &
+     "      if (face < 2) pp = vec3(float(x + 1 - face), float(y) + kk.x, float(z) + kk.y);" & LF &
+     "      else if (face < 4) pp = vec3(float(x) + kk.x, float(y + 3 - face), float(z) + kk.y);" & LF &
+     "      else pp = vec3(float(x) + kk.x, float(y) + kk.y, float(z + 5 - face));" & LF &
+     "      uint cd = (bits >> uint(6 * i)) & 63u;" & LF &
+     "      uint cz = (cd >> 4u) & 3u;" & LF &
+     "      cn[i] = pp + vec3(0.25 * pull_of(cd & 3u), 0.25 * pull_of((cd >> 2u) & 3u)," &
+     " cz == 2u ? -1.0 : cz == 3u ? -0.5 : cz == 1u ? 1.0 : 0.0);" & LF &
+     "    }" & LF &
+     "    int ci = (k.y < 0.5) ? int(k.x) : 3 - int(k.x);" & LF &
+     "    g = vec3(a_origin.xyz) + cn[ci];" & LF &
+     "    vec3 fn = cross(cn[2] - cn[0], cn[3] - cn[1]);" & LF &
+     "    const vec3 fnorm[6] = vec3[6](vec3(1,0,0), vec3(-1,0,0), vec3(0,1,0), vec3(0,-1,0), vec3(0,0,1), vec3(0,0,-1));" & LF &
+     "    if (dot(fn, fnorm[face]) < 0.0) fn = -fn;" & LF &
+     "    v_bend = vec4(dot(fn, fn) > 1.0e-6 ? normalize(fn) - fnorm[face] : vec3(0.0), 0.0);" & LF &
+     "  }" & LF &
+     "  else if (soft) {" & LF &
      "    int ci = (k.y < 0.5) ? int(k.x) : 3 - int(k.x);" & LF &
      "    uint bits = ((q.y >> 16u) & 0xFFFFu) | ((q.y & 0xFFu) << 16u);" & LF &
      "    uint code = (bits >> uint(6 * ci)) & 63u;" & LF &
      "    vec3 pull = vec3(pull_of(code & 3u), pull_of((code >> 2u) & 3u), pull_of((code >> 4u) & 3u));" & LF &
      "    float n = abs(pull.x) + abs(pull.y) + abs(pull.z);" & LF &
-     "    if (n > 1.5) {" & LF &
+     "    if (n > 1.5 && v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Boulder)) & "u) {" & LF &
+     "      g += pull * " & GLSL (Float (Boulder_Cut)) & ";" & LF &
+     "      vec3 fn = vec3(face == 0 ? 1.0 : face == 1 ? -1.0 : 0.0, face == 2 ? 1.0 : face == 3 ? -1.0 : 0.0," &
+     " face == 4 ? 1.0 : face == 5 ? -1.0 : 0.0);" & LF &
+     --  (a corner drawn out of a hollow, bit 20 + its number: the way out is the way it went)
+     "      bool outw = ((q.x >> (20u + uint(ci))) & 1u) != 0u;" & LF &
+     "      v_bend = vec4(normalize(outw ? pull : -pull) - fn, 0.0);" & LF &
+     "    }" & LF &
+     "    else if (n > 1.5) {" & LF &
      "      ivec3 gi = ivec3(round(g));" & LF &
      "      uint hh = vhash(gi + ivec3(17, 5, 3));" & LF &
      "      vec3 j = vec3(float(hh & 1023u), float((hh >> 10u) & 1023u), float((hh >> 20u) & 1023u)) / 1023.0 - 0.5;" & LF &
@@ -295,10 +333,20 @@ package body Castle.Render is
      "uniform vec3 u_eye;" & LF &
      "uniform vec3 u_focus;" & LF &
      "uniform float u_fog_dist;" & LF &
+     "uniform vec2 u_far;" & LF &              --  the haze at the edge of what is streamed in (1: all, as it was); where it is all
      "uniform float u_vis;" & LF &             --  weather haze per metre from the eye
      "uniform float u_mist;" & LF &            --  0 none .. 1 thick
      "uniform vec3 u_mist_col;" & LF &
      "layout(binding = 16) uniform sampler2D u_base;" & LF &   --  r: the land's level thereabouts (m); g: how damp the place is
+     "uniform vec3 u_ghaze;" & LF &            --  the ground haze (see the spec): how thick at the focus, at the view's edge, far off (1/m; 0: none)
+     "uniform float u_rim;" & LF &             --  the map's rim goes into the haze over this many metres (0: it does not)
+     "layout(binding = 24) uniform sampler2D u_haze_top;" & LF &   --  how deep the ground haze lies on the ground (m)
+     "layout(binding = 1) uniform sampler2D u_height;" & LF &      --  the land's height as it was made (m), a number a metre
+     --  How far over the ground's level a point still counts as the ground,
+     --  for the haze: half a block; half its cell, for a tile of the far view
+     --  (whose tops stand up to that much over the ground they stand for);
+     --  everything, for open water.  Set by whoever calls air.
+     "float g_slack = 0.125;" & LF &
      "uniform float u_time;" & LF &
      "uniform float u_cover;" & LF &
      "uniform vec2 u_drift;" & LF &
@@ -502,10 +550,37 @@ package body Castle.Render is
      "vec3 air(vec3 c, vec3 p, out float thru) {" & LF &
      "  vec3 d = normalize(p - u_eye);" & LF &
      "  vec3 hz = haze(d);" & LF &
-     "  float fog = clamp((length(p.xy - u_focus.xy) - 0.6 * u_fog_dist) / (0.4 * u_fog_dist), 0.0, 1.0);" & LF &
+     --  (with the far land drawn beyond, the loaded land is not all haze at
+     --  its edge: u_far.x of it, and the rest by u_far.y; with u_far.x 1 this
+     --  is the one clamp it always was, to the bit)
+     "  float gd = length(p.xy - u_focus.xy);" & LF &
+     "  float fog = u_far.x * clamp((gd - 0.6 * u_fog_dist) / (0.4 * u_fog_dist), 0.0, 1.0)" & LF &
+     "            + (1.0 - u_far.x) * clamp((gd - u_fog_dist) / (u_far.y - u_fog_dist), 0.0, 1.0);" & LF &
      "  float murk = 1.0 - exp(-length(p - u_eye) * u_vis);" & LF &
      "  c = mix(mix(c, hz, fog), hz, murk);" & LF &
      "  thru = (1.0 - fog) * (1.0 - murk);" & LF &
+     --  (the ground haze: how deep under its top the point is, and how thick
+     --  it lies that far from the focus; then the map's rim)
+     "  if (u_ghaze.z > 0.0) {" & LF &
+     "    float deep = textureLod(u_haze_top, p.xy / 2048.0, 0.0).r" & LF &
+     "                 - max(p.z - textureLod(u_height, p.xy / 2048.0, 0.0).r - g_slack, 0.0);" & LF &
+     "    if (deep > 0.0) {" & LF &
+     --  (far from the focus and from under the eye alike: the ground one stands over is as clear as the ground one looks at)
+     "      float hd = min(gd, length(p.xy - u_eye.xy));" & LF &
+     "      float k = mix(u_ghaze.x, u_ghaze.y, smoothstep(" & GLSL (Float (Haze_From)) & " * u_fog_dist, "
+     & GLSL (Float (Haze_Edge_At)) & " * u_fog_dist, hd))" & LF &
+     "              + (u_ghaze.z - u_ghaze.y) * smoothstep(" & GLSL (Float (Haze_Edge_At)) & " * u_fog_dist, "
+     & GLSL (Float (Haze_Far_At)) & " * u_fog_dist, hd);" & LF &
+     "      float through = exp(-k * deep);" & LF &
+     "      c = mix(hz, c, through);" & LF &
+     "      thru *= through;" & LF &
+     "    }" & LF &
+     "  }" & LF &
+     "  if (u_rim > 0.0) {" & LF &
+     "    float open = smoothstep(0.0, u_rim, min(min(p.x, 2048.0 - p.x), min(p.y, 2048.0 - p.y)));" & LF &
+     "    c = mix(hz, c, open);" & LF &
+     "    thru *= open;" & LF &
+     "  }" & LF &
      "  if (u_mist > 0.0) {" & LF &
      "    float mt = mist_through(p);" & LF &
      "    c = mix(mist_colour(d), c, mt);" & LF &
@@ -521,6 +596,154 @@ package body Castle.Render is
      "  c = clamp(mix(vec3(l), c, 1.18), 0.0, 1.0);" & LF &
      "  c = mix(c, c * c * (3.0 - 2.0 * c), 0.35);" & LF &
      "  return c * vec3(1.03, 1.0, 0.95);" & LF &
+     "}" & LF;
+
+   --  The far land (see the spec): a grid of Castle.Far's cells, its
+   --  corners' heights from a texture, six vertices a cell with no buffer.
+   Far_Vertex_Source : constant String :=
+     "#version 450 core" & LF &
+     "layout(binding = 18) uniform sampler2D u_far_z;" & LF &
+     "uniform mat4 u_viewproj;" & LF &
+     "uniform vec3 u_camera;" & LF &
+     "out vec3 v_world;" & LF &
+     "const ivec2 corner[6] = ivec2[6](ivec2(0, 0), ivec2(1, 0), ivec2(1, 1), ivec2(0, 0), ivec2(1, 1), ivec2(0, 1));" & LF &
+     "void main() {" & LF &
+     "  int cell = gl_VertexID / 6;" & LF &
+     "  ivec2 g = ivec2(cell % " & GLSL_Int (Castle.Far.Cells) & ", cell / " & GLSL_Int (Castle.Far.Cells)
+     & ") + corner[gl_VertexID % 6];" & LF &
+     "  v_world = vec3(vec2(g) * " & GLSL (Float (Castle.Far.Cell_M)) & ", texelFetch(u_far_z, g, 0).r);" & LF &
+     "  gl_Position = u_viewproj * vec4(v_world - u_camera, 1.0);" & LF &
+     "}" & LF;
+
+   Far_Fragment_Head : constant String :=
+     "#version 450 core" & LF &
+     "in vec3 v_world;" & LF &
+     "out vec4 o_color;" & LF &
+     "layout(binding = 19) uniform sampler2D u_far_col;" & LF &      --  rgb: the ground; a: what the cell is (Castle.Far.Class)
+     "layout(binding = 20) uniform sampler2D u_far_flag;" & LF &     --  a stack whose own mesh is loaded
+     "uniform vec3 u_snow;" & LF &
+     "uniform float u_ice;" & LF &
+     "uniform float u_wet;" & LF &
+     "uniform vec2 u_leaf;" & LF &
+     "uniform float u_grass_dry;" & LF &
+     "uniform vec3 u_crown[3];" & LF;          --  a broadleaf's, an aspen's and a conifer's crown
+
+   Far_Fragment_Body : constant String :=
+     "uint fhash(ivec2 p) {" & LF &
+     "  uint h = uint(p.x) * 0x8da6b343u ^ uint(p.y) * 0xd8163841u;" & LF &
+     "  h ^= h >> 16u; h *= 0x7feb352du; h ^= h >> 15u;" & LF &
+     "  return h;" & LF &
+     "}" & LF &
+     "float snow_depth(float z) {" & LF &
+     "  if (z <= 16.0) return u_snow.x;" & LF &
+     "  if (z <= 70.0) return mix(u_snow.x, u_snow.y, (z - 16.0) / 54.0);" & LF &
+     "  if (z <= 140.0) return mix(u_snow.y, u_snow.z, (z - 70.0) / 70.0);" & LF &
+     "  return u_snow.z;" & LF &
+     "}" & LF &
+     "void main() {" & LF &
+     "  ivec2 cell = clamp(ivec2(floor(v_world.xy / " & GLSL (Float (Castle.Far.Cell_M)) & ")), ivec2(0), ivec2("
+     & GLSL_Int (Castle.Far.Cells - 1) & "));" & LF &
+     "  vec4 t = texelFetch(u_far_col, cell, 0);" & LF &
+     "  int code = int(t.a * 255.0 + 0.5);" & LF &
+     "  int cls = code / " & GLSL_Int (Castle.Far.Class_Step) & ";" & LF &
+     "  bool wet = (code % " & GLSL_Int (Castle.Far.Class_Step) & ") >= " & GLSL_Int (Castle.Far.Wet_Step) & ";" & LF &
+     "  bool water = cls == 5;" & LF &
+     "  bool crown = cls >= 2 && cls <= 4;" & LF &
+     --  The sheet lies under the land as it was made (Castle.Far), so a
+     --  stack's own mesh hides it and no hole is cut for one.  It is dropped
+     --  where such a mesh is drawn (the loaded stacks whose nearest side is
+     --  within the fog distance of the focus: Draw's own test, half a metre
+     --  less here, so that where the two disagree by a hair both are drawn)
+     --  only if the land there is no longer as it was made (the stack has
+     --  been edited: a pit would show the sheet), or the cell stands at open
+     --  water's level (the water's surface is drawn over its bed, and the
+     --  sheet would lie between).
+     "  ivec2 st = clamp(ivec2(floor(v_world.xy / 8.0)), ivec2(0), ivec2(" & GLSL_Int (Chunks_XY - 1) & "));" & LF &
+     "  float flag = texelFetch(u_far_flag, st, 0).r;" & LF &      --  0: no mesh of its own; a half: one; 1: one, and edited
+     "  if (flag > 0.25 && (wet || flag > 0.75)) {" & LF &
+     "    vec2 lo = vec2(st) * 8.0;" & LF &
+     "    vec2 g = max(vec2(0.0), max(lo - u_focus.xy, u_focus.xy - (lo + 8.0)));" & LF &
+     "    float fd = max(u_fog_dist - 0.5, 0.0);" & LF &
+     "    if (dot(g, g) < fd * fd) discard;" & LF &
+     "  }" & LF &
+     "  uint h = fhash(cell);" & LF &
+     "  float r1 = float(h & 1023u) / 1023.0;" & LF &
+     "  float r2 = float((h >> 10u) & 1023u) / 1023.0;" & LF &
+     --  the lie of the land, from the map's height field (as the land's own
+     --  far lighting goes by it); water lies flat
+     "  vec2 hp = v_world.xy / 2048.0;" & LF &
+     "  const float e = 2.0 / 2048.0;" & LF &
+     "  float hx = texture(u_height, hp + vec2(e, 0.0)).r - texture(u_height, hp - vec2(e, 0.0)).r;" & LF &
+     "  float hy = texture(u_height, hp + vec2(0.0, e)).r - texture(u_height, hp - vec2(0.0, e)).r;" & LF &
+     "  vec3 n = water ? vec3(0.0, 0.0, 1.0) : normalize(vec3(-0.25 * hx, -0.25 * hy, 1.0));" & LF &
+     --  (the ground's colour runs from one cell into the next; what a cell is does not)
+     "  vec3 c = texture(u_far_col, v_world.xy / 2048.0).rgb;" & LF &
+     "  float turfy = (cls == 1) ? 1.0 : 0.0;" & LF &
+     --  A crown: its leaves' colour, a little its own tree's; a broadleaf's
+     --  turns in autumn and then is gone, tree by tree, and the ground under
+     --  it shows through its boughs.
+     "  float bare = 0.0;" & LF &
+     "  if (crown) {" & LF &
+     "    vec3 k = u_crown[cls - 2] * (1.0 + 0.16 * (r1 - 0.5)) * vec3(1.0 + 0.10 * (r2 - 0.5), 1.0, 1.0 - 0.10 * (r2 - 0.5));" & LF &
+     "    if (cls != 4) {" & LF &
+     "      float tree = (cls == 3) ? 0.0 : r2;" & LF &
+     "      vec3 autumn = (tree < 0.3) ? " & GLSL (Castle.Colors.Aged_Gold)
+     & " : (tree < 0.6) ? " & GLSL (Castle.Colors.Warm_Copper) & LF &
+     "                  : (tree < 0.85) ? " & GLSL (Castle.Colors.Brightened_Crimson)
+     & " : " & GLSL (Castle.Colors.Warm_Umber) & ";" & LF &
+     "      float l = clamp(dot(k, vec3(0.3, 0.59, 0.11)) / 0.3, 0.6, 1.4);" & LF &
+     "      k = mix(k, autumn * l, u_leaf.x);" & LF &
+     "      bare = clamp((u_leaf.y * 1.001 - 0.6 * r1) / 0.4, 0.0, 1.0);" & LF &
+     "    }" & LF &
+     --  (bare, its boughs stand over the ground: a little of their grey-brown)
+     "    c = mix(k * " & GLSL (Float (Far_Crown)) & ", mix(c, " & GLSL (Castle.Colors.Warm_Umber) & ", 0.30), bare);" & LF &
+     "    turfy = bare;" & LF &
+     "  }" & LF &
+     --  A meadow's drifts and its drying, as the land has them.
+     "  if (turfy > 0.0) {" & LF &
+     "    float d1 = texture(u_noise, v_world.xy / 53.0).r;" & LF &
+     "    float d2 = texture(u_noise, v_world.yx / 137.0 + 0.41).r;" & LF &
+     "    float tone = 1.0 + " & GLSL (Float (2.0 * Meadow_Tone)) & " * (0.65 * d1 + 0.35 * d2 - 0.5);" & LF &
+     "    float sere = " & GLSL (Float (Meadow_Sere)) & " * smoothstep(0.5, 0.85, 0.5 + d2 - d1);" & LF &
+     "    c = mix(c, c * tone * mix(vec3(1.0), vec3(1.16, 1.02, 0.70), sere), turfy);" & LF &
+     "    if (u_grass_dry > 0.0) {" & LF &
+     "      float l = dot(c, vec3(0.3, 0.59, 0.11));" & LF &
+     "      c = mix(c, vec3(1.35, 1.12, 0.55) * l * 1.25, 0.85 * u_grass_dry * turfy);" & LF &
+     "    }" & LF &
+     "  }" & LF &
+     "  vec3 amb = mix(u_gnd_amb, u_sky_amb, 0.5 + 0.5 * n.z);" & LF &
+     "  float sun = max(dot(n, u_lamp), 0.0);" & LF &
+     "  float lit = (sun > 0.0) ? cloud_shade(v_world) : 1.0;" & LF &
+     "  vec3 light = amb + u_lamp_col * sun * lit;" & LF &
+     --  Snow on what looks up at the sky; a crown holds less of it.
+     "  float snow = water ? 0.0 : snow_depth(v_world.z);" & LF &
+     "  float coat = 0.0;" & LF &
+     "  if (snow > 0.0) {" & LF &
+     "    float patchy = smoothstep(0.0, 0.05, snow * (0.5 + texture(u_noise, v_world.xy / 9.0).r));" & LF &
+     "    coat = smoothstep(0.55, 0.9, n.z) * patchy * (crown ? mix(0.45, 0.70, bare) : 1.0);" & LF &
+     "    c = mix(c, vec3(0.92, 0.94, 0.98), coat);" & LF &
+     "  }" & LF &
+     "  c *= 1.0 - " & GLSL (Float (Wet_Dark)) & " * u_wet * (1.0 - coat);" & LF &
+     "  vec3 col = c * light;" & LF &
+     --  Open water: its hue, the sky in it (more the flatter it is seen), and ice.
+     "  if (water) {" & LF &
+     "    vec3 v = normalize(u_eye - v_world);" & LF &
+     "    float fres = pow(1.0 - max(v.z, 0.0), 3.0);" & LF &
+     "    col = mix(" & GLSL (Castle.Colors.Storm_Blue) & ", " & GLSL (Castle.Colors.Royal_Indigo) & ", 0.5) * light;" & LF &
+     "    col = mix(col, sky_at(reflect(-v, n), lit, 0.0), mix(" & GLSL (Float (Far_Mirror)) & ", 0.9, fres));" & LF &
+     "    if (u_ice > 0.0) {" & LF &
+     "      float ice = smoothstep(0.0, 0.15, u_ice * 1.6 - 0.6 * texture(u_noise, v_world.xy / 23.0).r);" & LF &
+     "      col = mix(col, mix(vec3(0.74, 0.84, 0.92), vec3(0.92, 0.94, 0.98)," & LF &
+     "                         ice * smoothstep(0.0, 0.05, snow_depth(v_world.z))) * light, ice);" & LF &
+     "    }" & LF &
+     "  }" & LF &
+     "  float thru;" & LF &
+     "  col = air(col, v_world, thru);" & LF &
+     --  (the world ends: toward the map's edge the sheet goes into the haze,
+     --  so that its end is not a straight line against the sky)
+     "  float rim = min(min(v_world.x, 2048.0 - v_world.x), min(v_world.y, 2048.0 - v_world.y));" & LF &
+     "  col = mix(haze(normalize(v_world - u_eye)), col, smoothstep(0.0, " & GLSL (Float (Far_Rim_M)) & ", rim));" & LF &
+     "  o_color = vec4(grade(col), 1.0);" & LF &
      "}" & LF;
 
    --  Broadleaf leaves fall tree by tree: a 3 m patch (roughly one crown)
@@ -801,6 +1024,8 @@ package body Castle.Render is
      "uniform vec2 u_px;" & LF &               --  one pixel of the window, of the whole picture
      "uniform float u_stars;" & LF &           --  how much the stars show (none by day)
      "uniform vec2 u_star_turn;" & LF &        --  how far the sky has turned about the pole (cosine, sine)
+     "uniform float u_floor;" & LF &           --  1: under the land a floor (see the spec, Ground_Floor)
+     "uniform int u_drop;" & LF &              --  1: the sun and the moon go down behind the map's edge (see the spec, Low_Horizon)
      "layout(binding = 15) uniform sampler2D u_clouds;" & LF &
      "out vec4 o_color;" & LF &
      Sky_Source &
@@ -838,11 +1063,65 @@ package body Castle.Render is
      "  vec3 tint = mix(vec3(1.0, 0.86, 0.72), vec3(0.78, 0.86, 1.0), float((h >> 5u) & 31u) / 31.0);" & LF &
      "  return tint * dot_ * (0.10 + 0.90 * bright) * u_stars * smoothstep(0.0, 0.22, d.z);" & LF &
      "}" & LF &
+     --  (Low_Horizon) How far under eye level the map's edge lies, seen
+     --  along D: the sine of it near enough, from the land's height where
+     --  the line leaves the map, less Horizon_Under_M; none where the line
+     --  does not cross the map or that is not under the eye.
+     "float edge_under(vec3 d) {" & LF &
+     "  float l = length(d.xy);" & LF &
+     "  if (l < 1.0e-4) return 0.0;" & LF &
+     "  vec2 h = d.xy / l;" & LF &
+     "  vec2 inv = 1.0 / vec2(abs(h.x) > 1.0e-5 ? h.x : 1.0e-5, abs(h.y) > 1.0e-5 ? h.y : 1.0e-5);" & LF &
+     "  vec2 ta = (vec2(0.0) - u_eye.xy) * inv, tb = (vec2(2048.0) - u_eye.xy) * inv;" & LF &
+     "  float t0 = max(max(min(ta.x, tb.x), min(ta.y, tb.y)), 0.0);" & LF &
+     "  float t1 = min(max(ta.x, tb.x), max(ta.y, tb.y));" & LF &
+     "  if (t1 <= t0) return 0.0;" & LF &
+     "  vec2 e = clamp(u_eye.xy + h * t1, vec2(0.5), vec2(2047.5));" & LF &
+     "  float under = u_eye.z - textureLod(u_height, e / 2048.0, 0.0).r + " & GLSL (Float (Horizon_Under_M)) & ";" & LF &
+     "  return (under > 0.0) ? under / length(vec2(under, t1)) : 0.0;" & LF &
+     "}" & LF &
      "void main() {" & LF &
      "  vec3 d = normalize(u_fwd + v_ndc.x * u_right + v_ndc.y * u_up);" & LF &
      "  vec3 c;" & LF &
-     "  if (d.z <= 0.004) c = haze(d);" & LF &
-     "  else {" & LF &
+     "  bool floored = false;" & LF &
+     "  if (d.z <= 0.004) {" & LF &
+     "    c = haze(d);" & LF &
+     --  (the floor under the land: the line of sight walked across the map
+     --  in even strides until it is under the land's level thereabouts, less
+     --  Floor_Under_M, and the place found between the last two; a line that
+     --  leaves the map over the land is the sky's)
+     "    if (u_floor > 0.0 && d.z < -0.001) {" & LF &
+     "      vec2 inv = 1.0 / vec2(abs(d.x) > 1.0e-5 ? d.x : 1.0e-5, abs(d.y) > 1.0e-5 ? d.y : 1.0e-5);" & LF &
+     "      vec2 ta = (vec2(0.0) - u_eye.xy) * inv, tb = (vec2(2048.0) - u_eye.xy) * inv;" & LF &
+     "      float t0 = max(max(min(ta.x, tb.x), min(ta.y, tb.y)), 0.0);" & LF &
+     "      float t1 = min(min(max(ta.x, tb.x), max(ta.y, tb.y)), -u_eye.z / d.z);" & LF &
+     "      if (t1 > t0) {" & LF &
+     "        const int steps = 24;" & LF &
+     "        float dt = (t1 - t0) / float(steps), over0 = 1.0, tl = t0;" & LF &
+     "        for (int i = 0; i <= steps; i++) {" & LF &
+     "          float t = t0 + dt * float(i);" & LF &
+     "          vec3 q = u_eye + d * t;" & LF &
+     "          float over = q.z - (textureLod(u_base, q.xy / 2048.0, 0.0).r - " & GLSL (Float (Floor_Under_M)) & ");" & LF &
+     "          if (over <= 0.0) {" & LF &
+     "            float th = (i == 0) ? t : mix(tl, t, over0 / max(over0 - over, 1.0e-4));" & LF &
+     "            float thru;" & LF &
+     "            c = air(" & GLSL (Castle.Colors.Charcoal) & " * (u_sky_amb + u_gnd_amb + 0.5 * u_lamp_col), u_eye + d * th, thru);" & LF &
+     "            floored = true;" & LF &
+     "            break;" & LF &
+     "          }" & LF &
+     "          over0 = over; tl = t;" & LF &
+     "        }" & LF &
+     "      }" & LF &
+     "    }" & LF &
+     --  (Low_Horizon: under eye level the sky is the haze as ever, but the
+     --  sun and the moon are drawn on it down to the map's edge, fading
+     --  out by the last Sun_Gone under eye level, as the sun's light on
+     --  the land does: so they go down behind the land, or into the haze
+     --  over it, and never at a line of their own above it)
+     "    if (!floored && u_drop == 1 && d.z > " & GLSL (Float (Sun_Gone)) & ") {" & LF &
+     "      if (d.z > -edge_under(d)) c = orbs(c, d, smoothstep(" & GLSL (Float (Sun_Gone)) & ", 0.0, d.z));" & LF &
+     "    }" & LF &
+     "  } else {" & LF &
      "    vec3 back = sky_back(d) + glow(d);" & LF &
      "    if (u_stars > 0.0) back += stars(d);" & LF &
      "    back = orbs(back, d, 1.0);" & LF &
@@ -858,7 +1137,7 @@ package body Castle.Render is
      "      c = mix(back, cloud_tone(d), k * 0.92);" & LF &
      "    }" & LF &
      "  }" & LF &
-     "  o_color = vec4(grade(sky_mist(c, d)), 1.0);" & LF &
+     "  o_color = vec4(grade(floored ? c : sky_mist(c, d)), 1.0);" & LF &
      "}" & LF;
 
    --  Share of sunlight reaching point P on a face with normal N.  There
@@ -882,23 +1161,56 @@ package body Castle.Render is
      "uniform float u_shadow_texel;" & LF &      --  metres; 0: no shadows
      "uniform float u_fig_texel;" & LF &
      "uniform float u_shadow_mix;" & LF &
+     --  The far maps (see the spec, Far_Shadows): four filtered taps each.
+     --  (Every tap of a depth map here is at a given detail, the maps having
+     --  one: they are read inside branches that not every pixel takes.)
+     "layout(binding = 22) uniform sampler2DShadow u_farsh;" & LF &
+     "layout(binding = 23) uniform sampler2DShadow u_farsh_b;" & LF &
+     "uniform mat4 u_farl_vp;" & LF &
+     "uniform mat4 u_farl_vp_b;" & LF &
+     "uniform vec2 u_far_sh;" & LF &            --  from the focus: where the far maps begin to take over, and where they have (0: there are none)
+     "uniform vec2 u_far_sh2;" & LF &           --  their bias, of their depth; a texel of theirs in metres
+     "float lit_far(sampler2DShadow m, mat4 vp, vec3 p) {" & LF &
+     "  vec3 s = (vp * vec4(p, 1.0)).xyz * 0.5 + 0.5;" & LF &
+     "  if (s.x <= 0.0 || s.y <= 0.0 || s.x >= 1.0 || s.y >= 1.0 || s.z >= 1.0) return 1.0;" & LF &
+     --  (four filtered taps three quarters of a texel out: an edge three
+     --  texels wide, 2 m, so that the two held maps, whose texels do not lie
+     --  alike on the ground, go over into each other without the edge creeping)
+     "  float t = 0.75 / float(textureSize(m, 0).x);" & LF &
+     "  float z = s.z - u_far_sh2.x;" & LF &
+     "  return 0.25 * (textureLod(m, vec3(s.xy + vec2(-t, -t), z), 0.0) + textureLod(m, vec3(s.xy + vec2(t, -t), z), 0.0)" & LF &
+     "               + textureLod(m, vec3(s.xy + vec2(-t, t), z), 0.0) + textureLod(m, vec3(s.xy + vec2(t, t), z), 0.0));" & LF &
+     "}" & LF &
      "float lit_in(sampler2DShadow m, mat4 vp, vec3 p, float fade) {" & LF &
      "  vec3 s = (vp * vec4(p, 1.0)).xyz * 0.5 + 0.5;" & LF &
      "  if (s.x <= 0.0 || s.y <= 0.0 || s.x >= 1.0 || s.y >= 1.0 || s.z >= 1.0) return 1.0;" & LF &
      "  float t = 1.0 / float(textureSize(m, 0).x);" & LF &
      "  float sum = 0.0;" & LF &
      "  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++)" & LF &
-     "    sum += texture(m, vec3(s.xy + vec2(float(i), float(j)) * t, s.z));" & LF &
+     "    sum += textureLod(m, vec3(s.xy + vec2(float(i), float(j)) * t, s.z), 0.0);" & LF &
      "  vec2 e = min(s.xy, 1.0 - s.xy);" & LF &
      "  return mix(1.0, sum / 9.0, clamp(min(e.x, e.y) / max(fade, 1.0e-4), 0.0, 1.0));" & LF &
      "}" & LF &
      "float sunlit(vec3 p, vec3 n) {" & LF &
      "  if (u_shadow_texel <= 0.0) return 1.0;" & LF &
-     "  vec3 pw = p + n * (1.5 * u_shadow_texel);" & LF &
-     "  vec3 pf = p + n * (1.5 * u_fig_texel);" & LF &
-     "  float a = min(lit_in(u_shadow, u_light_vp, pw, 0.0), lit_in(u_figsh, u_fig_vp, pf, 0.04));" & LF &
-     "  float b = min(lit_in(u_shadow_b, u_light_vp_b, pw, 0.0), lit_in(u_figsh_b, u_fig_vp_b, pf, 0.04));" & LF &
-     "  return mix(a, b, u_shadow_mix);" & LF &
+     --  (which maps a point asks: the near ones up to the fog distance, the
+     --  far ones from Far_Shadow_Blend of it; in the one or the other alone
+     --  only that one's taps are made.  Asked of every point with no branch,
+     --  the far maps' two taps cost a tenth of a millisecond at the meadow.)
+     "  float w = (u_far_sh.y > 0.0) ? smoothstep(u_far_sh.x, u_far_sh.y, length(p.xy - u_focus.xy)) : 0.0;" & LF &
+     "  float near = 1.0, far = 1.0;" & LF &
+     "  if (w < 1.0) {" & LF &
+     "    vec3 pw = p + n * (1.5 * u_shadow_texel);" & LF &
+     "    vec3 pf = p + n * (1.5 * u_fig_texel);" & LF &
+     "    float a = min(lit_in(u_shadow, u_light_vp, pw, 0.0), lit_in(u_figsh, u_fig_vp, pf, 0.04));" & LF &
+     "    float b = min(lit_in(u_shadow_b, u_light_vp_b, pw, 0.0), lit_in(u_figsh_b, u_fig_vp_b, pf, 0.04));" & LF &
+     "    near = mix(a, b, u_shadow_mix);" & LF &
+     "  }" & LF &
+     "  if (w > 0.0) {" & LF &
+     "    vec3 pq = p + n * (1.2 * u_far_sh2.y);" & LF &
+     "    far = mix(lit_far(u_farsh, u_farl_vp, pq), lit_far(u_farsh_b, u_farl_vp_b, pq), u_shadow_mix);" & LF &
+     "  }" & LF &
+     "  return mix(near, far, w);" & LF &
      "}" & LF;
 
    --  A vertex of a figure's box (Castle.Figures), shared by the shader that
@@ -1120,6 +1432,7 @@ package body Castle.Render is
      "flat in int v_face;" & LF &
      "flat in uint v_ao;" & LF &
      "flat in uint v_fr;" & LF &
+     "flat in int v_lod;" & LF &
      "flat in float v_depth;" & LF &
      "uniform uvec2 u_foliage;" & LF &      --  leaves, needles, bushes: drawn soft
      "uniform int u_turf;" & LF &           --  the fringe's two kinds of ground: turf,
@@ -1129,7 +1442,11 @@ package body Castle.Render is
      "layout(binding = 10) uniform sampler2D u_scene_z;" & LF &
      "uniform mat4 u_viewproj;" & LF &
      "uniform int u_reflect;" & LF &
-     "layout(binding = 1) uniform sampler2D u_height;" & LF &
+     "uniform vec3 u_far_view;" & LF &      --  the far view: where the stacks' ring ends (0: no far view); its cross-fade;
+                                            --  where the stacks begin to give way
+     "uniform vec3 u_zp;" & LF &            --  the camera's planes: 2 n f, f + n, f - n
+     "layout(binding = 20) uniform sampler2D u_stack_flag;" & LF &    --  a stack whose own mesh is loaded
+     "layout(binding = 21) uniform sampler2D u_far_have;" & LF &      --  how far in each level of the far view is, over each 16 m
      "uniform uvec2 u_ground;" & LF &
      "uniform int u_a2c;" & LF &
      "uniform vec3 u_camera;" & LF &
@@ -1150,6 +1467,17 @@ package body Castle.Render is
      "uniform int u_grain;" & LF &
      "uniform uvec2 u_crowns;" & LF &
      "uniform int u_aspen;" & LF &          --  the aspen's leaves: gold in autumn
+     --  roofs cleared on the camera's ray (Castle.Cutaway, the same taper as
+     --  its Cover): where (x, y), along which way (x, y); half the walls'
+     --  lengths, the floor and the ridge; how far cleared
+     "uniform int u_thatch;" & LF &
+     "uniform uvec2 u_walls;" & LF &        --  what a wall can be made of (asked before its place is: daub, timber)
+     "uniform vec4 u_roof_box;" & LF &      --  round every cleared house (x, y least; x, y most)
+     "uniform int u_samples;" & LF &
+     "uniform int u_roofs;" & LF &
+     "uniform vec4 u_roof_a[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
+     "uniform vec4 u_roof_b[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
+     "uniform float u_roof_f[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
      "out vec4 o_color;" & LF &
      Sky_Source &
      Sunlit_Source &
@@ -1159,6 +1487,54 @@ package body Castle.Render is
      "  uint h = uint(p.x) * 0x8da6b343u ^ uint(p.y) * 0xd8163841u ^ uint(p.z) * 0xcb1ab31fu;" & LF &
      "  h ^= h >> 16u; h *= 0x7feb352du; h ^= h >> 15u;" & LF &
      "  return h;" & LF &
+     "}" & LF &
+     --  How much of a roof is drawn here: 1 whole (or no cleared roof's);
+     --  cleared, a share over its walls and eaves, thinning to nothing
+     --  inward (Castle.Cutaway.Cover, the same sum).
+     "float roof_cover(vec3 p) {" & LF &
+     "  float k = 1.0;" & LF &
+     "  for (int i = 0; i < u_roofs; i++) {" & LF &
+     "    vec2 d = p.xy - u_roof_a[i].xy;" & LF &
+     "    vec2 w = u_roof_a[i].zw;" & LF &
+     "    vec2 q = abs(vec2(dot(d, w), d.y * w.x - d.x * w.y));" & LF &
+     "    vec4 b = u_roof_b[i];" & LF &
+     "    if (q.x > b.x + " & GLSL (Float (Castle.Cutaway.Eave_M)) & " || q.y > b.y + "
+     & GLSL (Float (Castle.Cutaway.Eave_M)) & " || p.z < b.z || p.z > b.w + 0.5) continue;" & LF &
+     "    float r = " & GLSL (Float (Castle.Cutaway.Edge_Cover)) & " * (1.0 - smoothstep(0.0, "
+     & GLSL (Float (Castle.Cutaway.Taper_M)) & ", min(b.x - q.x, b.y - q.y)));" & LF &
+     "    k = min(k, 1.0 - u_roof_f[i] * (1.0 - r));" & LF &
+     "  }" & LF &
+     "  return k;" & LF &
+     "}" & LF &
+     --  How much of a wall is drawn here: 1 whole (not in a cleared house's
+     --  walls' line above its floor, or a wall whose outward side does not
+     --  face the eye); nothing where it faces the eye squarely, fading to
+     --  whole edge-on (Castle.Cutaway.Wall_Cover, the same sum).
+     "float wall_cover(vec3 p) {" & LF &
+     "  float k = 1.0;" & LF &
+     "  for (int i = 0; i < u_roofs; i++) {" & LF &
+     "    vec2 d = p.xy - u_roof_a[i].xy;" & LF &
+     "    vec2 w = u_roof_a[i].zw;" & LF &
+     "    vec2 l = vec2(dot(d, w), d.y * w.x - d.x * w.y);" & LF &
+     "    vec4 b = u_roof_b[i];" & LF &
+     "    vec2 inn = b.xy - abs(l);" & LF &
+     "    if (inn.x < -0.02 || inn.y < -0.02 || min(inn.x, inn.y) > " & GLSL (Float (Castle.Cutaway.Wall_M))
+     & " || p.z < b.z + 0.03 || p.z > b.w + 0.5) continue;" & LF &
+     "    vec2 n = (inn.x < inn.y) ? ((l.x < 0.0) ? -w : w)" & LF &
+     "                             : ((l.y < 0.0) ? vec2(w.y, -w.x) : vec2(-w.y, w.x));" & LF &
+     "    vec2 e = u_camera.xy - p.xy;" & LF &
+     "    float facing = dot(n, e) / max(length(e), 0.5);" & LF &
+     "    k = min(k, 1.0 - u_roof_f[i] * smoothstep(" & GLSL (Float (Castle.Cutaway.Face_Lo)) & ", "
+     & GLSL (Float (Castle.Cutaway.Face_Hi)) & ", facing));" & LF &
+     "  }" & LF &
+     "  return k;" & LF &
+     "}" & LF &
+     --  a threshold for each pixel of a 4 x 4 tile, so that a share drawn
+     --  is spread evenly (by the pixel, never by the frame)
+     "float cut_dither(vec2 fc) {" & LF &
+     "  ivec2 p = ivec2(fc) & 3;" & LF &
+     "  const int m[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);" & LF &
+     "  return (float(m[p.y * 4 + p.x]) + 0.5) / 16.0;" & LF &
      "}" & LF &
      --  Water ripples: two scales of the tiling noise drifting in different
      --  directions, as a height whose slope tilts the surface normal.
@@ -1185,11 +1561,14 @@ package body Castle.Render is
      --  likely carries on); toward its top the weight fades out, since what
      --  stands above the picture is not known.
      "float view_z(float d) {" & LF &
-     "  return " & GLSL (Float (2.0 * Near_M * Far_M)) & " / (" & GLSL (Float (Far_M + Near_M))
-     & " - (d * 2.0 - 1.0) * " & GLSL (Float (Far_M - Near_M)) & ");" & LF &
+     "  return u_zp.x / (u_zp.y - (d * 2.0 - 1.0) * u_zp.z);" & LF &
      "}" & LF &
-     "vec4 mirrored(vec3 p0, vec3 r) {" & LF &
-     "  float t = 0.4, last = 0.0;" & LF &
+     --  (By: how many times longer the strides are, and how much deeper a
+     --  thing may stand behind the picture's depth and still be the ray's:
+     --  1 for water in the view; for a tile of the far view its cell's size,
+     --  so the walk reaches as many cells as it does blocks close by.)
+     "vec4 mirrored(vec3 p0, vec3 r, float by) {" & LF &
+     "  float t = 0.4 * by, last = 0.0;" & LF &
      "  float wl = (u_viewproj * vec4(p0 - u_camera, 1.0)).w;" & LF &
      "  for (int i = 0; i < 30; i++) {" & LF &
      "    vec4 q = u_viewproj * vec4(p0 + r * t - u_camera, 1.0);" & LF &
@@ -1199,7 +1578,7 @@ package body Castle.Render is
      "    uv.x = clamp(uv.x, 0.0, 1.0);" & LF &
      "    float ds = texture(u_scene_z, uv).r;" & LF &
      "    float zs = view_z(ds);" & LF &
-     "    if (ds < 0.99999 && q.w > zs && q.w - zs < 0.6 + 1.5 * abs(q.w - wl)) {" & LF &
+     "    if (ds < 0.99999 && q.w > zs && q.w - zs < 0.6 * by + 1.5 * abs(q.w - wl)) {" & LF &
      "      float lo = last, hi = t;" & LF &
      "      for (int j = 0; j < 5; j++) {" & LF &
      "        float m = 0.5 * (lo + hi);" & LF &
@@ -1213,7 +1592,7 @@ package body Castle.Render is
      "    }" & LF &
      "    last = t;" & LF &
      "    wl = q.w;" & LF &
-     "    t = t * 1.2 + 0.3;" & LF &
+     "    t = t * 1.2 + 0.3 * by;" & LF &
      "  }" & LF &
      "  return vec4(0.0);" & LF &
      "}" & LF &
@@ -1236,6 +1615,58 @@ package body Castle.Render is
      "  return (r > 1.0e-3) ? o / r * ring : vec2(0.0);" & LF &
      "}" & LF &
      "void main() {" & LF &
+     --  The far view (see the spec): which level this place shows, and
+     --  whether this fragment is of it.  c counts doublings of distance from
+     --  the end of the stacks' ring; ring wl is c in wl - 1 .. wl.
+     --  (a stack's own fragment well inside its ring is what shows, and asks nothing)
+     "  float far_d = (u_far_view.x > 0.0) ? length(v_world.xy - u_focus.xy) : 0.0;" & LF &
+     "  if (u_far_view.x > 0.0 && (v_lod > 0 || far_d > u_far_view.z)) {" & LF &
+     "    float c = log2(max(far_d, 1.0) / u_far_view.x);" & LF &
+     "    int wl = clamp(int(floor(c)) + 1, 0, " & GLSL_Int (Castle.Lod.Max_Level) & ");" & LF &
+     "    if (v_lod < wl) discard;" & LF &
+     --  (a level is loaded here, for this pixel, if its share is over the
+     --  pixel's place in the pattern: a tile just come in takes its pixels a
+     --  few more each frame, from whatever stood in for it)
+     "    float dz = cut_dither(gl_FragCoord.xy);" & LF &
+     "    vec4 wt = texelFetch(u_far_have, clamp(ivec2(floor(v_world.xy / 16.0)), ivec2(0), ivec2("
+     & GLSL_Int (Chunks_XY / 2 - 1) & ")), 0);" & LF &
+     "    bool st = texelFetch(u_stack_flag, clamp(ivec2(floor(v_world.xy / 8.0)), ivec2(0), ivec2("
+     & GLSL_Int (Chunks_XY - 1) & ")), 0).r > 0.25;" & LF &
+     "    int f = wl;" & LF &                  --  the finest level loaded here that is not finer than wanted
+     "    while (f < " & GLSL_Int (Castle.Lod.Max_Level) & " && !((f == 0) ? st : (wt[f - 1] > dz))) f++;" & LF &
+     --  (the cross-fade: tc is the coarser level's share of the pixels, tf
+     --  what the finer has given up; tc runs Far_Lap ahead of tf, so that the
+     --  two fragments of a pixel, which stand a little apart on the ground,
+     --  never both give it up)
+     "    const float span = " & GLSL (Float (Far_Fade - Far_Lap)) & ";" & LF &
+     "    bool fade = wl < " & GLSL_Int (Castle.Lod.Max_Level) & ";" & LF &
+     "    float tc = fade ? clamp((c - (float(wl) - u_far_view.y)) / span, 0.0, 1.0) : 0.0;" & LF &
+     "    float tf = fade ? clamp((c - (float(wl) - span)) / span, 0.0, 1.0) : 0.0;" & LF &
+     "    bool next = fade && wt[wl] > dz;" & LF &
+     "    if (v_lod == f) {" & LF &
+     "      if (f == wl && next && dz < tf) discard;" & LF &
+     "    } else if (!(v_lod == wl + 1 && f == wl && next && dz < tc)) discard;" & LF &
+     "  }" & LF &
+     --  A cleared roof: as many of the pixel's samples as its share drawn
+     --  (alpha to coverage, dithered between whole samples), or with no
+     --  multisampling, as many of the pixels.
+     --  (and the walls on the eye's side of a cleared house: by their place,
+     --  asked only of what a wall can be made of, inside the box round the
+     --  cleared houses)
+     "  float roof_q = 1.0;" & LF &
+     "  if (u_roofs > 0 && u_water == 0 && all(greaterThanEqual(v_world.xy, u_roof_box.xy))" & LF &
+     "      && all(lessThanEqual(v_world.xy, u_roof_box.zw))" & LF &
+     "      && (int(v_mat) == u_thatch || in_set(u_walls, v_mat))) {" & LF &
+     "    float k = (int(v_mat) == u_thatch) ? roof_cover(v_world)" & LF &
+     "            : in_set(u_walls, v_mat) ? wall_cover(v_world) : 1.0;" & LF &
+     "    if (k < 1.0) {" & LF &
+     "      float dz = cut_dither(gl_FragCoord.xy);" & LF &
+     "      if (u_a2c == 1) {" & LF &
+     "        roof_q = floor(k * float(u_samples) + dz) / float(u_samples);" & LF &
+     "        if (roof_q <= 0.0) discard;" & LF &
+     "      } else if (k <= dz) discard;" & LF &
+     "    }" & LF &
+     "  }" & LF &
      "  vec3 n = normals[v_face];" & LF &
      "  vec3 pb = v_grid * 4.0 - n * 0.01;" & LF &
      "  ivec3 b = ivec3(floor(pb));" & LF &
@@ -1381,6 +1812,8 @@ package body Castle.Render is
      --  (the side of a block of turf is a bank of grass: see the spec)
      "  bool bank = int(v_mat) == u_turf && v_face < 4 && u_water == 0;" & LF &
      "  if (bank) nl = normalize(mix(n, vec3(0.0, 0.0, 1.0), " & GLSL (Float (Turf_Up)) & "));" & LF &
+     --  (a face of a dressed roof: the light goes by the way it was turned)
+     "  if (!soft && !plant && dot(v_bend.xyz, v_bend.xyz) > 1.0e-4) nl = normalize(n + v_bend.xyz);" & LF &
      "  if (soft) {" & LF &
      "    uint rh = hash3(b + ivec3(3, 11, 7));" & LF &
      "    vec3 ruffle = vec3(float(rh & 1023u), float((rh >> 10u) & 1023u), float((rh >> 20u) & 1023u)) / 1023.0 - 0.5;" & LF &
@@ -1440,7 +1873,13 @@ package body Castle.Render is
      --  across each block; far off, the face's average, so it can't shimmer.
      "  if (u_water == 0) {" & LF &
      "    vec4 k = vec4(float(v_ao & 3u), float((v_ao >> 2u) & 3u), float((v_ao >> 4u) & 3u), float((v_ao >> 6u) & 3u)) / 3.0;" & LF &
-     "    float ao = mix(mix(k.x, k.y, uv.x), mix(k.w, k.z, uv.x), uv.y);" & LF &
+     --  (a tile of the far view: across its own cell, not across each block of it)
+     "    vec2 uva = uv;" & LF &
+     "    if (v_lod > 0) {" & LF &
+     "      vec3 fa = fract(pb / float(1 << v_lod));" & LF &
+     "      uva = (v_face < 2) ? fa.yz : (v_face < 4) ? fa.xz : fa.xy;" & LF &
+     "    }" & LF &
+     "    float ao = mix(mix(k.x, k.y, uva.x), mix(k.w, k.z, uva.x), uva.y);" & LF &
      "    ao = mix(ao, dot(k, vec4(0.25)), m2);" & LF &
      "    float occl = 0.45 + 0.55 * ao;" & LF &
      "    amb *= occl;" & LF &
@@ -1460,7 +1899,7 @@ package body Castle.Render is
      "    c.rgb *= hue / " & GLSL (Castle.Colors.Storm_Blue) & ";" & LF &
      "  }" & LF &
      "  vec3 col = c.rgb * (amb + u_lamp_col * sun * lit + firelight(v_world, nl));" & LF &
-     "  float alpha = c.a;" & LF &
+     "  float alpha = c.a * roof_q;" & LF &
      --  What is wet shines: it mirrors the sky, the more the flatter it is
      --  seen (rock, planks and leaves more than turf and earth), and glints
      --  where the sun comes off it.  And on level bare ground under the
@@ -1571,9 +2010,10 @@ package body Castle.Render is
      --  the level; it is kept above it, or it would find the lake's own
      --  bed, which is in the picture under the water.)
      "    vec3 rd = reflect(-v, wn);" & LF &
-     "    if (u_reflect == 1 && v_face == 4 && u_flowdbg == 0 && !air) {" & LF &
+     --  (u_reflect 2: far water too, in strides as long as its cells; 1: it mirrors the sky alone)
+     "    if (u_reflect >= 1 && v_face == 4 && u_flowdbg == 0 && !air && (v_lod == 0 || u_reflect == 2)) {" & LF &
      "      vec3 ru = normalize(vec3(rd.xy, max(rd.z, 0.03)));" & LF &
-     "      vec4 mir = mirrored(v_world, ru);" & LF &
+     "      vec4 mir = mirrored(v_world, ru, float(1 << v_lod));" & LF &
      "      mir_c = mir.rgb;" & LF &
      "      mir_k = mir.a;" & LF &
      "    }" & LF &
@@ -1624,6 +2064,7 @@ package body Castle.Render is
      "  }" & LF &
      --  The air between (haze, murk, mist: air, in the shared source).
      "  float thru;" & LF &
+     "  g_slack = (u_water == 1) ? 1.0e4 : 0.125 * float(1 << v_lod);" & LF &
      "  col = air(col, v_world, thru);" & LF &
      --  (the mirrored world comes from the picture, graded already: it goes
      --  in after the grade, and fades with the distance and the weather as
@@ -1651,7 +2092,25 @@ package body Castle.Render is
       Lean             : Vec3 := (0.0, 0.0, 0.0);           --  where a shadow lies from what casts it, per metre of height
       VP, Fig_VP       : aliased Mat4 := (others => 0.0);   --  as the maps were last drawn
       Key              : Shadow_Key := (others => -1.0);    --  what the land's was drawn for
+      --  the far map (see the spec, Far_Shadows): as it was last drawn
+      Far_Tex, Far_FBO : UInt := 0;
+      Far_VP           : aliased Mat4 := (others => 0.0);
+      Far_Dir          : Vec3 := (0.0, 0.0, 0.0);           --  (none: not drawn yet)
+      Far_Tiles, Far_Stacks : Natural := 0;                 --  the tiles' and the stacks' changes it was drawn at
+      Far_Remade       : Natural := 0;                      --  and the tiles' remakings
+      Far_At           : Natural := 0;                      --  the frame
+      --  the near map's share of the far view: the tiles' changes it was drawn at, and the frame
+      Seen_Far, Drawn_At : Natural := 0;
    end record;
+   Far_Shadow_Size : constant := 4096;
+   Far_Sh_Half     : constant := 1_470.0;   --  round the map's middle: all of it (2,048 m square, 256 high) from any side
+   Far_Sh_Reach    : constant := 1_470.0;
+   Far_Sh_Ready    : Boolean := False;
+   Far_Sh_Tried    : Boolean := False;      --  (the two maps are made when first wanted: 64 MB of the card's memory)
+   Far_Changes     : Natural := 0;          --  tiles of the far view come in or dropped so far
+   Far_Remakes     : Natural := 0;          --  and tiles made again in place (for an edit)
+   Far_Replacing   : Boolean := False;      --  (Upload_Far is putting a tile in the place of the one it had)
+   Far_Casts       : Natural := 0;          --  far maps drawn so far
    Held       : array (0 .. 1) of Held_Map;
    From       : Natural range 0 .. 1 := 0;   --  Held (From): the sun has passed it; the other: it is coming to
    Held_Ok    : Boolean := False;
@@ -1699,6 +2158,7 @@ package body Castle.Render is
    Noise_Tex   : UInt := 0;                --  tiling noise: clouds, ripples
    Puff_Tex    : UInt := 0;                --  tiling noise in three dimensions: the clouds' billows
    Base_Tex    : UInt := 0;                --  the land's level thereabouts, and how damp: what mist lies on
+   Haze_Tex    : UInt := 0;                --  how deep the ground haze lies on the ground, for every 2 m
 
    --  The clouds' picture (see the spec): half the window each way.
    Cloud_Program            : UInt := 0;
@@ -1708,7 +2168,7 @@ package body Castle.Render is
    Cloud_Ready              : Boolean := False;
    Clouds_Drawn             : Boolean := False;   --  this frame
    Loc_Vol, Loc_Px          : int := -1;
-   Loc_Stars, Loc_Star_Turn : int := -1;
+   Loc_Stars, Loc_Star_Turn, Loc_Drop : int := -1;
    Loc_C_Fwd, Loc_C_Right, Loc_C_Up : int := -1;
 
    --  The sky's view straight down, for snow and shelter.
@@ -1729,13 +2189,14 @@ package body Castle.Render is
    Last_Seconds : Float := 0.0;
 
    --  Uniforms several programs share, located once.
-   type Program_Id is (P_World, P_World_Wet, P_Sky, P_Shadow, P_Precip, P_Figure, P_Blob, P_Cloud);
+   type Program_Id is (P_World, P_World_Wet, P_Sky, P_Shadow, P_Precip, P_Figure, P_Blob, P_Cloud, P_Far);
    type Uniform_Id is
      (U_Sun, U_Sun_Glow, U_Sun_Disc, U_Moon, U_Moon_Col, U_Moon_K, U_Day, U_Lamp, U_Lamp_Col, U_Orb, U_Orb_Col,
       U_Zenith, U_Horizon, U_Sky_Amb, U_Gnd_Amb, U_Cover, U_Time, U_Drift,
       U_Eye, U_Snow, U_Ice, U_Wet, U_Leaf, U_Grass_Dry, U_Vis, U_Snow_VP, U_Fire,
       U_Light_A, U_Light_B, U_Fig_A, U_Fig_B, U_Shadow_Texel, U_Fig_Texel, U_Shadow_Mix, U_Fire_Cast,
-      U_Mist, U_Mist_Col, U_Rain);
+      U_Mist, U_Mist_Col, U_Rain, U_Far, U_Floor, U_Focus, U_Fog, U_FarL_A, U_FarL_B, U_Far_Sh, U_Far_Sh2,
+      U_GHaze, U_Rim);
    function Uniform_Name (U : Uniform_Id) return String is
      (case U is
          when U_Sun => "u_sun", when U_Sun_Glow => "u_sun_glow", when U_Sun_Disc => "u_sun_disc",
@@ -1751,7 +2212,11 @@ package body Castle.Render is
          when U_Fig_A => "u_fig_vp", when U_Fig_B => "u_fig_vp_b",
          when U_Shadow_Texel => "u_shadow_texel", when U_Fig_Texel => "u_fig_texel",
          when U_Shadow_Mix => "u_shadow_mix", when U_Fire_Cast => "u_fire_cast",
-         when U_Mist => "u_mist", when U_Mist_Col => "u_mist_col", when U_Rain => "u_rain");
+         when U_Mist => "u_mist", when U_Mist_Col => "u_mist_col", when U_Rain => "u_rain", when U_Far => "u_far",
+         when U_Floor => "u_floor", when U_Focus => "u_focus", when U_Fog => "u_fog_dist",
+         when U_FarL_A => "u_farl_vp", when U_FarL_B => "u_farl_vp_b",
+         when U_Far_Sh => "u_far_sh", when U_Far_Sh2 => "u_far_sh2",
+         when U_GHaze => "u_ghaze", when U_Rim => "u_rim");
    Programs : array (Program_Id) of UInt := (others => 0);
    Locs     : array (Program_Id, Uniform_Id) of int := (others => (others => -1));
 
@@ -1764,6 +2229,52 @@ package body Castle.Render is
    Fig_Bone_Buf, Fig_Box_Buf, Fig_Blob_Buf : UInt := 0;
    Fig_Loc_VP, Fig_Loc_Camera, Fig_Loc_Focus, Fig_Loc_Fog, Fig_Loc_A2C : int := -1;
    Blob_Loc_VP, Blob_Loc_Camera, Blob_Loc_Strength : int := -1;
+
+   --  The far land (see the spec): its program, its corners' heights, its
+   --  cells, and which stacks have a mesh of their own loaded.
+   Far_Program  : UInt := 0;
+   Far_Z_Tex, Far_Col_Tex, Far_Flag_Tex : UInt := 0;
+   Far_Loc_VP, Far_Loc_Camera, Far_Loc_Focus, Far_Loc_Fog : int := -1;
+   Far_Ready    : Boolean := False;
+   Far_Flag     : aliased Unsigned_8 := 0;
+
+   --  The far view (see the spec): a slot to every tile of every level, the
+   --  loaded ones listed, and for every 16 m of the map which levels are
+   --  loaded over it (bit L: level L), as the shader has it.
+   Far_Side : constant := Chunks_XY / 2;            --  tiles a side at level 1; 16 m cells a side
+   type Face_Counts is array (0 .. 5) of Natural;
+   type Far_Slot is record
+      Loaded           : Boolean := False;
+      S_Start, S_Count : Natural := 0;
+      By_Face          : Face_Counts := [others => 0];   --  its solid quads, which come face by face (+X, -X, +Y, -Y, +Z, -Z)
+      Born             : Natural := 0;                   --  the frame it came in
+      Coming           : Boolean := False;               --  still taking its pixels
+      W_Start, W_Count : Natural := 0;
+      Z_Lo, Z_Hi       : Integer := 0;             --  rows of its cells
+      List_Pos         : Natural := 0;
+   end record;
+   type Far_Grid is array (1 .. Castle.Lod.Max_Level, 0 .. Far_Side - 1, 0 .. Far_Side - 1) of Far_Slot;
+   type Far_Grid_Access is access Far_Grid;
+   Far_Slots : constant Far_Grid_Access := new Far_Grid;
+   type Far_Ref is record
+      L, TX, TY : Integer := 0;
+   end record;
+   Max_Far   : constant := 16_384;
+   Far_List  : array (1 .. Max_Far) of Far_Ref;
+   Far_N     : Natural := 0;
+   Far_Seen  : array (1 .. Max_Far) of Positive;    --  those drawn this frame
+   Far_Quads : Natural := 0;
+   Far_Drawn : Natural := 0;
+   Far_Sent  : Natural := 0;                       --  solid quads of theirs sent this frame
+   type Level_Shares is array (1 .. Castle.Lod.Max_Level) of aliased Unsigned_8 with Convention => C;
+   type Have_Grid is array (0 .. Far_Side - 1, 0 .. Far_Side - 1) of aliased Level_Shares with Convention => C;   --  (y, x)
+   Far_Have       : Have_Grid := [others => [others => [others => 0]]];
+   --  (255: that level's tile is loaded there; less: it has just come and is taking its pixels)
+   Far_Frame      : Natural := 0;                  --  frames drawn
+   Far_Coming     : Natural := 0;                  --  tiles still taking their pixels
+   Far_Have_Tex   : UInt := 0;
+   Far_Have_Dirty : Boolean := False;
+   Far_View_Loc, Zp_Loc : array (Boolean) of int := [others => -1];
 
    Sky_Program : UInt := 0;
    pragma Warnings (Off, Sky_Program);
@@ -1806,6 +2317,7 @@ package body Castle.Render is
    --  the one in use (Use_World).
    type World_Locs is record
       VP, Camera, Focus, A2C, Fog_Dist, Variants, Water, Blend, Wmask, Flowdbg, Wstep, Reflect : int := -1;
+      Roofs, Roof_A, Roof_B, Roof_F, Roof_Box : int := -1;   --  houses cleared (Castle.Cutaway)
    end record;
    World_Prog : array (Boolean) of UInt := [others => 0];
    World_Loc  : array (Boolean) of World_Locs;
@@ -2000,6 +2512,45 @@ package body Castle.Render is
       Loc_Reflect  := L.Reflect;
    end Use_World;
 
+   --  The roofs cleared on the camera's ray, to the program in use
+   --  (Castle.Cutaway: drawing only).
+   procedure Put_Roofs is
+      type Vec4_Array is array (1 .. Castle.Cutaway.Max_Roofs, 1 .. 4) of Float32;
+      type F_Array is array (1 .. Castle.Cutaway.Max_Roofs) of Float32;
+      A, B : Vec4_Array := [others => [others => 0.0]];
+      F    : F_Array := [others => 0.0];
+      N    : constant Natural := Natural'Min (Castle.Cutaway.Count, Castle.Cutaway.Max_Roofs);
+      Loc  : World_Locs renames World_Loc (Program = World_Prog (True));
+      X0, Y0 : Float := Float'Last;
+      X1, Y1 : Float := Float'First;
+   begin
+      for K in 1 .. N loop
+         declare
+            C : constant Castle.Cutaway.Cleared := Castle.Cutaway.Shown (K);
+            Reach : constant Float := C.R.Half_A + C.R.Half_B + 1.0;      --  (further than any corner or eave)
+         begin
+            X0 := Float'Min (X0, C.R.Centre.X - Reach);  X1 := Float'Max (X1, C.R.Centre.X + Reach);
+            Y0 := Float'Min (Y0, C.R.Centre.Y - Reach);  Y1 := Float'Max (Y1, C.R.Centre.Y + Reach);
+            A (K, 1) := Float32 (C.R.Centre.X);  A (K, 2) := Float32 (C.R.Centre.Y);
+            A (K, 3) := Float32 (C.R.Along.X);   A (K, 4) := Float32 (C.R.Along.Y);
+            B (K, 1) := Float32 (C.R.Half_A);    B (K, 2) := Float32 (C.R.Half_B);
+            B (K, 3) := Float32 (C.R.Centre.Z);  B (K, 4) := Float32 (C.R.Top_Z);
+            F (K) := Float32 (C.Amount);
+         end;
+      end loop;
+      Program_Uniform_1i (Program, Loc.Roofs, int (N));
+      if N > 0 then
+         Program_Uniform_4fv (Program, Loc.Roof_A, Sizei (N), A'Address);
+         Program_Uniform_4fv (Program, Loc.Roof_B, Sizei (N), B'Address);
+         Program_Uniform_1fv (Program, Loc.Roof_F, Sizei (N), F'Address);
+         declare
+            Box : constant array (1 .. 4) of Float32 := [Float32 (X0), Float32 (Y0), Float32 (X1), Float32 (Y1)];
+         begin
+            Program_Uniform_4fv (Program, Loc.Roof_Box, 1, Box'Address);
+         end;
+      end if;
+   end Put_Roofs;
+
    ---------------------------------------------------------------- daylight
 
    function Mix (A, B : Vec3; T : Float) return Vec3 is (A + (B - A) * T);
@@ -2107,7 +2658,6 @@ package body Castle.Render is
    --  gone Sun_Gone under the horizon), then the moon.  The one's light is
    --  nothing where the other takes over, so nothing jumps.  Both the
    --  daylight and the shadows' held directions go by this one routine.
-   Sun_Gone : constant := -0.03;
    function Sun_Share (Se : Float) return Float is (Smooth (Sun_Gone, 0.06, Se));
    function Moon_Share (Se, Moon_Z, Phase : Float) return Float is
      (Moonlight * Ada.Numerics.Elementary_Functions."**" (Moon_Lit (Phase), 1.3)
@@ -2354,7 +2904,9 @@ package body Castle.Render is
       --  Materials that follow the terrain surface: lit from the height
       --  field at a distance.
       for M in Material loop
-         if M not in Air | Water | Boulder | Trunk | Crown | Berry_Bush | Bare_Bush | Plank | Shingle | Thatch | Daub then
+         if M not in Air | Water | Boulder | Trunk | Crown | Berry_Bush | Bare_Bush | Plank | Shingle | Thatch | Daub
+                     | Fieldstone
+         then
             Ground := Ground or Bit (M);
          end if;
       end loop;
@@ -2376,8 +2928,19 @@ package body Castle.Render is
            (VP => Location ("u_viewproj"), Camera => Location ("u_camera"), Focus => Location ("u_focus"),
             A2C => Location ("u_a2c"), Fog_Dist => Location ("u_fog_dist"), Variants => Location ("u_variants"),
             Water => Location ("u_water"), Blend => Location ("u_blend"), Wmask => Location ("u_wmask"),
-            Flowdbg => Location ("u_flowdbg"), Wstep => Location ("u_wstep"), Reflect => Location ("u_reflect"));
+            Flowdbg => Location ("u_flowdbg"), Wstep => Location ("u_wstep"), Reflect => Location ("u_reflect"),
+            Roofs => Location ("u_roofs"), Roof_A => Location ("u_roof_a"), Roof_B => Location ("u_roof_b"),
+            Roof_F => Location ("u_roof_f"), Roof_Box => Location ("u_roof_box"));
+         Far_View_Loc (Wet) := Location ("u_far_view");
+         Zp_Loc (Wet) := Location ("u_zp");
       end loop;
+      Create_Textures (Texture_2D, 1, Far_Have_Tex);
+      Texture_Storage_2D (Far_Have_Tex, 1, RGBA8, Far_Side, Far_Side);
+      Texture_Sub_Image_2D (Far_Have_Tex, 0, 0, 0, Far_Side, Far_Side, RGBA, Unsigned_Byte, Far_Have (0, 0)'Address);
+      Texture_Parameter_I (Far_Have_Tex, Texture_Min_Filter, Nearest);
+      Texture_Parameter_I (Far_Have_Tex, Texture_Mag_Filter, Nearest);
+      Texture_Parameter_I (Far_Have_Tex, Texture_Wrap_S, Clamp_To_Edge);
+      Texture_Parameter_I (Far_Have_Tex, Texture_Wrap_T, Clamp_To_Edge);
       Use_World (False);
       Sky_Program := Link (Compile (Vertex_Shader, Sky_Vertex_Source),
                            Compile (Fragment_Shader, Sky_Fragment_Source));
@@ -2388,6 +2951,7 @@ package body Castle.Render is
       Loc_Px    := Location ("u_px", Sky_Program);
       Loc_Stars := Location ("u_stars", Sky_Program);
       Loc_Star_Turn := Location ("u_star_turn", Sky_Program);
+      Loc_Drop := Location ("u_drop", Sky_Program);
       Cloud_Program := Link (Compile (Vertex_Shader, Sky_Vertex_Source),
                              Compile (Fragment_Shader, Cloud_Fragment_Source));
       Loc_C_Fwd   := Location ("u_fwd", Cloud_Program);
@@ -2659,6 +3223,93 @@ package body Castle.Render is
          Free_Pg (Img);
       end;
 
+      --  How deep the ground haze lies on the ground (see the spec,
+      --  Ground_Haze): from the land's level (its water's, where there is
+      --  open water) and that level's mean over 65 m, a number for every 2 m.
+      declare
+         use Castle.Fields;
+         R    : constant := 32;                   --  the mean is over 2 R + 1 m each way
+         Half : constant := Size_M / 2;
+         type Grid is array (0 .. Size_M - 1, 0 .. Size_M - 1) of Float;
+         type Small is array (0 .. Half - 1, 0 .. Half - 1) of Float with Convention => C;
+         type Grid_Access is access Grid;
+         type Small_Access is access Small;
+         procedure Free_G is new Ada.Unchecked_Deallocation (Grid, Grid_Access);
+         procedure Free_S is new Ada.Unchecked_Deallocation (Small, Small_Access);
+         F    : Grid_Access := new Grid;          --  (Y, X): the land's level
+         Row  : Grid_Access := new Grid;          --  its mean along X
+         Mean : Grid_Access := new Grid;          --  and then along Y
+         Top  : Grid_Access := new Grid;
+         Img  : Small_Access := new Small;
+         function Clamped (I : Integer) return Integer is (Integer'Max (0, Integer'Min (Size_M - 1, I)));
+      begin
+         for Y in 0 .. Size_M - 1 loop
+            for X in 0 .. Size_M - 1 loop
+               F (Y, X) := Float'Max (W.Height (Idx (X, Y)), W.Water (Idx (X, Y)));
+            end loop;
+         end loop;
+         for Y in 0 .. Size_M - 1 loop
+            declare
+               Sum : Float := 0.0;
+            begin
+               for X in -R .. R loop
+                  Sum := Sum + F (Y, Clamped (X));
+               end loop;
+               for X in 0 .. Size_M - 1 loop
+                  Row (Y, X) := Sum / Float (2 * R + 1);
+                  Sum := Sum + F (Y, Clamped (X + R + 1)) - F (Y, Clamped (X - R));
+               end loop;
+            end;
+         end loop;
+         for X in 0 .. Size_M - 1 loop
+            declare
+               Sum : Float := 0.0;
+            begin
+               for Y in -R .. R loop
+                  Sum := Sum + Row (Clamped (Y), X);
+               end loop;
+               for Y in 0 .. Size_M - 1 loop
+                  Mean (Y, X) := Sum / Float (2 * R + 1);
+                  Sum := Sum + Row (Clamped (Y + R + 1), X) - Row (Clamped (Y - R), X);
+               end loop;
+            end;
+         end loop;
+         for Y in 0 .. Size_M - 1 loop
+            for X in 0 .. Size_M - 1 loop
+               declare
+                  Sx    : constant Float := (Mean (Y, Clamped (X + 4)) - Mean (Y, Clamped (X - 4))) / 8.0;
+                  Sy    : constant Float := (Mean (Clamped (Y + 4), X) - Mean (Clamped (Y - 4), X)) / 8.0;
+                  Slope : constant Float := Ada.Numerics.Elementary_Functions.Sqrt (Sx * Sx + Sy * Sy);
+               begin
+                  --  (open water: the whole depth, wherever it is; land: less of
+                  --  it the steeper, and none in the mountains)
+                  Top (Y, X) :=
+                    (if W.Water (Idx (X, Y)) > W.Height (Idx (X, Y)) then Float (Haze_Deep_M)
+                     else Float (Haze_Deep_M) * (1.0 - Smooth (Haze_Slope_Lo, Haze_Slope_Hi, Slope))
+                          * (1.0 - Smooth (Haze_Mountain_Lo, Haze_Mountain_Hi, W.Mountain (Idx (X, Y)))));
+               end;
+            end loop;
+         end loop;
+         for J in 0 .. Half - 1 loop
+            for I in 0 .. Half - 1 loop
+               Img (J, I) := 0.25 * (Top (2 * J, 2 * I) + Top (2 * J, 2 * I + 1)
+                                     + Top (2 * J + 1, 2 * I) + Top (2 * J + 1, 2 * I + 1));
+            end loop;
+         end loop;
+         Create_Textures (Texture_2D, 1, Haze_Tex);
+         Texture_Storage_2D (Haze_Tex, 1, R16F, Half, Half);
+         Texture_Sub_Image_2D (Haze_Tex, 0, 0, 0, Half, Half, Red, Float_Type, Img (0, 0)'Address);
+         Texture_Parameter_I (Haze_Tex, Texture_Min_Filter, Linear);
+         Texture_Parameter_I (Haze_Tex, Texture_Mag_Filter, Linear);
+         Texture_Parameter_I (Haze_Tex, Texture_Wrap_S, Clamp_To_Edge);
+         Texture_Parameter_I (Haze_Tex, Texture_Wrap_T, Clamp_To_Edge);
+         Free_G (F);
+         Free_G (Row);
+         Free_G (Mean);
+         Free_G (Top);
+         Free_S (Img);
+      end;
+
       Precip_Program := Link (Compile (Vertex_Shader, Precip_Vertex_Source),
                               Compile (Fragment_Shader, Precip_Fragment_Source));
       Box_Program := Link (Compile (Vertex_Shader, Box_Vertex_Source),
@@ -2731,12 +3382,26 @@ package body Castle.Render is
       Named_Buffer_Storage (Mark_Buf, Sizeiptr (Castle.Marks.Marks'Length * 48), Null_Address,
                             Dynamic_Storage_Bit);
 
+      --  (the far land is out of the game since 2026-11-15, John's word: none
+      --  of it is made unless Far_Land has been set by the time this runs)
+      if Far_Land then
+         Far_Program := Link (Compile (Vertex_Shader, Far_Vertex_Source),
+                              Compile (Fragment_Shader, Far_Fragment_Head & Sky_Source & Far_Fragment_Body));
+         Far_Loc_VP     := Location ("u_viewproj", Far_Program);
+         Far_Loc_Camera := Location ("u_camera", Far_Program);
+         Far_Loc_Focus  := Location ("u_focus", Far_Program);
+         Far_Loc_Fog    := Location ("u_fog_dist", Far_Program);
+      end if;
+
       Programs := (P_World => World_Prog (False), P_World_Wet => World_Prog (True), P_Sky => Sky_Program,
                    P_Shadow => Shadow_Program, P_Precip => Precip_Program,
-                   P_Figure => Fig_Program, P_Blob => Blob_Program, P_Cloud => Cloud_Program);
+                   P_Figure => Fig_Program, P_Blob => Blob_Program, P_Cloud => Cloud_Program,
+                   P_Far => Far_Program);
       for P in Program_Id loop
          for U in Uniform_Id loop
-            Locs (P, U) := Location (Uniform_Name (U), Programs (P));
+            if Programs (P) /= 0 then
+               Locs (P, U) := Location (Uniform_Name (U), Programs (P));
+            end if;
          end loop;
       end loop;
 
@@ -2776,7 +3441,8 @@ package body Castle.Render is
                                          or Bit (Bog_Iron) or Bit (Thatch) or Bit (Daub));
             Put_Set (Program, "u_shines", Bit (Bedrock) or Bit (Granite) or Bit (Limestone) or Bit (Sandstone)
                                           or Bit (Boulder) or Bit (Coal) or Bit (Iron_Ore) or Bit (Silver_Ore)
-                                          or Bit (Gold_Ore) or Bit (Rock_Salt) or Bit (Plank) or Bit (Shingle));
+                                          or Bit (Gold_Ore) or Bit (Rock_Salt) or Bit (Plank) or Bit (Shingle)
+                                          or Bit (Fieldstone));
             Put_Set (Program, "u_pools", Bit (Dirt) or Bit (Footpath) or Bit (Clay) or Bit (Bedrock) or Bit (Granite)
                                          or Bit (Limestone) or Bit (Sandstone));
             Program_Uniform_1i (Program, Location ("u_aspen"), int (Material'Pos (Aspen_Leaves)));
@@ -2795,6 +3461,10 @@ package body Castle.Render is
          Program_Uniform_1i (Program, Loc_Variants, Castle.Textures.Variants);
          Put_Set (Program, "u_ground", Ground);
          Program_Uniform_1i (Program, Loc_A2C, (if A2C then 1 else 0));
+         Program_Uniform_1i (Program, Location ("u_thatch"), int (Material'Pos (Thatch)));
+         Put_Set (Program, "u_walls", Bit (Daub) or Bit (Log));
+         Program_Uniform_1i (Program, Location ("u_samples"), int (Natural'Max (1, MSAA)));
+         Program_Uniform_1i (Program, World_Loc (Wet).Roofs, 0);
       end loop;
 
       Create_Textures (Texture_2D, 1, Height_Tex);
@@ -2878,6 +3548,60 @@ package body Castle.Render is
                                Set.Overall (Set.Overall'First)'Address);
          Texture_Parameter_I (Tex, Texture_Min_Filter, Nearest);
          Texture_Parameter_I (Tex, Texture_Mag_Filter, Nearest);
+
+         --  Which stacks have a mesh of their own loaded (the far view reads
+         --  it; the far land was dropped by it).
+         declare
+            Zero : constant array (0 .. Chunks_XY * Chunks_XY - 1) of aliased Unsigned_8 := [others => 0];
+         begin
+            Create_Textures (Texture_2D, 1, Far_Flag_Tex);
+            Texture_Storage_2D (Far_Flag_Tex, 1, R8, Chunks_XY, Chunks_XY);
+            Texture_Sub_Image_2D (Far_Flag_Tex, 0, 0, 0, Chunks_XY, Chunks_XY, Red, Unsigned_Byte, Zero (0)'Address);
+            Texture_Parameter_I (Far_Flag_Tex, Texture_Min_Filter, Nearest);
+            Texture_Parameter_I (Far_Flag_Tex, Texture_Mag_Filter, Nearest);
+            Texture_Parameter_I (Far_Flag_Tex, Texture_Wrap_S, Clamp_To_Edge);
+            Texture_Parameter_I (Far_Flag_Tex, Texture_Wrap_T, Clamp_To_Edge);
+         end;
+
+         --  The far land: worked out once from the map (a fifth of a second),
+         --  if it is asked for.
+         if Far_Land and then Far_Program /= 0 then
+            declare
+               use Castle.Far;
+               Z   : Height_Grid_Access := new Height_Grid;
+               C   : Texel_Grid_Access := new Texel_Grid;
+               procedure Free_Z is new Ada.Unchecked_Deallocation (Height_Grid, Height_Grid_Access);
+               procedure Free_C is new Ada.Unchecked_Deallocation (Texel_Grid, Texel_Grid_Access);
+               type Two is array (1 .. 2) of UInt;
+            begin
+               Build (W, Set.Overall.all, Z.all, C.all);
+               Create_Textures (Texture_2D, 1, Far_Z_Tex);
+               Texture_Storage_2D (Far_Z_Tex, 1, R32F, Cells + 1, Cells + 1);
+               Texture_Sub_Image_2D (Far_Z_Tex, 0, 0, 0, Cells + 1, Cells + 1, Red, Float_Type, Z (0, 0)'Address);
+               Create_Textures (Texture_2D, 1, Far_Col_Tex);
+               Texture_Storage_2D (Far_Col_Tex, 1, RGBA8, Cells, Cells);
+               Texture_Sub_Image_2D (Far_Col_Tex, 0, 0, 0, Cells, Cells, RGBA, Unsigned_Byte, C (0, 0)'Address);
+               for T of Two'(Far_Z_Tex, Far_Col_Tex) loop
+                  Texture_Parameter_I (T, Texture_Min_Filter, (if T = Far_Col_Tex then Linear else Nearest));
+                  Texture_Parameter_I (T, Texture_Mag_Filter, (if T = Far_Col_Tex then Linear else Nearest));
+                  Texture_Parameter_I (T, Texture_Wrap_S, Clamp_To_Edge);
+                  Texture_Parameter_I (T, Texture_Wrap_T, Clamp_To_Edge);
+               end loop;
+               for K in Class range Broadleaf .. Conifer loop
+                  declare
+                     Crown : constant Texel := Crown_Of (Set.Overall.all, K);
+                  begin
+                     Program_Uniform_3f (Far_Program,
+                                         Location ("u_crown[" & GLSL_Int (Class'Pos (K) - Class'Pos (Broadleaf)) & "]",
+                                                   Far_Program),
+                                         Float32 (Crown.R) / 255.0, Float32 (Crown.G) / 255.0, Float32 (Crown.B) / 255.0);
+                  end;
+               end loop;
+               Free_Z (Z);
+               Free_C (C);
+               Far_Ready := True;
+            end;
+         end if;
          Free (Set);
       end;
 
@@ -2913,25 +3637,88 @@ package body Castle.Render is
 
    procedure Set_Water_Reach (Metres : Float) is
    begin
-      --  Two loaded columns must never share a texel: the texture spans
-      --  more than the loaded diameter, a stack's margin included.
+      --  Two stacks of the view must never share a slot: the texture spans
+      --  more than the view's loaded diameter, its two stacks of hysteresis
+      --  included (the view radius in stacks and two more on either side fit
+      --  the window of 64 or 128).  Stacks kept loaded outside the view (the
+      --  colony's ground) can: see the spec, "a slot is its window stack's
+      --  alone".
       Lv_Size := (if Metres * 8.0 + 256.0 <= 2048.0 then 2048 else 4096);
+      if Metres * 8.0 + 256.0 > 4096.0 then
+         Put_Line ("render: a view of" & Integer'Image (Integer (Metres))
+                   & " m is wider than the water's surface texture (480 m at most): water past its window is not drawn");
+      end if;
    end Set_Water_Reach;
 
-   procedure Set_Surface (Bx0, By0 : Integer; S : Surface_Block) is
-   begin
-      if Lv_Tex /= 0 then
-         Texture_Sub_Image_2D (Lv_Tex, 0, int (Bx0 mod Lv_Size), int (By0 mod Lv_Size), 32, 32,
-                               RGBA, Float_Type, S'Address);
-      end if;
-   end Set_Surface;
+   --  Whose each slot of the surface texture is (the spec: "a slot is its
+   --  window stack's alone").  A stack's key is CX * 4096 + CY.
+   Max_Lv_Stacks : constant := 128;
+   No_Owner      : constant Integer := -1;
+   Slot_Owner    : array (0 .. Max_Lv_Stacks - 1, 0 .. Max_Lv_Stacks - 1) of Integer :=
+     [others => [others => No_Owner]];
+   Lv_Fx, Lv_Fy  : Integer := 0;              --  the window's middle stack,
+   Lv_Focused    : Boolean := False;          --  once it has been given (until then every stack is in it)
+
+   function Lv_Stacks return Integer is (Lv_Size / 32);
+
+   function In_Surface_Window (CX, CY : Integer) return Boolean is
+     (not Lv_Focused
+      or else (CX - Lv_Fx in -Lv_Stacks / 2 .. Lv_Stacks / 2 - 1
+               and then CY - Lv_Fy in -Lv_Stacks / 2 .. Lv_Stacks / 2 - 1));
+
+   function Owns_Surface (CX, CY : Integer) return Boolean is
+     (Slot_Owner (CX mod Lv_Stacks, CY mod Lv_Stacks) = CX * 4096 + CY);
 
    Hidden_Block : constant Surface_Block := (others => (others => (0.0, 0.0, Hidden_Floor, 0.0)));
 
-   procedure Hide_Surface (Bx0, By0 : Integer) is
+   procedure Write_Slot (SX, SY : Integer; S : Surface_Block) is
    begin
-      Set_Surface (Bx0, By0, Hidden_Block);
+      if Lv_Tex /= 0 then
+         Texture_Sub_Image_2D (Lv_Tex, 0, int (SX * 32), int (SY * 32), 32, 32, RGBA, Float_Type, S'Address);
+      end if;
+   end Write_Slot;
+
+   procedure Set_Surface (Bx0, By0 : Integer; S : Surface_Block) is
+      CX : constant Integer := Bx0 / 32;
+      CY : constant Integer := By0 / 32;
+   begin
+      if In_Surface_Window (CX, CY) then
+         Write_Slot (CX mod Lv_Stacks, CY mod Lv_Stacks, S);
+         Slot_Owner (CX mod Lv_Stacks, CY mod Lv_Stacks) := CX * 4096 + CY;
+      end if;
+   end Set_Surface;
+
+   procedure Hide_Surface (Bx0, By0 : Integer) is
+      CX : constant Integer := Bx0 / 32;
+      CY : constant Integer := By0 / 32;
+   begin
+      if Owns_Surface (CX, CY) then
+         Write_Slot (CX mod Lv_Stacks, CY mod Lv_Stacks, Hidden_Block);
+         Slot_Owner (CX mod Lv_Stacks, CY mod Lv_Stacks) := No_Owner;
+      end if;
    end Hide_Surface;
+
+   procedure Set_Surface_Focus (CX, CY : Integer; Moved : out Boolean) is
+   begin
+      Moved := not Lv_Focused or else CX /= Lv_Fx or else CY /= Lv_Fy;
+      if Moved then
+         Lv_Fx := CX;
+         Lv_Fy := CY;
+         Lv_Focused := True;
+         for SX in 0 .. Lv_Stacks - 1 loop
+            for SY in 0 .. Lv_Stacks - 1 loop
+               declare
+                  K : constant Integer := Slot_Owner (SX, SY);
+               begin
+                  if K /= No_Owner and then not In_Surface_Window (K / 4096, K mod 4096) then
+                     Write_Slot (SX, SY, Hidden_Block);
+                     Slot_Owner (SX, SY) := No_Owner;
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end if;
+   end Set_Surface_Focus;
 
    procedure Set_Water_Blend (B : Float) is
    begin
@@ -2973,7 +3760,7 @@ package body Castle.Render is
       Flow_Debug := On;
    end Set_Flow_Debug;
 
-   procedure Upload (CX, CY : Integer; M : Mesh) is
+   procedure Upload (CX, CY : Integer; M : Mesh; Edited : Boolean := False) is
       S : Slot renames Slots (CX, CY);
    begin
       Changes := Changes + 1;
@@ -3004,6 +3791,10 @@ package body Castle.Render is
       Loaded_List (Loaded_N) := (CX, CY);
       S.List_Pos := Loaded_N;
       Quads_Total := Quads_Total + S.S_Count + S.W_Count;
+      if Far_Flag_Tex /= 0 then                --  (what the far view goes by, and the far land was dropped by)
+         Far_Flag := (if Edited then 255 else 128);
+         Texture_Sub_Image_2D (Far_Flag_Tex, 0, int (CX), int (CY), 1, 1, Red, Unsigned_Byte, Far_Flag'Address);
+      end if;
    end Upload;
 
    procedure Unload (CX, CY : Integer) is
@@ -3025,9 +3816,108 @@ package body Castle.Render is
          Loaded_N := Loaded_N - 1;
       end;
       S := (others => <>);
+      if Far_Flag_Tex /= 0 then
+         Far_Flag := 0;
+         Texture_Sub_Image_2D (Far_Flag_Tex, 0, int (CX), int (CY), 1, 1, Red, Unsigned_Byte, Far_Flag'Address);
+      end if;
    end Unload;
 
    function Loaded (CX, CY : Integer) return Boolean is (Slots (CX, CY).Loaded);
+
+   --  The far view's tiles.
+   procedure Mark_Far (Level, TX, TY : Integer; Share : Unsigned_8) is
+      N : constant Integer := 2 ** (Level - 1);          --  16 m cells a side
+   begin
+      for Y in TY * N .. TY * N + N - 1 loop
+         for X in TX * N .. TX * N + N - 1 loop
+            Far_Have (Y, X) (Level) := Share;
+         end loop;
+      end loop;
+      Far_Have_Dirty := True;
+   end Mark_Far;
+
+   procedure Unload_Far (Level : Positive; TX, TY : Integer) is
+      S : Far_Slot renames Far_Slots (Level, TX, TY);
+   begin
+      if not S.Loaded then
+         return;
+      end if;
+      Release (S.S_Start, S.S_Count);
+      Release (S.W_Start, S.W_Count);
+      Far_Quads := Far_Quads - S.S_Count - S.W_Count;
+      declare
+         P    : constant Positive := S.List_Pos;
+         Last : constant Far_Ref := Far_List (Far_N);
+      begin
+         Far_List (P) := Last;
+         Far_Slots (Last.L, Last.TX, Last.TY).List_Pos := P;
+         Far_N := Far_N - 1;
+      end;
+      if S.Coming then
+         Far_Coming := Far_Coming - 1;
+      end if;
+      S := (others => <>);
+      Mark_Far (Level, TX, TY, 0);
+      if not Far_Replacing then
+         Far_Changes := Far_Changes + 1;
+      end if;
+   end Unload_Far;
+
+   procedure Upload_Far (Level : Positive; TX, TY : Integer; M : Mesh) is
+      S     : Far_Slot renames Far_Slots (Level, TX, TY);
+      Fresh : constant Boolean := not S.Loaded;       --  (one made again takes its place at once)
+   begin
+      if S.Loaded then
+         Far_Replacing := True;
+         Unload_Far (Level, TX, TY);
+         Far_Replacing := False;
+      end if;
+      if Far_N = Max_Far then
+         return;
+      end if;
+      if not Place (M.Solid, S.S_Start, S.S_Count) or else not Place (M.Water, S.W_Start, S.W_Count) then
+         if Skipped = 0 then
+            Put_Line (Standard_Error, "render: the quad arena is full: a tile of the far view does not fit and is not drawn");
+         end if;
+         Skipped := Skipped + 1;
+         Release (S.S_Start, S.S_Count);
+         S := (others => <>);
+         return;
+      end if;
+      S.By_Face := [others => 0];
+      if M.Solid /= null then
+         for Q of M.Solid.all loop
+            S.By_Face (Integer (Shift_Right (Q.W0, 25) and 7)) := @ + 1;
+         end loop;
+      end if;
+      S.Z_Lo := M.Z_Lo;
+      S.Z_Hi := M.Z_Hi;
+      S.Loaded := True;
+      Far_N := Far_N + 1;
+      Far_List (Far_N) := (Level, TX, TY);
+      S.List_Pos := Far_N;
+      Far_Quads := Far_Quads + S.S_Count + S.W_Count;
+      if Fresh then
+         Far_Changes := Far_Changes + 1;
+      else
+         Far_Remakes := Far_Remakes + 1;
+      end if;
+      if Fresh and then Far_Arrive_Frames > 0 then
+         S.Born := Far_Frame;
+         S.Coming := True;
+         Far_Coming := Far_Coming + 1;
+         Mark_Far (Level, TX, TY, 0);
+      else
+         Mark_Far (Level, TX, TY, 255);
+      end if;
+   end Upload_Far;
+
+   function Far_Loaded (Level : Positive; TX, TY : Integer) return Boolean is (Far_Slots (Level, TX, TY).Loaded);
+   function Far_Shadow_Draws return Natural is (Far_Casts);
+   function Far_Tiles_Resident return Natural is (Far_N);
+   function Far_Quads_Resident return Natural is (Far_Quads);
+   function Far_Draws_Last_Frame return Natural is (Far_Drawn);
+   function Far_Sent_Last_Frame return Natural is (Far_Sent);
 
    ---------------------------------------------------------------- frame
 
@@ -3481,6 +4371,97 @@ package body Castle.Render is
          end loop;
       end if;
 
+      --  The far view's tiles that can show: in the view, not wholly past
+      --  their own ring, and not wholly inside it under finer ground that is
+      --  loaded (the shader settles the rest fragment by fragment).
+      Far_Drawn := 0;
+      Far_Sent := 0;
+      Far_Frame := Far_Frame + 1;
+      if Far_Coming > 0 then
+         for I in 1 .. Far_N loop
+            declare
+               T : constant Far_Ref := Far_List (I);
+               S : Far_Slot renames Far_Slots (T.L, T.TX, T.TY);
+            begin
+               if S.Coming then
+                  declare
+                     Share : constant Natural :=
+                       Natural'Min (255, ((Far_Frame - S.Born) * 255) / Natural'Max (1, Far_Arrive_Frames));
+                  begin
+                     Mark_Far (T.L, T.TX, T.TY, Unsigned_8 (Share));
+                     if Share = 255 then
+                        S.Coming := False;
+                        Far_Coming := Far_Coming - 1;
+                     end if;
+                  end;
+               end if;
+            end;
+         end loop;
+      end if;
+      if Far_View then
+         declare
+            R0   : constant Float := Fog_Distance;
+            use Ada.Numerics.Elementary_Functions;
+            Near : constant Float := R0 * 2.0 ** (-Float (Far_Fade));      --  where the stacks begin to give way
+            --  Every 16 m of the tile has finer ground loaded over it.
+            function Under_Finer (L, TX, TY : Integer) return Boolean is
+               N : constant Integer := 2 ** (L - 1);
+            begin
+               for Y in TY * N .. TY * N + N - 1 loop
+                  for X in TX * N .. TX * N + N - 1 loop
+                     --  (no finer level of the far view wholly in here)
+                     if (for all K in 1 .. L - 1 => Far_Have (Y, X) (K) < 255) then
+                        declare
+                           Fx : constant Float := Float'Max (abs (Float (X) * 16.0 - Focus.X), abs (Float (X + 1) * 16.0 - Focus.X));
+                           Fy : constant Float := Float'Max (abs (Float (Y) * 16.0 - Focus.Y), abs (Float (Y + 1) * 16.0 - Focus.Y));
+                        begin
+                           if Fx * Fx + Fy * Fy >= Near * Near
+                             or else not (Slots (2 * X, 2 * Y).Loaded and then Slots (2 * X + 1, 2 * Y).Loaded
+                                          and then Slots (2 * X, 2 * Y + 1).Loaded
+                                          and then Slots (2 * X + 1, 2 * Y + 1).Loaded)
+                           then
+                              return False;
+                           end if;
+                        end;
+                     end if;
+                  end loop;
+               end loop;
+               return True;
+            end Under_Finer;
+         begin
+            for I in 1 .. Far_N loop
+                  begin
+                     declare
+                        L    : constant Integer := Far_List (I).L;
+                        T    : constant Far_Ref := Far_List (I);
+                        S    : Far_Slot renames Far_Slots (T.L, T.TX, T.TY);
+                        Side : constant Float := Float (2 ** L) * 8.0;
+                        Cell : constant Float := Float (2 ** L) * 0.25;
+                        X0   : constant Float := Float (T.TX) * Side;
+                        Y0   : constant Float := Float (T.TY) * Side;
+                        Lo   : constant Vec3 := (X0 - Eye.X, Y0 - Eye.Y, Float (S.Z_Lo) * Cell - Eye.Z);
+                        Hi   : constant Vec3 := (Lo.X + Side, Lo.Y + Side, Float (S.Z_Hi + 1) * Cell - Eye.Z);
+                        Nx   : constant Float := Float'Max (0.0, Float'Max (X0 - Focus.X, Focus.X - (X0 + Side)));
+                        Ny   : constant Float := Float'Max (0.0, Float'Max (Y0 - Focus.Y, Focus.Y - (Y0 + Side)));
+                        Fx   : constant Float := Float'Max (abs (X0 - Focus.X), abs (X0 + Side - Focus.X));
+                        Fy   : constant Float := Float'Max (abs (Y0 - Focus.Y), abs (Y0 + Side - Focus.Y));
+                        Outer : constant Float := R0 * 2.0 ** L;
+                        Inner : constant Float := R0 * 2.0 ** (Float (L - 1) - Float (Far_Fade));
+                     begin
+                        if S.S_Count + S.W_Count > 0
+                          and then (L = Castle.Lod.Max_Level or else Nx * Nx + Ny * Ny < Outer * Outer)
+                          and then Box_Visible (F, Lo, Hi)
+                          and then not (Fx * Fx + Fy * Fy < Inner * Inner and then Under_Finer (T.L, T.TX, T.TY))
+                        then
+                           Far_Drawn := Far_Drawn + 1;
+                           Far_Seen (Far_Drawn) := I;
+                        end if;
+                     end;
+                  end;
+            end loop;
+         end;
+      end if;
+
       for Pass in 1 .. 2 loop
          for J in 1 .. Seen loop
             exit when K = Max_Draws;
@@ -3495,6 +4476,59 @@ package body Castle.Render is
                                First => Unsigned_32 (Start * 6), Base => Unsigned_32 (K));
                   Origins (K) := (Integer_32 (C.CX * Chunk_B), Integer_32 (C.CY * Chunk_B), 0, 0);
                   K := K + 1;
+               end if;
+            end;
+         end loop;
+         --  A far tile's solid quads come face by face, and those of a face
+         --  that looks away from the eye wherever in the tile it stands are not
+         --  sent (of John's list: back-face chunk culling): seen from outside
+         --  and above, half of them or more.  Faces next to each other in the
+         --  order that are both sent go as one draw.
+         for J in 1 .. Far_Drawn loop
+            exit when K + 6 > Max_Draws;
+            declare
+               T     : constant Far_Ref := Far_List (Far_Seen (J));
+               S     : Far_Slot renames Far_Slots (T.L, T.TX, T.TY);
+               Side  : constant Float := Float (2 ** T.L) * 8.0;
+               Cell  : constant Float := Float (2 ** T.L) * 0.25;
+               X0    : constant Float := Float (T.TX) * Side;
+               Y0    : constant Float := Float (T.TY) * Side;
+               Shows : constant array (0 .. 5) of Boolean :=
+                 [Eye.X > X0, Eye.X < X0 + Side, Eye.Y > Y0, Eye.Y < Y0 + Side,
+                  Eye.Z > Float (S.Z_Lo) * Cell, Eye.Z < Float (S.Z_Hi + 1) * Cell];
+               At_Q  : Natural := S.S_Start;
+               Run_At, Run_N : Natural := 0;
+
+               procedure Send (Start, Count : Natural) is
+               begin
+                  if Count > 0 then
+                     Cmds (K) := (Count => Unsigned_32 (Count * 6), Instances => 1,
+                                  First => Unsigned_32 (Start * 6), Base => Unsigned_32 (K));
+                     Origins (K) := (Integer_32 (T.TX * 2 ** T.L * Chunk_B), Integer_32 (T.TY * 2 ** T.L * Chunk_B), 0,
+                                     Integer_32 (T.L));
+                     K := K + 1;
+                  end if;
+               end Send;
+            begin
+               if Pass = 2 then
+                  Send (S.W_Start, S.W_Count);
+               elsif not Far_Cull then
+                  Send (S.S_Start, S.S_Count);
+               else
+                  for Fc in 0 .. 5 loop
+                     if Shows (Fc) and then S.By_Face (Fc) > 0 then
+                        if Run_N = 0 then
+                           Run_At := At_Q;
+                        end if;
+                        Run_N := Run_N + S.By_Face (Fc);
+                        Far_Sent := Far_Sent + S.By_Face (Fc);
+                     else
+                        Send (Run_At, Run_N);
+                        Run_N := 0;
+                     end if;
+                     At_Q := At_Q + S.By_Face (Fc);
+                  end loop;
+                  Send (Run_At, Run_N);
                end if;
             end;
          end loop;
@@ -3552,6 +4586,9 @@ package body Castle.Render is
            Shadows and then Fire_Ready and then Fire_K > 0.0
            and then Sqrt (Fire_Off.X * Fire_Off.X + Fire_Off.Y * Fire_Off.Y) < Fog_Distance + Fire_Reach_M;
          Fire_Land_At, Fire_Land_N : Natural := 0;   --  the stacks its light reaches
+         Far_Cast : Integer := -1;                   --  which held direction's far map is drawn again this frame
+         Far_Cast_At, Far_Cast_N : Natural := 0;
+         Far_Sh_On : constant Boolean := Sun_Up and then Far_View and then Far_Shadows;
          Snow_On : constant Boolean :=
            Snow_Ready and then (Current.Snow_Lo + Current.Snow_Mid + Current.Snow_Hi > 0.0
                                 or else Current.Rain + Current.Snowfall > 0.0
@@ -3562,6 +4599,54 @@ package body Castle.Render is
          Sy      : constant Float := Float'Rounding (Focus.Y / S_Texel) * S_Texel;
          S_Key   : constant Shadow_Key :=
            (Sx, Sy, Float (Changes), Float'Rounding (Current.Leaf_Fall * 50.0), 0.0, 0.0);
+
+         --  The far view's tiles that cast (see the spec, Far_Shadows), as
+         --  commands from Next on: every tile that lies in its own ring,
+         --  whole or in part (the ring's rule with no cross-fade: one level
+         --  casts in any one place, or two where a tile lies across a ring's
+         --  edge), and, unless Whole, only those the light's view LF holds
+         --  whose tops stand over Low by Rise for every metre they are past
+         --  the stacks' ground (the light's slope: lower, their shadows end
+         --  short of the view).
+         procedure Cast_Tiles (LF : Frustum; Whole : Boolean; Rise : Float := 0.0; Low : Float := 0.0) is
+            R0 : constant Float := Fog_Distance;
+         begin
+            for J in 1 .. Far_N loop
+               exit when Next = Max_Draws;
+               declare
+                  T     : constant Far_Ref := Far_List (J);
+                  S     : Far_Slot renames Far_Slots (T.L, T.TX, T.TY);
+                  Side  : constant Float := Float (2 ** T.L) * 8.0;
+                  Cell  : constant Float := Float (2 ** T.L) * 0.25;
+                  X0    : constant Float := Float (T.TX) * Side;
+                  Y0    : constant Float := Float (T.TY) * Side;
+                  Nx    : constant Float := Float'Max (0.0, Float'Max (X0 - Focus.X, Focus.X - (X0 + Side)));
+                  Ny    : constant Float := Float'Max (0.0, Float'Max (Y0 - Focus.Y, Focus.Y - (Y0 + Side)));
+                  Fx    : constant Float := Float'Max (abs (X0 - Focus.X), abs (X0 + Side - Focus.X));
+                  Fy    : constant Float := Float'Max (abs (Y0 - Focus.Y), abs (Y0 + Side - Focus.Y));
+                  Outer : constant Float := R0 * Float (2 ** T.L);
+                  Inner : constant Float := R0 * Float (2 ** (T.L - 1));
+               begin
+                  if S.S_Count > 0
+                    and then (T.L = Castle.Lod.Max_Level or else Nx * Nx + Ny * Ny < Outer * Outer)
+                    and then Fx * Fx + Fy * Fy > Inner * Inner
+                    and then (Whole
+                              or else (Box_Visible (LF, (X0, Y0, Float (S.Z_Lo) * Cell),
+                                                    (X0 + Side, Y0 + Side, Float (S.Z_Hi + 1) * Cell))
+                                       --  (and stands high enough to shade the view from where it
+                                       --  is: at noon next to nothing past the view's edge does)
+                                       and then Float (S.Z_Hi + 1) * Cell - Low
+                                                >= Rise * Float'Max (0.0, Sqrt (Nx * Nx + Ny * Ny) - (R0 + 16.0))))
+                  then
+                     Cmds (Next) := (Count => Unsigned_32 (S.S_Count * 6), Instances => 1,
+                                     First => Unsigned_32 (S.S_Start * 6), Base => Unsigned_32 (Next));
+                     Origins (Next) := (Integer_32 (T.TX * 2 ** T.L * Chunk_B), Integer_32 (T.TY * 2 ** T.L * Chunk_B), 0,
+                                        Integer_32 (T.L));
+                     Next := Next + 1;
+                  end if;
+               end;
+            end loop;
+         end Cast_Tiles;
       begin
          while Fig_Half < Figure_Shadow_By * Dist and then Fig_Half < Half loop
             Fig_Half := 2.0 * Fig_Half;
@@ -3576,12 +4661,21 @@ package body Castle.Render is
                   VP_L   : Mat4;
                   Cs, Cu : Float;
                begin
-                  Sun_View (M.Dir, Focus, Half, 500.0, Shadow_Size, Shadow_Snap, VP_L, Cs, Cu);
+                  --  (with the far shadows the map reaches as far up the light as
+                  --  the map goes: what stands past the view casts into the view)
+                  Sun_View (M.Dir, Focus, Half, (if Far_Sh_On then Far_Sh_Reach else 500.0), Shadow_Size, Shadow_Snap,
+                            VP_L, Cs, Cu);
                   declare
                      Key  : constant Shadow_Key := (Cs, Cu, M.Dir.X, M.Dir.Y, M.Dir.Z, Float (Changes));
                      LF_P : constant Frustum := Planes (VP_L);
                   begin
-                     if Key /= M.Key then
+                     --  (drawn again too, not often, while the far view's tiles come and go)
+                     if Key /= M.Key
+                       or else (Far_Sh_On and then M.Seen_Far /= Far_Changes
+                                and then Far_Frame - M.Drawn_At >= Far_Shadow_Every)
+                     then
+                        M.Seen_Far := Far_Changes;
+                        M.Drawn_At := Far_Frame;
                         M.Key := Key;
                         M.VP := VP_L;
                         Redraw (I) := True;
@@ -3602,6 +4696,18 @@ package body Castle.Render is
                               end if;
                            end;
                         end loop;
+                        if Far_Sh_On then
+                           declare
+                              Low : Float := Float'Last;       --  the lowest ground a stack of the view has
+                              Run : constant Float := Sqrt (Float'Max (1.0E-6, 1.0 - M.Dir.Z * M.Dir.Z));
+                           begin
+                              for J in 1 .. Loaded_N loop
+                                 Low := Float'Min (Low, Float (Slots (Loaded_List (J).CX, Loaded_List (J).CY).Z_Lo) * 0.25);
+                              end loop;
+                              Cast_Tiles (LF_P, Whole => False, Rise => Float'Max (0.0, M.Dir.Z) / Run,
+                                          Low => (if Loaded_N > 0 then Low else 0.0));
+                           end;
+                        end if;
                         Land_N (I) := Next - Land_At (I);
                      end if;
                   end;
@@ -3612,6 +4718,87 @@ package body Castle.Render is
             Held_Ok := False;
             for M of Held loop
                M.Key := (others => -1.0);
+            end loop;
+         end if;
+
+         --  The far shadows (see the spec): which of the two far maps is
+         --  drawn again this frame, if either (one whose direction has moved;
+         --  else the longer out of date, by what has changed and how long
+         --  ago), and what goes into it: every stack's own mesh, and every
+         --  tile of the far view that lies in its own ring.
+         if Far_Sh_On then
+            if not Far_Sh_Tried then
+               Far_Sh_Tried := True;
+               Far_Sh_Ready := True;
+               for M of Held loop
+                  declare
+                     Ok : Boolean;
+                  begin
+                     Make_Depth_Map (Far_Shadow_Size, Depth_Component_16, M.Far_Tex, M.Far_FBO, Ok);
+                     Far_Sh_Ready := Far_Sh_Ready and then Ok;
+                  end;
+               end loop;
+               if not Far_Sh_Ready then
+                  Put_Line (Standard_Error, "render: far shadow map rejected, no shadows past the view's edge");
+               end if;
+            end if;
+            if Far_Sh_Ready then
+               for I in Held'Range loop
+                  if Far_Cast < 0 and then Held (I).Far_Dir /= Held (I).Dir then
+                     Far_Cast := I;
+                  end if;
+               end loop;
+               if Far_Cast < 0 then
+                  for I in Held'Range loop
+                     declare
+                        M   : Held_Map renames Held (I);
+                        Age : constant Natural := Far_Frame - M.Far_At;
+                     begin
+                        if ((M.Far_Tiles /= Far_Changes and then Age >= Far_Shadow_Every)
+                            or else ((M.Far_Stacks /= Changes or else M.Far_Remade /= Far_Remakes)
+                                     and then Age >= Far_Shadow_Slow))
+                          and then (Far_Cast < 0 or else M.Far_At < Held (Far_Cast).Far_At)
+                        then
+                           Far_Cast := I;
+                        end if;
+                     end;
+                  end loop;
+               end if;
+            end if;
+            if Far_Cast >= 0 then
+               declare
+                  M      : Held_Map renames Held (Far_Cast);
+                  Cs, Cu : Float;
+                  Mid    : constant Float := Float (Chunks_XY) * 4.0;
+               begin
+                  Sun_View (M.Dir, (Mid, Mid, 128.0), Far_Sh_Half, Far_Sh_Reach, Far_Shadow_Size, 1, M.Far_VP, Cs, Cu);
+                  M.Far_Dir := M.Dir;
+                  M.Far_Tiles := Far_Changes;
+                  M.Far_Stacks := Changes;
+                  M.Far_Remade := Far_Remakes;
+                  M.Far_At := Far_Frame;
+                  Far_Cast_At := Next;
+                  for J in 1 .. Loaded_N loop
+                     exit when Next = Max_Draws;
+                     declare
+                        C : constant Coord := Loaded_List (J);
+                        S : Slot renames Slots (C.CX, C.CY);
+                     begin
+                        if S.S_Cast > 0 then
+                           Cmds (Next) := (Count => Unsigned_32 (S.S_Cast * 6), Instances => 1,
+                                           First => Unsigned_32 (S.S_Start * 6), Base => Unsigned_32 (Next));
+                           Origins (Next) := (Integer_32 (C.CX * Chunk_B), Integer_32 (C.CY * Chunk_B), 0, 0);
+                           Next := Next + 1;
+                        end if;
+                     end;
+                  end loop;
+                  Cast_Tiles (Planes (M.Far_VP), Whole => True);
+                  Far_Cast_N := Next - Far_Cast_At;
+               end;
+            end if;
+         else
+            for M of Held loop
+               M.Far_Dir := (0.0, 0.0, 0.0);
             end loop;
          end if;
 
@@ -3705,6 +4892,13 @@ package body Castle.Render is
                Clear (Depth_Buffer_Bit);
                Draw_Casters (Held (I).Fig_VP, (0.0, 0.0, 0.0), 0, 0, Figures => True);
             end loop;
+            if Far_Cast >= 0 then
+               Bind_Framebuffer (Framebuffer, Held (Far_Cast).Far_FBO);
+               Viewport (0, 0, Far_Shadow_Size, Far_Shadow_Size);
+               Clear (Depth_Buffer_Bit);
+               Draw_Casters (Held (Far_Cast).Far_VP, (0.0, 0.0, 0.0), Far_Cast_At, Far_Cast_N, Figures => False);
+               Far_Casts := Far_Casts + 1;
+            end if;
             End_Casting;
          end if;
 
@@ -3777,10 +4971,48 @@ package body Castle.Render is
          Bind_Texture_Unit (7, Held (1 - From).Tex);
          Bind_Texture_Unit (11, Held (From).Fig_Tex);
          Bind_Texture_Unit (12, Held (1 - From).Fig_Tex);
+         --  (the far maps are read once both have been drawn)
+         if Far_Sh_On and then Far_Sh_Ready
+           and then (for all M of Held => M.Far_Dir /= Vec3'(0.0, 0.0, 0.0))
+         then
+            Put (U_FarL_A, Held (From).Far_VP);
+            Put (U_FarL_B, Held (1 - From).Far_VP);
+            Put (U_Far_Sh, Far_Shadow_Blend * Fog_Distance, Fog_Distance);
+            Put (U_Far_Sh2, Far_Shadow_Bias_M / (2.0 * Far_Sh_Reach), 2.0 * Far_Sh_Half / Float (Far_Shadow_Size));
+         else
+            Put (U_Far_Sh, 0.0, 0.0);
+         end if;
+         Bind_Texture_Unit (22, Held (From).Far_Tex);
+         Bind_Texture_Unit (23, Held (1 - From).Far_Tex);
       end;
 
       Put (U_Eye, Eye);
+      --  (the haze's two legs: with no far land, all haze at the fog distance, as it was)
+      if Far_View then
+         Put (U_Far, 0.0, Float'Max (Far_Haze_M, Fog_Distance + 1.0));
+      elsif Far_Land and then Far_Ready then
+         Put (U_Far, Far_Haze, Float'Max (Far_Whole_M, Fog_Distance + 1.0));
+      else
+         Put (U_Far, 1.0, Fog_Distance + 1.0);
+      end if;
       Bind_Texture_Unit (16, Base_Tex);
+      Bind_Texture_Unit (24, Haze_Tex);
+      Bind_Texture_Unit (1, Height_Tex);       --  (for every program that has the air)
+      if Far_View and then Ground_Haze then
+         declare
+            use Ada.Numerics.Elementary_Functions;
+            --  what stops that share of the light in Haze_Deep_M, a metre
+            function Per_M (Share : Float) return Float is (-Log (1.0 - Share) / Float (Haze_Deep_M));
+         begin
+            Put (U_GHaze, Vec3'(Per_M (Haze_Near), Per_M (Haze_Edge), Per_M (Haze_Far)) * Haze_Amount);
+         end;
+      else
+         Put (U_GHaze, Vec3'(0.0, 0.0, 0.0));
+      end if;
+      Put (U_Rim, (if Far_View and then Ground_Haze then Haze_Rim_M else 0.0));
+      Put (U_Floor, (if Far_View and then Ground_Floor then 1.0 else 0.0));
+      Put (U_Focus, Focus);            --  (for every program that has the air: the sky's too, for the floor)
+      Put (U_Fog, Fog_Distance);
 
       --  The clouds walked through, into their picture: only when some sky
       --  above the horizon is in the view (from the usual tilt none is).
@@ -3856,8 +5088,24 @@ package body Castle.Render is
          Program_Uniform_3f (Program, Loc_Camera, Float32 (Eye.X), Float32 (Eye.Y), Float32 (Eye.Z));
          Program_Uniform_3f (Program, Loc_Focus, Float32 (Focus.X), Float32 (Focus.Y), Float32 (Focus.Z));
          Program_Uniform_1f (Program, Loc_Fog_Dist, Float32 (Fog_Distance));
+         declare
+            Wet_Now : constant Boolean := Wetness and then Current.Wet > 0.0;
+         begin
+            Program_Uniform_3f (Program, Far_View_Loc (Wet_Now), (if Far_View then Float32 (Fog_Distance) else 0.0),
+                                Float32 (Far_Fade),
+                                Float32 (Fog_Distance * Ada.Numerics.Elementary_Functions."**" (2.0, -Float (Far_Fade))));
+            Program_Uniform_3f (Program, Zp_Loc (Wet_Now), Float32 (2.0 * Near_M * Far_Plane),
+                                Float32 (Far_Plane + Near_M), Float32 (Far_Plane - Near_M));
+         end;
+         if Far_Have_Dirty then
+            Texture_Sub_Image_2D (Far_Have_Tex, 0, 0, 0, Far_Side, Far_Side, RGBA, Unsigned_Byte, Far_Have (0, 0)'Address);
+            Far_Have_Dirty := False;
+         end if;
+         Bind_Texture_Unit (20, Far_Flag_Tex);
+         Bind_Texture_Unit (21, Far_Have_Tex);
 
          Program_Uniform_1i (Program, Loc_Water, 0);
+         Put_Roofs;
          Disable (Blend);
          if A2C then
             Enable (Sample_Alpha_To_Coverage);
@@ -3869,6 +5117,30 @@ package body Castle.Render is
       end if;
 
       Draw_Figures (Eye, Focus, VP, Fog_Distance);
+
+      --  The far land (see the spec), wherever no stack's own mesh is drawn:
+      --  after the land, which is in front of nearly all of it.
+      if Far_Land and then Far_Ready then
+         Enable (Depth_Test);
+         Depth_Func (Less);
+         Depth_Mask (GL_True);
+         Enable (Cull_Face_Cap);
+         Cull_Face (Back);
+         Front_Face (CCW);
+         Disable (Blend);
+         Use_Program (Far_Program);
+         Bind_Vertex_Array (Sky_VAO);
+         Bind_Texture_Unit (1, Height_Tex);
+         Bind_Texture_Unit (3, Noise_Tex);
+         Bind_Texture_Unit (18, Far_Z_Tex);
+         Bind_Texture_Unit (19, Far_Col_Tex);
+         Bind_Texture_Unit (20, Far_Flag_Tex);
+         Program_Uniform_Matrix_4fv (Far_Program, Far_Loc_VP, 1, GL_False, VP (0)'Address);
+         Program_Uniform_3f (Far_Program, Far_Loc_Camera, Float32 (Eye.X), Float32 (Eye.Y), Float32 (Eye.Z));
+         Program_Uniform_3f (Far_Program, Far_Loc_Focus, Float32 (Focus.X), Float32 (Focus.Y), Float32 (Focus.Z));
+         Program_Uniform_1f (Far_Program, Far_Loc_Fog, Float32 (Fog_Distance));
+         Draw_Arrays (Triangles, 0, Sizei (Castle.Far.Cells * Castle.Far.Cells * 6));
+      end if;
 
       --  The picture so far (the land and the people; not the marks, which
       --  are the developer's, nor the sky, which the water works out for
@@ -3896,6 +5168,7 @@ package body Castle.Render is
          Bind_Texture_Unit (3, Noise_Tex);
          Bind_Texture_Unit (15, Cloud_Tex);
          Program_Uniform_1i (Sky_Program, Loc_Vol, (if Clouds_Drawn then 1 else 0));
+         Program_Uniform_1i (Sky_Program, Loc_Drop, (if Low_Horizon then 1 else 0));
          Program_Uniform_2f (Sky_Program, Loc_Px, 1.0 / Float32 (Natural'Max (1, Width)),
                              1.0 / Float32 (Natural'Max (1, Height)));
          Program_Uniform_3f (Sky_Program, Loc_Fwd, Float32 (Fwd.X), Float32 (Fwd.Y), Float32 (Fwd.Z));
@@ -3919,7 +5192,8 @@ package body Castle.Render is
          if K > N_Solid then
             Program_Uniform_1i (Program, Loc_Water, 1);
             Program_Uniform_1i (Program, Loc_Reflect,
-                                (if Reflections and then Scene_Ready and then MSAA > 0 then 1 else 0));
+                                (if not (Reflections and then Scene_Ready and then MSAA > 0) then 0
+                                 elsif Far_View and then Far_Reflections then 2 else 1));
             Bind_Texture_Unit (9, Scene_Col);
             Bind_Texture_Unit (10, Scene_Z);
             Enable (Blend);

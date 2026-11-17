@@ -34,12 +34,18 @@ package Castle.Buildings is
    Stud_B         : constant := 4;      --  a post of the frame about every metre of wall, between the corners'
    Setback_Min_B  : constant := 2;      --  front wall 0.5 .. 1 m off the pathway edge
    Setback_Max_B  : constant := 4;
-   Max_Push_B     : constant := 12;     --  slide up to 3 m further on a slanting pathway
+   Max_Push_B     : constant := 20;     --  slide up to 3 m further on a slanting pathway
    Shared_Rate    : constant := 0.35;   --  (the preview's layout) chance that the next house shares a side wall
    Woodpile_Rate  : constant := 0.30;   --  (the preview's layout)
    Max_Step_B     : constant := 8;      --  lots falling more than 2 m are refused
-   Apron_B        : constant := 4;      --  a bank a metre wide feathered round each pad (as far as its lot is),
-   Apron_Front_B  : constant := 2;      --  half a metre wide before its front wall, where the path is near
+   Apron_B        : constant := 2;      --  its ground reaches two blocks past its walls behind and to either side
+                                        --  (as far as its lot is): one of open ground at its floor's level, and one
+                                        --  that is a wall of stone where the land beside it stands over or under.
+                                        --  No wider: a yard a serf could stand in between a house and a wall over
+                                        --  its head would be a pit with no way out (the walking map lets a serf
+                                        --  drop a metre and climb half of one), and a builder starved in one.
+                                        --  Before its front wall its ground reaches to its path,
+   Apron_Front_B  : constant := 2;      --  half a metre at the least
    Door_Landing_B : constant := 3;      --  the ground before a door is level with the floor this far out: a serf
                                         --  stepping down to it from half a metre up would not clear the eave
                                         --  over the first block, nor the lintel (the walking map's cells are
@@ -59,6 +65,10 @@ package Castle.Buildings is
    end record;
    type Opening_List is array (1 .. 5) of Opening;
 
+   Max_Reach_B : constant := 32;    --  a house's ground reaches at most this far past its own yard to either side,
+                                    --  to meet the ground of the house beside it (a gap no lot would fit in)
+   type Front_Runs is array (-(Apron_B + Max_Reach_B) .. Max_Width_B - 1 + Apron_B + Max_Reach_B) of Natural;
+
    type House is record
       Fx, Fy        : Integer := 0;     --  front-left corner (blocks)
       Ux, Uy        : Integer := 1;     --  along the front wall
@@ -67,10 +77,18 @@ package Castle.Buildings is
       Wall_H        : Integer := Wall_H_B;
       Pad           : Integer := 0;     --  ground blocks 0 .. Pad - 1 after levelling
       Door_Run      : Natural := 0;     --  block columns from its front wall straight out from its door to the
+      Front         : Front_Runs := [others => 0];
+                                        --  its front yard: at each place along its front (and the yard's to
+                                        --  either side), the block columns of ground between its front wall's
+                                        --  line and the edge of its path (the colony's to say)
       Door_Row      : Integer := 0;     --  path's ground, and the row of the ground where that way meets the
                                         --  path: past a landing (Door_Landing_B) the way is cut or built up
                                         --  as a stair between the pad and that (0 columns: no stair, as the
                                         --  preview has it)
+      Reach_L       : Natural := 0;     --  its ground reaches this many block columns further to its left and
+      Reach_R       : Natural := 0;     --  to its right than its own yard: as far as the ground of the house
+                                        --  begun before it beside it, so that the two are one terrace and the
+                                        --  walls behind them one wall (the colony's to say)
       Ridge_Along_U : Boolean := True;
       Shared_Left   : Boolean := False;
       Shared_Right  : Boolean := False;
@@ -95,10 +113,10 @@ package Castle.Buildings is
    --  and of the end wall); now and then another in another wall.  Level:
    --  how far it has been improved (0: the hovel; nothing more yet).
 
-   type Stage is (Site, Floor, Trim, Walls, Gables, Roof, Extras);   --  (in the order they are built in)
+   type Stage is (Site, Floor, Trim, Walls, Gables, Roof, Dress, Extras);   --  (in the order they are built in)
 
    generic
-      with procedure Put (Bx, By, Bz : Integer; M : Material; S : Stage);
+      with procedure Put (Bx, By, Bz : Integer; M : Material; S : Stage; State : Natural);
    procedure Blueprint (H : House);
    --  Every block of the house in build order.  The floor (Floor): the
    --  threshold under its door and the earth inside the walls beaten hard,
@@ -111,6 +129,11 @@ package Castle.Buildings is
    --  (front, right, back, left); air marks door and windows.  The gables
    --  (Gables), in daub, one end and then the other.  The roof (Roof), in
    --  thatch, strip by strip from one eave over the ridge to the other.
-   --  All its timber comes before any of its daub or thatch.
+   --  All its timber comes before any of its daub or thatch.  Last (Dress)
+   --  the roof is trimmed, strip by strip the same way: the top block of
+   --  thatch of each of its columns again, now with the state that says it
+   --  is dressed and how it lies (Castle.Blocks.Dressed): the same block at
+   --  the same place, so nothing is carried for it.  State is 0 for every
+   --  block but those.
 
 end Castle.Buildings;

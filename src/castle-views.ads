@@ -51,6 +51,7 @@ package Castle.Views is
    function Zone (Z : Positive) return Sheet;     --  zone Z: a stockpile, the camp, housing
    function House (H : Positive) return Sheet;    --  house H: whose it is, how far built, what it waits for
    function Deer (K : Positive) return Sheet;     --  deer K of the herds
+   function Cart return Sheet;                    --  the lord's cart: what is left in it
 
    --  The demand table (Castle.Colony, "demand"): for food and for each
    --  kind that is asked for or in store, a line of what the stores have of

@@ -66,7 +66,7 @@ procedure Find_Source (K : Item_Kind; From : Vec3; Self : Positive; Tgt : out Bl
 
    procedure Scan (CX, CY : Integer) is
       function Ver (X, Y : Integer) return Natural is
-        (if X in Memo_Grid'Range (1) and then Y in Memo_Grid'Range (2) then Version_Src (X, Y) else 0);
+        (if X in Memo_Grid'Range (1) and then Y in Memo_Grid'Range (2) then Own_V (X, Y) else 0);
       Slot : constant Memo_Slot :=
         (case K is when Straw => 0, when Stone => 1, when Water => 2, when others => 3);
    begin
@@ -133,7 +133,7 @@ begin
                   if abs (CX - SX) <= Reach and then abs (CY - SY) <= Reach
                     and then CX in Indexed_Grid'Range (1) and then CY in Indexed_Grid'Range (2)
                     and then Indexed (CX, CY) and then (Sources (CX, CY) and Bit) /= 0
-                    and then Version_Src (CX, CY) > 0
+                    and then Own_V (CX, CY) > 0
                   then
                      Scan (CX, CY);
                   end if;

@@ -26,7 +26,8 @@ package body Castle.Actions is
          when Set_Winter_Store => (To_Line ("set the winter store"), A_Stockpile, Leader),
          when Spare_Apples     => (To_Line ("spare the apple trees"), The_Colony, Leader),
          when Spare_Deer       => (To_Line ("spare the deer"), The_Colony, Leader),
-         when Zone_Housing     => (To_Line ("zone housing"), The_Ground, Leader));
+         when Zone_Housing     => (To_Line ("zone housing"), The_Ground, Leader),
+         when Fill_Housing     => (To_Line ("zone housing inside paths"), The_Ground, Leader));
 
    function Name (A : Action) return String is (Str (Row_Of (A).Name));
 
@@ -112,7 +113,14 @@ package body Castle.Actions is
                return;
             end if;
             Zone_Housing (O.X0, O.Y0, O.X1, O.Y1, R.Count);
-            R.Done := R.Count > 0;
+            R.Done := Housing_Refusal = "";      --  (room for no hovel yet is not a refusal: it can be pulled further)
+         when Fill_Housing =>
+            if not Has_Stake then
+               R.Why := Not_Now;
+               return;
+            end if;
+            Zone_Housing_Inside (O.Inside.X, O.Inside.Y, R.Count);
+            R.Done := Housing_Refusal = "";
       end case;
       if not R.Done then
          R.Why := The_Ground_Refused;
@@ -136,7 +144,7 @@ package body Castle.Actions is
                when Lay_Path       => Path_Refusal,
                when Zone_Stockpile => Stockpile_Refusal,
                when Zone_Camp      => Camp_Refusal,
-               when Zone_Housing   => Housing_Refusal,
+               when Zone_Housing | Fill_Housing => Housing_Refusal,
                when others         => "it could not be done"));
 
    ------------------------------------------------------------------ what one may do to a thing
@@ -186,6 +194,10 @@ package body Castle.Actions is
                      Todo => (What => Zone_Housing, By => Who, X0 => T.Point.X, Y0 => T.Point.Y,
                               X1 => T.Point.X, Y1 => T.Point.Y),
                      Two_Point => True, others => <>));
+               if Path_Count > 0 then
+                  Add ((Label => To_Line ("Housing inside these paths"),
+                        Todo => (What => Fill_Housing, By => Who, Inside => T.Point), others => <>));
+               end if;
             end if;
          when A_Person =>
             if T.Index in 1 .. Members then

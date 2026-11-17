@@ -209,9 +209,14 @@ package body Castle.HUD is
             if R.Done then
                Tools.Follow := (if Tools.Follow = O.Whom then 0 else O.Whom);
             end if;
-         when Zone_Housing =>
+         when Zone_Housing | Fill_Housing =>
             if R.Done then
-               Say (Tools, "housing zoned: room for" & R.Count'Image & (if R.Count = 1 then " hovel" else " hovels"));
+               Say (Tools, (if Castle.Colony.Housing_Joined > 0 then "housing extended: room for" else "housing zoned: room for")
+                           & (if R.Count = 0
+                              then " no hovel yet: the next in turn does not fit on it ("
+                                   & (if O.What = Zone_Housing then "pull it further, or " else "") & "mark more elsewhere)"
+                              else R.Count'Image & (if R.Count = 1 then " hovel" else " hovels")
+                                   & (if Castle.Colony.Housing_Joined > 0 then " now" else "")));
             else
                Say (Tools, "no housing there: " & Why_Not (O, R), Bad => True);
             end if;
@@ -396,7 +401,7 @@ package body Castle.HUD is
                return (Castle.Actions.A_Stockpile, T.Index, T.Point);
             end if;
             return Ground_Target (T);            --  nothing to do to the camp yet: its ground's menu
-         when A_Block | A_House | Nothing =>     --  (nor to a house)
+         when A_Block | A_House | A_Cart | Nothing =>     --  (nor to a house, nor to the cart)
             return Ground_Target (T);
       end case;
    end Target_Of;
@@ -771,6 +776,7 @@ package body Castle.HUD is
                   when A_Deer   => 2_000 + S.Under.Index,
                   when A_Zone   => 3_000 + S.Under.Index,
                   when A_House  => 4_000 + S.Under.Index,
+                  when A_Cart   => 5_000,
                   when A_Block | Nothing => 0));
    begin
       if The_Menu.Open or else not Tip_Due (Key) then
@@ -778,7 +784,8 @@ package body Castle.HUD is
       end if;
       declare
          Sheet : constant Castle.Views.Sheet :=
-           (if Key >= 4_000 then Castle.Views.House (Key - 4_000)
+           (if Key >= 5_000 then Castle.Views.Cart
+            elsif Key >= 4_000 then Castle.Views.House (Key - 4_000)
             elsif Key >= 3_000 then Castle.Views.Zone (Key - 3_000)
             elsif Key >= 2_000 then Castle.Views.Deer (Key - 2_000)
             else Castle.Views.Person (Key - 1_000));
@@ -846,8 +853,8 @@ package body Castle.HUD is
                            Label (P, "beside a path", Ink_Dim);
          when Camp      => Label (P, "click the fire's place", Ink_Dim);
                            Label (P, "7 x 7 m, on level grass", Ink_Dim);
-         when Housing   => Label (P, "click two corners", Ink_Dim);
-                           Label (P, "along a path", Ink_Dim);
+         when Housing   => Label (P, "click beside a path,", Ink_Dim);
+                           Label (P, "then pull along it", Ink_Dim);
          when Edit      => null;
       end case;
       if Placing and then Tools.Mode = Edit then
@@ -1000,11 +1007,12 @@ package body Castle.HUD is
       K19 : aliased constant String := "Point at";           D19 : aliased constant String := "a person, zone, deer: what it is";
       K20 : aliased constant String := "Right click";        D20 : aliased constant String := "what you may do with it";
       K21 : aliased constant String := "F10 / F11";          D21 : aliased constant String := "interface smaller / larger";
-      Rows : constant array (1 .. 21) of Pair :=
+      K22 : aliased constant String := "H";                  D22 : aliased constant String := "houses open: as looked at / all / none";
+      Rows : constant array (1 .. 22) of Pair :=
         [(K1'Access, D1'Access), (K2'Access, D2'Access), (K3'Access, D3'Access), (K4'Access, D4'Access),
          (K5'Access, D5'Access), (K6'Access, D6'Access), (K7'Access, D7'Access), (K8'Access, D8'Access),
          (K9'Access, D9'Access), (K10'Access, D10'Access), (K11'Access, D11'Access), (K12'Access, D12'Access),
-         (K13'Access, D13'Access), (K14'Access, D14'Access), (K15'Access, D15'Access),
+         (K13'Access, D13'Access), (K14'Access, D14'Access), (K15'Access, D15'Access), (K22'Access, D22'Access),
          (K16'Access, D16'Access), (K17'Access, D17'Access), (K18'Access, D18'Access),
          (K19'Access, D19'Access), (K20'Access, D20'Access), (K21'Access, D21'Access)];
       Cols : constant Columns := [(92.0, Left), (170.0, Left)];

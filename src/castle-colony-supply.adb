@@ -12,7 +12,8 @@ begin
          declare
             Cl : Cell renames Cells (C);
          begin
-            if (Pass = 1 and then Cl.Kind = K) or else (Pass = 2 and then Cl.Kind = Nothing and then Cl.Incoming = 0)
+            if (Pass = 1 and then Cl.Kind = K)
+              or else (Pass = 2 and then Cl.Kind = Nothing and then Cl.Incoming = 0 and then not Under_Cart (C))
             then
                declare
                   Room : constant Natural := Integer'Max (0, Cell_Limit (K) - Cl.Count - Cl.Incoming);

@@ -104,6 +104,15 @@ package Castle.Nav is
    --  Off: every changed stack read whole (for measuring, and for checks
    --  that compare the two).
 
+   Prove_Dry : Boolean := False;
+   --  Checks and measuring only (colony_run --prove-dry; slow).  On: every
+   --  plan of dry going (Wade under Wade_B) whose pieces of ground say out
+   --  of reach is then searched for with the pieces off and no budget, over
+   --  all the ground it may go on, and Program_Error is raised if that way
+   --  is found (Totals.Proved counts those borne out); and a stack's pieces
+   --  for dry going are worked out again beside the kept ones each time
+   --  they are used, and must be the same.
+
    procedure Forget;                          --  every stack's floors
    procedure Forget_Stack (CX, CY : Integer);  --  one stack's (it was unloaded)
 
@@ -158,16 +167,48 @@ package Castle.Nav is
       Overflow : Boolean := False;        --  crosses more stacks than it can note
    end record;
 
+   --  Where a plan may go, and nothing else (what is outside is no ground
+   --  to it: not stepped on, not looked over): the stacks any part of which
+   --  lies within R metres of (X, Y) (Within_M), or the stacks within Stacks
+   --  of stack (SX, SY), counted stack to stack (Within_Stacks: the ground a
+   --  colony is kept, Castle.Colony.Set_Ground_Stacks).  Neither: everywhere.
+   type Region is record
+      X, Y   : Float := 0.0;
+      R      : Float := 0.0;
+      SX, SY : Integer := 0;
+      Stacks : Natural := 0;
+   end record;
+   Everywhere : constant Region := (X => 0.0, Y => 0.0, R => 0.0, SX => 0, SY => 0, Stacks => 0);
+   function Within_M (X, Y, R : Float) return Region is ((X => X, Y => Y, R => R, SX => 0, SY => 0, Stacks => 0));
+   function Within_Stacks (SX, SY : Integer; Stacks : Positive) return Region is
+     ((X => 0.0, Y => 0.0, R => 0.0, SX => SX, SY => SY, Stacks => Stacks));
+
    function Plan (From, To : Vec3; Budget : Positive := 300_000; Weight : Float := Heuristic_Weight;
-                  Wade : Natural := Wade_B)
+                  Wade : Natural := Wade_B; Within : Region := Everywhere; Refuse : Boolean := False)
                   return Route;
    --  From the floor nearest From to the floor nearest To (each looked for
    --  within 3 m if its own cell can't be stood in).  Budget: floors looked
    --  at, at most.  Weight: 1.0 for the quickest route there is (tests).
    --  Wade: no step is taken onto a floor under more rows of water than
-   --  this (a herd's way keeps dry: Castle.Herds); the pieces of ground are
-   --  those of a serf, who wades, so a goal only wading reaches is searched
-   --  for to the budget and the route ends where it comes nearest.
+   --  this (a herd's way keeps dry: Castle.Herds).
+   --
+   --  The pieces of ground asked are those of the plan's own going (John,
+   --  2026-11-13, of the herds: "let them know that water blocks them"): a
+   --  serf's, who wades, for Wade_B; for less, the pieces that can be gone
+   --  over no deeper than Wade rows, worked out for a stack when a plan
+   --  first asks and again when its floors have changed.  (They were a
+   --  serf's whatever the plan, and a herd's way to a place only wading
+   --  reaches was searched for over its whole budget every time.)
+   --
+   --  Within: the plan keeps to that ground, and a goal its pieces do not
+   --  join inside it is out of reach, whatever lies beyond or is not
+   --  loaded.  (Everywhere, the pieces answer only when one end's are all
+   --  known: ground not loaded leaves the question open.)
+   --
+   --  Refuse: a goal the pieces show to be out of reach is not made for at
+   --  all: no search, no route (None, no points; Last_Stats.Out_Of_Reach).
+   --  Otherwise the route ends at the floor nearest the goal that can be
+   --  got to.
 
    function Changed (R : Route) return Boolean;
    --  The ground of a stack the route crosses has changed since it was planned.
@@ -186,6 +227,7 @@ package Castle.Nav is
       Seconds   : Float   := 0.0; --  wall time of the last Plan
       Stacks    : Natural := 0;   --  stacks whose floors were (re)built during it
       Out_Of_Reach : Boolean := False;   --  the labels showed the goal can't be reached
+      Cut_Short : Boolean := False;      --  the search stopped (budget, or room) with ground still to look at
    end record;
    function Last_Stats return Stats;
 
@@ -201,6 +243,12 @@ package Castle.Nav is
       Spent_Plans   : Natural := 0;      --  those that ran out of budget (or of room) before an end
       Short_Plans   : Natural := 0;      --  those that ended short of the goal (Partial or None)
       Unreached     : Natural := 0;      --  those the pieces of ground showed out of reach, with no search
+      Refused       : Natural := 0;      --  of those, the ones not made for at all (Refuse),
+      Refused_Seconds : Long_Float := 0.0;   --  and the wall time in them
+      Proved        : Natural := 0;      --  with Prove_Dry: answers of out of reach a whole search bore out,
+      Unproved      : Natural := 0;      --  and those it could not go all the way through (too much ground)
+      Dry_Labellings : Natural := 0;     --  times a stack's pieces for dry going were worked out
+      Remembered    : Natural := 0;      --  those answered from the memory of one that ran out of budget
       Stacks_Built  : Natural := 0;      --  stacks whose floors were read anew, whole
       Stacks_Mended : Natural := 0;      --  stacks whose floors were read anew only where the ground changed
       Cells_Built   : Long_Integer := 0; --  cells read, either way
@@ -212,6 +260,34 @@ package Castle.Nav is
    function Totals return Totals_Rec;
    procedure Reset_Totals;
 
+   --  What the pieces of ground said of a plan before it was searched (for
+   --  measuring: why a plan that ran out of budget was searched at all).
+   type Label_Answer is
+     (Not_Asked,     --  the labels off, nowhere to stand at the goal, or start and goal one floor
+      Stale,         --  the start's stack or the goal's not mapped as it is now
+      No_Piece,      --  the start's floor or the goal's is of no piece of ground
+      Same_Piece,    --  one piece: it can be got to (by the plan's own going: a serf's, or dry)
+      Met,           --  the start's pieces join the goal's: it can be got to (by the plan's own going)
+      Unknown,       --  neither end's pieces all known (open, or too many)
+      Out_Of_Reach); --  known out of reach: headed for the nearest floor instead, or refused
+   type Answer_Counts is array (Label_Answer) of Natural;
+   function Spent_By return Answer_Counts;
+   --  The plans that ran out of budget so far, by that answer.
+
+   --  A plan that ran out of budget (for measuring: colony_run --nav-log).
+   type Spent_Plan is record
+      From, To  : Vec3 := (0.0, 0.0, 0.0);
+      Budget    : Natural := 0;
+      Wade      : Natural := 0;            --  rows of water it might go through (less than Wade_B: a herd's dry way)
+      Answer    : Label_Answer := Not_Asked;
+      Result    : Outcome := None;
+      Reached_M : Float := 0.0;            --  how far from To the route ended
+      Seconds   : Float := 0.0;
+   end record;
+   type Spent_Hook is access procedure (P : Spent_Plan);
+   procedure On_Spent (Hook : Spent_Hook);
+   --  Called for each such plan from now on (null: none).  Measuring only.
+
    --  The plans that took longest so far, slowest first (for measuring).
    type Slow_Plan is record
       From, To  : Vec3 := (0.0, 0.0, 0.0);
@@ -222,6 +298,21 @@ package Castle.Nav is
    end record;
    type Slow_List is array (1 .. 12) of Slow_Plan;
    function Slowest return Slow_List;
+
+   --  A plan that ran out of budget is remembered (2026-11-13: a herd
+   --  frightened by a serf standing by it, with no dry way out, asked the
+   --  same way again every three seconds for two days, forty thousand
+   --  floors each time): its route, by where it was from and to, its budget,
+   --  weight and wade, and by the version of every stack in a box round
+   --  everything it read (its cells and the pieces of ground it went by, a
+   --  stack more each way).  One the pieces of ground called out of reach
+   --  is not remembered: the floor it made for instead was picked from
+   --  stacks far round its goal.  Asked again while none of that ground has
+   --  moved, it is answered from memory: the same route a search would give.
+   --  Kept only to save work: it changes no run, and this switch proves it
+   --  (colony_run --no-memos; tools/stress.sh runs the crowd both ways).
+   procedure Set_Spent_Memos (On : Boolean);
+   function Spent_Memos return Boolean;
 
    procedure Use_Labels (On : Boolean);
    --  Tests: plan without the pieces of ground (search everything, as

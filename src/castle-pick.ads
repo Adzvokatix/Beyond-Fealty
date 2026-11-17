@@ -18,9 +18,10 @@ package Castle.Pick is
    --  feet).  The development view, from above, has no limit.
    No_Limit : constant Float := Float'Last;
 
-   type Thing_Kind is (Nothing, A_Person, A_Deer, A_Zone, A_Block, A_House);
+   type Thing_Kind is (Nothing, A_Person, A_Deer, A_Zone, A_Block, A_House, A_Cart);
    --  (A_House: a house of the colony's, standing or begun: its walls, its
-   --  roof, or the ground its walls are to stand on.)
+   --  roof, or the ground its walls are to stand on.  A_Cart: the lord's
+   --  cart, where the ray lands on its bed or on the ground under it.)
    type Thing is record
       Kind   : Thing_Kind := Nothing;
       Index  : Natural := 0;               --  the member, the deer, the zone, the house

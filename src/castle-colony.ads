@@ -39,6 +39,28 @@ package Castle.Colony is
    procedure Set_World (Read : Block_Reader; Write : Block_Writer; Version : Version_Reader);
    --  The routes come from Castle.Nav, whose source is set apart.
 
+   procedure Set_Ground_Stacks (N : Natural);
+   function Ground_Stacks return Natural;
+   --  The colony's own ground: the host has in, or is bringing in, every
+   --  stack within N stacks of the stake's (counted stack to stack), and
+   --  the colony reads no ground beyond them, whatever else is loaded: it
+   --  indexes, searches and lays out nothing there, and its routes keep to
+   --  them (Castle.Nav.Within_Stacks).  So a colony comes out the same
+   --  whether its host holds that ground alone (the runner), what the
+   --  camera has passed over besides (the game as it was), or the whole map
+   --  (the game since 2026-11-14; colony_run --ground-stacks 400 ends in
+   --  the very state of a run on the colony's own ground, and
+   --  tools/stress.sh holds it to that).  Until it is called the colony
+   --  reads whatever is loaded (checks on made-up worlds).  A statement of
+   --  the host's, not the colony's state: Reset leaves it, nothing saves it.
+   --  What the player plans is not the band's doing and is read from all
+   --  the ground that is held: the line of a path shown and counted, the
+   --  ground inside a round of paths.  A zone or a path so marked further
+   --  out widens Ground_Reach_M, and the band goes there once the host has
+   --  said that ground is its own.
+   --  The stacks to bring in are those within Integer (Ground_Reach_M / 8)
+   --  + 5 of the stake's, and never fewer than were once in.
+
    --  Trees come from the generator (in the game, Castle.Flora): one at
    --  most to each Tree_Cell_B x Tree_Cell_B cell of block columns.  The
    --  colony asks for the trees whose trunks stand in the stacks it looks
@@ -76,11 +98,13 @@ package Castle.Colony is
    ------------------------------------------------------- things carried and stored
 
    type Item_Kind is (Nothing, Berries, Wood, Stone, Water, Straw, Meat, Hide, Carcass,
-                      Vegetables, Apples, Sticks, Grain, Earth);
+                      Vegetables, Apples, Sticks, Grain, Earth, Salt, Ladder);
    --  Berries are counted in handfuls, wood in logs (a metre long, carried
    --  one at a time on the shoulder), straw in sheaves (a block of tall
    --  grass each), stone in stones (a block of boulder each, carried in the
-   --  porter's sack), meat in joints and hides one a deer.  Water is not
+   --  porter's sack), meat in pounds (in joints, until 2026-11-12, and still
+   --  with curing off: "The lord's cart", below) and hides one a deer.
+   --  Water is not
    --  fetched yet: it waits for a use and for barrels to keep it in.  A
    --  carcass is carried (across the shoulders), never stored: it is
    --  butchered at the stockpile, into meat and a hide.  Vegetables are
@@ -91,14 +115,21 @@ package Castle.Colony is
    --  (see Grain_Per_Plant).  Earth is counted in blocks (a basketful is
    --  Carry_Limit of them): what is dug off ground being levelled; it is
    --  heaped in a stockpile, and nobody asks for it but a hollow to fill.
+   --  Salt is counted in pounds: it comes from the lord's cart, a sackful
+   --  at a time, and is used up as deer are butchered.  A ladder is a
+   --  ladder: made at a stockpile by a builder with a roof to thatch,
+   --  carried over the shoulder, stood against the house, and stored again.
    --  (Saved by position: new kinds go on the end.)
 
-   Carry_Limit : constant array (Item_Kind) of Natural :=
+   function Carry_Limit (K : Item_Kind) return Natural;   --  the most of it carried at once
+   function Cell_Limit (K : Item_Kind) return Natural;    --  and the most a stockpile's place holds
+   --  (meat's: by the pound, or with curing off by the joint, as below)
+   Carry_Table : constant array (Item_Kind) of Natural :=
      [Nothing => 0, Berries => 30, Wood => 1, Stone => 4, Water => 2, Straw => 6, Meat => 4, Hide => 2,
-      Carcass => 1, Vegetables => 12, Apples => 20, Sticks => 1, Grain => 30, Earth => 16];
-   Cell_Limit : constant array (Item_Kind) of Natural :=
+      Carcass => 1, Vegetables => 12, Apples => 20, Sticks => 1, Grain => 30, Earth => 16, Salt => 20, Ladder => 1];
+   Cell_Table : constant array (Item_Kind) of Natural :=
      [Nothing => 0, Berries => 120, Wood => 20, Stone => 40, Water => 10, Straw => 40, Meat => 20, Hide => 20,
-      Carcass => 0, Vegetables => 60, Apples => 80, Sticks => 0, Grain => 120, Earth => 64];
+      Carcass => 0, Vegetables => 60, Apples => 80, Sticks => 0, Grain => 120, Earth => 64, Salt => 240, Ladder => 2];
 
    function Name (K : Item_Kind) return String;   --  "berries"
 
@@ -199,8 +230,33 @@ package Castle.Colony is
    function Path_Todo (K : Positive; Metre : Positive) return Boolean;
    --  Metre Metre (from its first end) of stretch K is still to lay, as last
    --  counted: for whatever shows a planned path.
+   procedure For_Path_Left (K : Positive; Visit : not null access procedure (X, Y, Zr : Integer));
+   --  Every block column of stretch K that is still to be turned to
+   --  footpath, as its ground lies now, and the row of that column's top:
+   --  for whatever shows a planned path on the ground it will lie on (John,
+   --  2026-11-12: "the pathing zone also just forms a stright line by
+   --  elevation and it is in the air above the ground instead of drawing
+   --  along it").  West to east, and south to north in each line of columns.
+   procedure For_Path_Line (From, To : Vec3; Visit : not null access procedure (X, Y, Zr : Integer));
+   --  And every block column a path laid From .. To would have to turn,
+   --  piece by piece as Lay_Path would record it: for the line as it is
+   --  drawn.  Nothing is changed.
+   function Paths_Left_Key return Natural;
+   --  Moves when what is still to lay does (a stretch planned, a metre
+   --  laid, a stretch read from the ground again).
    function Stretch_Of (I : Positive) return Natural;   --  the stretch member I has to lay (0: none)
    function Laid_By (I : Positive) return Natural;      --  metres it has laid since it was given one
+   procedure Set_Path_Holes (On : Boolean);
+   --  On (the default): a hole in the ground under a metre of path is
+   --  filled as the metre is laid, to the ground round it, and the path
+   --  laid over it (John, 2026-11-13: "It would be nice if there was a way
+   --  for serfs to fill in holes in the path when they are compacting the
+   --  ground").  A hole is a column with nothing of the eight round it
+   --  lower and more than half of them higher: a pit, a dent, a ditch a
+   --  block wide; never a step of a slope, which a path goes down as it
+   --  did.  The earth is the turf cut where the path is laid.  Off: a path
+   --  goes down into a hole as it did.  Saved with the colony.
+   function Path_Holes return Boolean;
    procedure Set_Stretches (On : Boolean);
    --  On (the default): a path is laid a stretch to a serf, as above.  Off:
    --  as it was before stretches, for the older reference logs: anyone at
@@ -390,9 +446,11 @@ package Castle.Colony is
    Bed_Hour      : constant := 21.0;
    Wake_Hour     : constant := 5.5;
    Raw_Food  : constant array (Item_Kind) of Natural := [Berries => 1, Vegetables => 3, Apples => 2, others => 0];
-   Stew_Food : constant array (Item_Kind) of Natural :=
+   function Stew_Food (K : Item_Kind) return Natural;
+   --  points an item gives, eaten raw / cooked into stew (meat's: a pound's,
+   --  Pound_Stew, or with curing off a joint's, as in the table)
+   Stew_Table : constant array (Item_Kind) of Natural :=
      [Meat => 30, Vegetables => 8, Berries => 3, Apples => 5, Grain => 4, others => 0];
-   --  points an item gives, eaten raw / cooked into stew
 
    --  Fending for itself: once its belly is down to Very_Hungry with no
    --  stew to be had, no food in the stockpiles and none in its hands, a
@@ -463,6 +521,28 @@ package Castle.Colony is
    procedure Set_Winter_Store (Days : Natural);   --  0 (the default): nothing held back
    function Winter_Store return Natural;
    function Store_Held_Days return Float;         --  held back now, in days of the band's food
+
+   --  What the cook keeps for the pot (John, 2026-11-12: "rather than
+   --  waiting for the cook to use the stockpile to cook food, the serfs
+   --  were eating raw directly from the stockpile preventing food from
+   --  being cooked, can the cook reserve food in the stockpile and only
+   --  suprlus is availible to eat raw if no stew is present").  While the
+   --  camp's hearth stands and the band has a living cook, a pot's fill of
+   --  what is stored is the cook's (Cook_Keeps points as stew, whatever is
+   --  in the pot already: the next pot's): meat for half of it while there
+   --  is meat, and for the rest greens in the cook's own order
+   --  (Greens_Order), from what the winter store does not hold.  Nobody
+   --  eating raw touches those greens: only what is over is eaten raw, and
+   --  only with no stew to be had, as before.  Someone starving who has
+   --  found nothing to gather breaks into them, as into the winter store
+   --  (a serf won't let itself starve).  Before the hearth stands, and in a
+   --  band with no cook, nothing is kept: there is nobody to cook it.  What
+   --  a serf carries is its own to eat, as it was.  First values, his to
+   --  tune: the size of it and who may break into it.
+   Cook_Keeps : constant := 900;                  --  points as stew: a pot's fill (Pot_Points)
+   procedure Set_Cook_Hold (On : Boolean);        --  off: the stores as they were before the cook kept anything
+   function Cook_Holds return Boolean;
+   function Cook_Held (K : Item_Kind) return Natural;   --  of K, kept for the pot now
    function Cold (I : Positive) return Boolean;
 
    procedure Set_Source_Memos (On : Boolean);
@@ -597,6 +677,10 @@ package Castle.Colony is
    Hearth_Wood    : constant := 3;       --  pieces of wood for the crossbar (two posts and the bar)
    Hearth_Ground_M : constant := 2.6;    --  the camp's floor: level, its turf cut off, this far round the fire
    Sod_Share      : constant := 2;       --  block columns of turf cut off the floor that make a block of earth
+   Hollow_Most    : constant := 64;      --  block columns a hollow in the ground may take (four square metres:
+                                         --  a hovel's pad and a path fill one, as of 2026-11-13; more is low ground)
+   Hollow_Reach_B : constant := 10;      --  and how far round a metre of path one is looked for (block columns),
+   Hollow_Rise_B  : constant := 4;       --  and the most a column of path is raised to fill one (a metre)
    Tamp_S         : constant := 4.0;     --  seconds to make a square metre of the camp's ground ready
    Patch_Reach_M  : constant := 1.6;     --  it is worked from this near its middle, if no nearer can be got to
                                          --  (a bank is dug from the foot of it)
@@ -767,8 +851,22 @@ package Castle.Colony is
       Reaping => Portering, Quarrying => Portering, Drawing_Water => Portering, Camp_Keeping => Cooking,
       Site_Work => Building, House_Raising => Building];
 
+   --  How fast the band works and walks (John, 2026-11-12: "also can we
+   --  increase the work and travel speed of serfs by about 50%"): every
+   --  work rate, and every pace over the ground, is multiplied by the
+   --  colony's pace.  Serf_Pace is what a colony is founded with; 1 is the
+   --  band as it was until then, which a colony loaded from before it
+   --  keeps, and which the older sections of the checks and the seven
+   --  older reference runs are held at (Set_Pace, --pace 1).  Saved with
+   --  the colony.  Nothing else goes by it: not hunger, the clock, a
+   --  hunter's patience at its aim, how fast a skill is learnt (an hour at
+   --  the work is an hour of practice still) or the deer.
+   Serf_Pace : constant := 1.5;
+   procedure Set_Pace (To : Float);
+   function Pace return Float;
+
    --  A level's worth.  Every timer of skilled work runs at
-   --     rate = condition x skill x direction
+   --     rate = pace x condition x skill x direction
    --  condition: Starving_Pace with an empty belly, else 1; skill: from
    --  Novice_Rate with none of the work's own skill to Master_Rate at
    --  mastery (1 at a third of the way: the pace before there were skills);
@@ -923,7 +1021,9 @@ package Castle.Colony is
       Homes  : Natural := 0;                 --  housing: the houses begun on it, standing or not,
       Homes_Built : Natural := 0;            --  and those of them that stand
       Short  : Per_Kind := [others => 0];    --  housing: what its houses still take that has not been delivered
-      No_Room : Boolean := False;            --  housing: someone is without a home and no lot could be found for one
+      No_Room : Boolean := False;            --  housing: someone is without a house, none is being built for them
+                                             --  and no lot is laid out to begin one on (the player's to mend)
+      Lots   : Natural := 0;                 --  housing: the lots laid out on it for houses not yet begun
    end record;
    function Zone_Count return Natural;
    function Zone_At (Z : Positive) return Zone_View;
@@ -1007,9 +1107,13 @@ package Castle.Colony is
    --  the fire, and asleep under its own roof it is not cold in winter.  A
    --  house whose owner dies goes to the next without one.
    Lot_M            : constant := 7.0;
+   Retain_Over_B    : constant := 1;      --  a rise or a fall of more than this many blocks at the edge of a
+                                          --  house's ground is held by a wall of stone (John: "if its over .25m")
+   Wall_Per_Stone   : constant := 16;     --  blocks of wall or stair a stone from the stockpile makes
    Planks_Per_Log   : constant := 96;     --  blocks of plank or timber a log makes
    Thatch_Per_Sheaf : constant := 64;     --  blocks of thatch a sheaf of straw makes
    Lay_Blocks       : constant := 16;     --  blocks laid in a bout: a square metre
+   Trim_S           : constant := 2.0;    --  seconds a bout of trimming a roof takes (as many blocks: lighter work)
    Lay_S            : constant := 5.0;    --  seconds a bout
    Build_Reach_M    : constant := 2.5;    --  a block is laid from this near, across the ground
    Reach_Slack_M    : constant := 0.5;    --  (and a bout goes on to blocks this much further off)
@@ -1019,9 +1123,10 @@ package Castle.Colony is
    Bed_In_B         : constant := 4;      --  the owner's bed: this many blocks in from the left and the back wall
    Home_M           : constant := 1.5;    --  it is at home within this of its bed
    Max_Houses       : constant := Max_Members;
-   Max_House_Blocks : constant := 4_096;  --  blocks to a blueprint
+   Max_House_Blocks : constant := 6_144;  --  blocks to a blueprint (its roof's trimming among them)
    Max_Fronts       : constant := 2_048;  --  frontages looked at for a lot (a metre of path, either side, each)
-   Max_Site_Patches : constant := 160;    --  square metres of a house's pad and bank
+   Max_Site_Patches : constant := 384;    --  square metres of a house's ground, at most (its own and what it
+                                          --  reaches over to a neighbour's)
 
    --  A trade is earned, not given: taken up by someone whose job leads to
    --  it (Trade_From) when there is work for it, and left for that job when
@@ -1030,24 +1135,124 @@ package Castle.Colony is
    Trade_From : constant array (Trade_Kind) of Job_Kind := [No_Trade => Unassigned, Builder => Forester];
    function Trade_Of (I : Positive) return Trade_Kind;   --  Builder: it has a house to build
    function Site_Of (I : Positive) return Natural;       --  the house it is building (0: none)
-   function Home_Of (I : Positive) return Natural;       --  its house, standing or not (0: none begun)
-   function Housed (I : Positive) return Boolean;        --  its house stands
+   function Home_Of (I : Positive) return Natural;       --  its house (0: none: a house is nobody's until it stands,
+                                                         --  and is then drawn for by lot among those without one)
+   function Housed (I : Positive) return Boolean;        --  it has one
    function At_Home (I : Positive) return Boolean;       --  and it is inside it
    function Homeless return Natural;                     --  the living whose house does not stand
 
-   procedure Zone_Housing (X0, Y0, X1, Y1 : Float; Lots : out Natural);
-   --  A housing zone on the lot between two corners (metres, in either
-   --  order; the first is the side of a path it is on), laid out the way
-   --  zones are, and only if it comes within a metre of a path's edge and
-   --  a hovel would fit in it.  Lots: how many hovels it would hold as
-   --  things stand (0: refused, and Housing_Refusal says why).
-   function Housing_Refusal return String;   --  why the last Zone_Housing was refused ("" if it was not)
-   function Plan_Housing (X0, Y0, X1, Y1 : Float) return Lot_Plan;
-   --  What that zoning would give, with nothing changed (Cells: the hovels
-   --  it would hold).
+   --  Housing is marked along a path (John, 2026-11-12: "make the area fixed
+   --  distance from the path that will fit a hovel, and then they can pull
+   --  it along the path to the desired length, and if they intersect with
+   --  another habitation zone let them overlap and just combine the entire
+   --  zone ... don't let them go farther than 7 blocks from the end or turn
+   --  of a path").  First values, his to tune:
+   Housing_Deep_M : constant := 9.5;     --  how far back from a path's edge housing reaches, beside a path that
+                                         --  runs with the block grid (beside one that runs aslant, more: this
+                                         --  times the sum of its way's two parts, 13.4 m at 45 degrees).  It is
+                                         --  what the largest hovel takes on ground that falls 2 m across it,
+                                         --  below its path: stood back for a stair of eight steps to its door
+   Housing_Past_B : constant := 7;       --  block columns past an end or a turn of its path that it may reach
+   Housing_Snap_M : constant := 12.0;    --  it is begun within this of a path, on the side it is begun on
+   Housing_Long_M : constant := 60.0;    --  one pull along a path goes this far at most (pull again from its end)
+   Run_Straight   : constant := 0.9986;  --  two stretches of path are one straight run within 3 degrees (the cosine),
+   Run_Joint_M    : constant := 0.3;     --  their ends this near
 
-   type House_Phase is (Ground, Flooring, Framing, Walling, Roofing, Standing);
-   type House_Wait is (Not_Waiting, For_A_Builder, For_Wood, For_Straw, For_A_Way);
+   procedure Zone_Housing (X0, Y0, X1, Y1 : Float; Lots : out Natural);
+   --  Housing begun at (X0, Y0) and pulled to (X1, Y1) (metres): a strip
+   --  along the straight run of the path nearest the first point, on the
+   --  side of it that point is on, from the path's edge Housing_Deep_M
+   --  back, as long as from the one point to the other along the path.
+   --  All of it that is free ground is taken, whether or not a hovel fits
+   --  on it by itself; a housing zone it overlaps or touches is combined
+   --  with it into one (Housing_Joined: how many were).  The lots of the
+   --  houses still to begin are laid out anew, there and on all the other
+   --  housing (it is done here, and when a path is laid: never while the
+   --  band is at its work).  Lots: how many of them lie on this zone.  The
+   --  next hovel in turn is never passed over for one that would fit: if it
+   --  fits nowhere, no more are laid out (Lots_Short) until there is more
+   --  housing or another path.  Refused (Housing_Refusal says
+   --  why, "" if it was not): with no path within Housing_Snap_M of where
+   --  it was begun, with no free ground in the strip, or too far from the
+   --  stake.
+   procedure Zone_Housing_Inside (X, Y : Float; Lots : out Natural);
+   --  Housing of all the ground inside a round of paths (John, 2026-11-12:
+   --  "it would be nice if player had a fill option for closed loop
+   --  paths"): from the point (metres) out over free ground, a block at a
+   --  time, until paths, other zones and whatever stands have stopped it on
+   --  every side.  Housing it meets is combined with it, and the lots are
+   --  laid out anew, as for a strip.  Refused (Housing_Refusal) where the
+   --  ground is not closed round (it runs on as far as a lot can be worked
+   --  out over, Max_Plan_B block columns across with the point in the
+   --  middle, or to ground that is not in), where no path lies beside it,
+   --  begun on a path, a zone or something standing, or too far from the
+   --  stake.  It is as deep as the paths lie apart: the fixed depth of a
+   --  strip and its seven blocks past a turn are a strip's rules, not its.
+   function Plan_Housing_Inside (X, Y : Float; Count : Boolean := True) return Lot_Plan;
+   --  What that would give, with nothing changed.
+   function Housing_Refusal return String;   --  why the last Zone_Housing or Plan_Housing was refused ("" if it was not)
+   function Housing_Joined return Natural;   --  the housing zones the last Zone_Housing was combined with
+   function Lot_Count return Natural;        --  the lots laid out for houses not yet begun, on all the housing
+   function Lot_At (K : Positive) return Lot_Corners;
+   --  The walls' outer corners, on the ground, of the house lot K is laid
+   --  out for (K in 1 .. Lot_Count, in the order they will be begun).
+   function Lots_Short return Boolean;       --  the next hovel in turn fits nowhere on the housing there is
+   function Room_Short return Boolean;       --  and someone is without a house with none being built for them
+   function Plan_Housing (X0, Y0, X1, Y1 : Float; Count : Boolean := True) return Lot_Plan;
+   --  What that zoning would give, with nothing changed (Cells: the hovels
+   --  it would hold, if Count: they are counted by placing them, which is
+   --  many times the cost of the strip's ground, so whatever shows a pull
+   --  every frame asks without).
+
+   --  A ladder for the roof (John, 2026-11-12: "serfs building spend a lot
+   --  of time walking around the house thatching, can we have them construct
+   --  a ladder in the stockpile, and use the ladder to thatch roofs, that
+   --  would be cool").  First rules and values of mine, his to tune.  When a
+   --  house's roof is next, its builder gets a ladder: one left standing at
+   --  a hovel that is built, else one from a stockpile, else it makes one,
+   --  at the stockpile, of Ladder_Wood logs that building may take
+   --  (Ladder_S seconds, at its rate of building).  It carries it to the
+   --  house and stands it under the eave of the slope that is next, at that
+   --  wall's middle (clear of the door), and from the ladder a bout is laid
+   --  with no walking: every block of that slope is within its reach.  When
+   --  the other slope is next it carries the ladder round.  Trimming is done
+   --  from it the same way.  The log is asked of the stores with the
+   --  house's timber, from the day the house is begun; with none there that
+   --  building may take when the roof comes, its builder goes and fells for
+   --  it as the forester it is (Ladder_Fells_Most trees at the most).  With
+   --  no ladder to be had and no wood for one after that, and where a ladder
+   --  cannot be stood or got to, the roof is thatched from the ground as it
+   --  was.  A ladder left at a hovel that stands goes
+   --  to the next roof that wants one, or back to a stockpile while there
+   --  is room there.  A ladder is in one place at every moment: stored,
+   --  carried, or standing at a house (one carried by somebody who dies is
+   --  lost with the rest of its load).  Two builders at two roofs want a
+   --  ladder each.  Set_Ladders (False), --no-ladders: every roof from the
+   --  ground, as it was.
+   Ladder_Wood : constant := 1;       --  logs a ladder is made of
+   Ladder_S    : constant := 20.0;    --  seconds it takes to make
+   Ladder_Fells_Most : constant := 2; --  trees a builder goes to fell for want of that log, before it thatches from the ground
+   Ladder_M    : constant := 3.4;     --  its length (drawn)
+   procedure Set_Ladders (On : Boolean);
+   function Ladders return Boolean;
+   function Ladders_Made return Natural;             --  all told
+   function Ladders_Lost return Natural;             --  with whoever carried them, all told
+   function Ladders_Standing return Natural;         --  at houses now
+   type Ladder_View is record
+      Standing : Boolean := False;
+      Side     : Natural := 0;                       --  the eave it is under: 1 front, 2 back, 3 left, 4 right
+      Foot     : Vec3 := (0.0, 0.0, 0.0);            --  on the ground, where its builder stood it
+      Top      : Vec3 := (0.0, 0.0, 0.0);            --  where it leans: the eave, or over it where its foot
+                                                     --  stands high (never flatter than Ladder_Lean)
+   end record;
+   Ladder_Lean : constant := 1.3;                    --  it rises at least this much for each metre out
+   function Ladder_At (H : Positive) return Ladder_View;   --  house H's
+   function Aloft (I : Positive) return Boolean;           --  it is up a ladder, at a roof
+   function Shown_At (I : Positive) return Vec3;
+   --  Where member I is to be seen: Where (I), or on its ladder's rungs.
+
+   type House_Phase is (Ground, Flooring, Framing, Walling, Roofing, Trimming, Standing);
+   type House_Wait is (Not_Waiting, For_A_Builder, For_Wood, For_Straw, For_A_Way, For_Stone);
    type House_View is record
       Zone    : Natural := 0;
       Owner   : Natural := 0;                 --  whose it is (0: nobody's just now)
@@ -1065,15 +1270,71 @@ package Castle.Colony is
       Rise    : Integer := 0;                 --  and how far its floor lies above the path's ground there (rows)
       Bed     : Vec3 := (0.0, 0.0, 0.0);      --  where its owner sleeps
       Top_Z   : Float := 0.0;                 --  the height of its ridge (metres)
+      Has_Bed : Boolean := False;             --  a bed of straw has been made in it (at Bed, lying back toward its door)
+      Reach_L : Natural := 0;                 --  how far its ground reaches past its own yard to its left (seen
+      Reach_R : Natural := 0;                 --  from its path) and to its right, to meet the ground of a house
+                                              --  begun before it (block columns; 0: it does not, or they touch)
    end record;
    function House_Count return Natural;
    function House_At (K : Positive) return House_View;   --  K in 1 .. House_Count
    function House_On (X, Y : Float) return Natural;
    --  The house whose walls stand, or are to stand, round (X, Y) (0: none).
-   procedure Build_Homes_Now;
+   --  Beds (John, 2026-11-12: "when the campground is built have them pull
+   --  or collect straw for a bed ... When they get assigned a home they can
+   --  build a new straw bed in their house, we will let the old one decay
+   --  outside when we add decay later").  Each of the band makes itself a
+   --  bed of straw where it sleeps: by the fire once the camp is built, and
+   --  another in its house when one falls to it; the one by the fire stays
+   --  where it was made.  First values, his to tune:
+   Bed_Straw : constant := 2;            --  sheaves of straw to a bed (or as many as it could come by: one at least)
+   --  Its straw is the stockpile's, before the hovels being built have any
+   --  of it (John, 2026-11-12: "serfs didn't create a bed when straw was in
+   --  the stockpile, might have been reserved by the housing, basic needs
+   --  take priority"); with none stored it cuts its own, as a porter cuts
+   --  straw.  And its bed comes before the band's building (the paths; not
+   --  the camp, which it waits for).  A bed changes nothing but where its
+   --  maker is seen to lie.
+   --
+   --  Where each lies by the fire (John, 2026-11-12: "it would be nice if
+   --  the serfs found level ground and slept perpendicular to the fire"):
+   --  once the camp stands each of the band looks for a place of its own
+   --  round the fire, lying across the way to it, on ground that is the
+   --  camp's or nobody's, level under all its length, that it can get to
+   --  and nobody else has; the nearest such to the fire.  Chosen once and
+   --  kept (it makes its bed there), until something is built or dug where
+   --  it lies.  First values, his to tune:
+   Bed_Near_M   : constant := 3.0;      --  a sleeper's middle is no nearer the fire than this (clear of the camp's floor),
+   Bed_Far_M    : constant := 5.5;      --  and no further (asleep within 6 m of a warm fire it is not cold)
+   Bed_Ring_M   : constant := 0.5;      --  places are tried on rings this far apart, this far apart round each
+   Bed_Apart_M  : constant := 0.9;      --  two sleepers lie this far apart at the least, middle line to middle line
+   Bed_Step_M   : constant := 3.0;      --  a place a block out of level is as good as a level one this much further off,
+   Bed_Uneven_B : constant := 2;        --  and one more blocks out of level than this is no place at all
+   --  (with no such place within Bed_Far_M it lies as the band did before:
+   --  on a ring round the fire, its feet to it, whatever the ground)
+   procedure Set_Beds (On : Boolean);    --  off: the band as it was before it made beds (the older reference runs)
+   function Beds return Boolean;
+   function Has_Bed (I : Positive) return Boolean;   --  it has a bed where it sleeps now (its house's, if it has a house)
+   function Straw_In_Beds return Natural;            --  sheaves, in all the beds made
+   type Bed_View is record
+      Made   : Boolean := False;
+      Feet   : Vec3 := (0.0, 0.0, 0.0);  --  where its sleeper's feet are: it lies back from there,
+      Toward : Vec3 := (0.0, 0.0, 0.0);  --  away from this (a point a metre beyond its feet)
+      By_Fire : Boolean := False;        --  at the camp, across the way to the fire: its sleeper turns to face it
+   end record;
+   function Sleeping_Place (I : Positive) return Bed_View;
+   --  Where member I lies down to sleep now (Made: on a bed), and what its
+   --  feet point to: its cloak lies there while it is not wearing it.
+   function Camp_Bed (I : Positive) return Bed_View;
+   --  The bed member I made itself at the camp (it lies there still when the
+   --  member has a house, and when it is dead).
+
+   procedure Build_Homes_Now (Last_First : Boolean := False);
    --  A house for everyone without one, begun and built on the spot, nothing
    --  taken from anywhere, for as many as the housing zones have room for:
    --  for scripted starts (--homes-built) and the checks, as Supply is.
+   --  (Last_First: the houses already begun are raised the last of them
+   --  first, so that a house's ground is made ready before that of the
+   --  earlier house beside it: for the checks.)
 
    ------------------------------------------------------- a person, as data
 
@@ -1100,6 +1361,7 @@ package Castle.Colony is
       Site     : Natural := 0;              --  the house it is building (0: none)
       Home     : Natural := 0;              --  its house (0: none begun),
       Housed   : Boolean := False;          --  and whether it stands
+      Has_Bed  : Boolean := False;          --  it has a bed of straw where it sleeps now
    end record;
    function Person (I : Positive) return Person_View;
 
@@ -1211,7 +1473,119 @@ package Castle.Colony is
    Shoot_M    : constant := 18.0;
    Draw_S     : constant := 1.5;
    Butcher_S  : constant := 10.0;
-   function Meat_Of (C : Castle.Deer.Class) return Positive;   --  joints of meat a deer gives
+   function Meat_Of (C : Castle.Deer.Class) return Positive;
+   --  The meat a deer gives: pounds of it dressed, all of it kept if it is
+   --  salted as it is butchered (below); with curing off, joints, as it was.
+
+   --  The lord's cart, salt, and meat by the pound (John, 2026-11-12: "we
+   --  need to up the amount of meat a single deer can provide, we are
+   --  looking at 60lbs of field dressed meat from a deer that should be
+   --  enough to feed a camp for a couple of days when smoked or cured ...
+   --  the player is a minor noble tasked wtih improving the land by their
+   --  lord, taxes on production would come after a few years, so the lord
+   --  provides a small workforce a minimum of starting supplies so for now
+   --  lets just add a cart with salt in it for curing, we can expand the
+   --  supplies later and work the story in as we get to the players role,
+   --  but for now that way a single deer can provide for the camp for a
+   --  couple of days").  First values and first rules of mine, his to tune:
+   --
+   --  Meat is counted in pounds.  A doe gives 60 lb dressed (Deer_Lb: a
+   --  stag more, a young stag and a fawn less), and a pound is worth
+   --  Pound_Stew points in the pot, so that a doe's meat is two days' food
+   --  for a band of six (60 x 48 = 2,880 points; six eat 1,440 a day).
+   --
+   --  The band arrives with a cart, the lord's, which stands a few metres
+   --  from the homestake from the moment that is raised (Cart_Near_M to
+   --  Cart_Far_M off, on the first level, open ground found going out a
+   --  metre at a time and round from the north), with Cart_Salt_Lb of salt
+   --  in it.  It is a thing in
+   --  the world: nothing is zoned over it, a camp marked over it and a path
+   --  laid through it are refused, nobody walks through it, and it can be
+   --  pointed at (its sheet says what is left in it).
+   --
+   --  The band pulls it into the stockpile zone nearest it (John,
+   --  2026-11-13: "the cart, can they pull it into the closest stockpile
+   --  zone?"), as an extra task of the band's (after the camp and its seats,
+   --  before the paths), once there is one: one of them goes to its shafts,
+   --  lifts them and pulls it at Cart_Tow_Pace of a walk to a place in the
+   --  zone held for it from the start, where it is set down.  The place is
+   --  two of the zone's places side by side, empty, the nearest such to it
+   --  in the zone nearest it that has them, on level ground (its bed square
+   --  to the grid, along the way the two lie); nothing is put on a place
+   --  under it, standing or held for it, and nothing else about the
+   --  stockpile changes.  In tow it is nothing of the world: drawn behind its
+   --  puller, its middle Cart_Shaft_M back.  Its puller called away (to
+   --  other work, dead): it is set down where it is, or near, or back where
+   --  it stood.  Standing in a stockpile zone it stays.  Its salt is
+   --  fetched and used as before.  Set_Cart_Pull (False), --no-cart-pull:
+   --  it stays where it stood, as before.
+   --
+   --  A hunter with empty hands keeps salt by for its kills: while the
+   --  stockpiles hold less than Salt_Keep_Lb of it, the cart has some and
+   --  there is room to store it, it fetches a sackful (Carry_Limit (Salt))
+   --  from the cart to a stockpile before it goes after deer.
+   --
+   --  A deer is salted as it is butchered, with the salt in the stockpiles:
+   --  a pound of salt to Lb_Per_Salt of meat.  Salted, all of its meat is
+   --  kept.  With no salt, only what can be eaten before the rest turns is
+   --  kept: one pound in Fresh_Div (with some salt, that much of it is
+   --  salted and the rest goes as unsalted meat does).  Nothing spoils once
+   --  it is stored: spoilage is a later stage's, and until then this is the
+   --  whole of what salt does.  Meat is never asked for in salt's name, and
+   --  salt is never in the demand table: nobody of the band can make it.
+   --
+   --  Set_Curing (False), --no-curing: the band as it was before any of
+   --  this: no cart, no salt, meat in joints (a doe 8, a joint 30 points in
+   --  the pot, four to a load, twenty to a place).  The seven older
+   --  reference runs are held at it.
+   type Deer_Yield is array (Castle.Deer.Class) of Positive;
+   Deer_Lb      : constant Deer_Yield :=
+     [Castle.Deer.Fawn => 20, Castle.Deer.Doe => 60, Castle.Deer.Young_Stag => 45, Castle.Deer.Stag => 75];
+   Deer_Joints  : constant Deer_Yield :=
+     [Castle.Deer.Fawn => 3, Castle.Deer.Doe => 8, Castle.Deer.Young_Stag => 6, Castle.Deer.Stag => 10];
+   Pound_Stew   : constant := 48;      --  points a pound of meat gives in the pot
+   Meat_Load_Lb : constant := 20;      --  pounds of meat carried at once
+   Meat_Cell_Lb : constant := 120;     --  and to a stockpile's place (two does)
+   Lb_Per_Salt  : constant := 10;      --  pounds of meat a pound of salt cures
+   Fresh_Div    : constant := 4;       --  unsalted, one pound in this many is kept
+   Cart_Salt_Lb : constant := 240;     --  the salt the band is sent out with (forty does' worth)
+   Salt_Keep_Lb : constant := 16;      --  a hunter fetches more when the stockpiles hold less (two stags' worth)
+   Cart_Near_M  : constant := 4.0;     --  the cart stands this far from the stake at the least,
+   Cart_Far_M   : constant := 20.0;    --  and no further (found none so near: there is no cart)
+   Cart_Long_B  : constant := 8;       --  its bed, in block columns: 2 m long
+   Cart_Wide_B  : constant := 4;       --  and 1 m across
+   Cart_Up_B    : constant := 3;       --  and this many rows over the ground it stands on (its floor's top: 0.75 m)
+   Cart_Tow_Pace : constant := 0.6;    --  pulling it, a walk's pace this much of its own
+   Cart_Shaft_M : constant := 2.3;     --  from its middle to the bar across its shafts (where its puller stands)
+
+   procedure Set_Curing (On : Boolean);
+   --  Said before the stake is raised (the cart comes with the band); off:
+   --  the band as it was.  Saved with the colony.
+   function Curing return Boolean;
+   function Kept_Of (Lb, Salt_Lb : Natural) return Natural;
+   --  What is kept of Lb pounds of a deer butchered with Salt_Lb pounds of
+   --  salt to hand.
+   function Salt_For (Lb : Natural) return Natural;   --  the salt that all of it takes
+
+   type Cart_View is record
+      Here  : Boolean := False;            --  there is one
+      At_P  : Vec3 := (0.0, 0.0, 0.0);     --  the middle of it, on the ground it stands on
+      Along_X : Boolean := True;           --  it lies along the world's X (else along Y)
+      Salt  : Natural := 0;                --  pounds of salt left in it
+      Turn  : Float := 0.0;                --  the way its shafts point (radians)
+      Towed : Boolean := False;            --  in tow, by
+      By    : Natural := 0;                --  that member
+   end record;
+   procedure Set_Cart_Pull (On : Boolean);
+   function Cart_Pull return Boolean;
+   function Cart_In_Stockpile return Boolean;   --  it stands, its middle on a stockpile zone's ground
+   function Cart return Cart_View;
+   function Cart_On (X, Y : Float) return Boolean;   --  (metres) its bed is over that ground
+   function Cart_Beside return Vec3;                 --  where one stands to take from it
+   procedure Set_Cart_Salt (Lb : Natural);           --  (scripted starts and checks: what is left in it)
+   function Deer_Salted return Natural;              --  deer butchered with salt for all their meat, all told
+   function Deer_Unsalted return Natural;            --  and with less than that
+   function Meat_Lost return Natural;                --  pounds of meat not kept for want of salt, all told
    function Hit_Chance (Metres : Float) return Float;
 
    procedure Set_Spare_Deer (On : Boolean);   --  a protection: deer are not hunted (default off)

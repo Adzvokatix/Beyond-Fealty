@@ -7,10 +7,9 @@ procedure Lay_Path (From, To : Vec3; Laid : out Natural) is
    Y0   : constant Integer := B (Float'Min (From.Y, To.Y) - Half);
    Y1   : constant Integer := B (Float'Max (From.Y, To.Y) + Half);
    L    : constant Float := Flat_Dist (From, To);
-   --  planned, a path is kept as stretches of Path_Stretch_M, the last what
-   --  is left (and up to a metre over, not a sliver of its own)
-   Pieces : constant Positive :=
-     (if Labour_On then Positive'Max (1, Natural (Float'Ceiling ((L - 1.0) / Path_Stretch_M))) else 1);
+   --  planned, a path is kept as stretches of Path_Stretch_M (Line_Pieces)
+   Pieces : constant Positive := Line_Pieces (L);
+   Paths_Were : constant Natural := N_Paths;
 begin
    Laid := 0;
    Path_Refused_For := Nothing_There;
@@ -33,6 +32,21 @@ begin
          end;
       end loop;
    end if;
+   --  nor through the lord's cart
+   if Cart_Set then
+      for K in 0 .. Integer (Float'Ceiling (L * 8.0)) loop
+         declare
+            T  : constant Float := Float'Min (1.0, Float (K) / (L * 8.0));
+            Px : constant Float := From.X + (To.X - From.X) * T;
+            Py : constant Float := From.Y + (To.Y - From.Y) * T;
+         begin
+            if Cart_On_Block (B (Px), B (Py), Margin => Integer (Half * 4.0)) then
+               Path_Refused_For := Through_Cart;
+               return;
+            end if;
+         end;
+      end loop;
+   end if;
    if Labour_On then
       --  planned: the band lays it.  What there is of it to lay is counted
       --  from the ground where that is in (a stretch on ground that is not
@@ -45,7 +59,7 @@ begin
          end Count;
          First : constant Positive := N_Paths + 1;
       begin
-         if Stretch_In (S) then
+         if Stretch_In (S, Held => True) then      --  (the player's act: by the ground that is held)
             For_Path_Work (S, Count'Access);
             if Laid = 0 then
                return;                        --  nothing there to lay a path on
@@ -54,23 +68,8 @@ begin
             Laid := Natural (L * Path_Width_M * 16.0);
          end if;
          for P in 1 .. Pieces loop
-            declare
-               --  where a piece ends: on the ground there if that is in
-               --  (else at no height yet: it is given one when it is)
-               function Joint (T : Float) return Vec3 is
-                  X : constant Float := From.X + (To.X - From.X) * T;
-                  Y : constant Float := From.Y + (To.Y - From.Y) * T;
-                  Z : constant Float := Castle.Nav.Surface_Z (X, Y);
-               begin
-                  return (X, Y, (if Z >= 0.0 then Z elsif From.Z >= 0.0 and then To.Z >= 0.0
-                                 then From.Z + (To.Z - From.Z) * T else -1.0));
-               end Joint;
-            begin
-               N_Paths := N_Paths + 1;
-               Path_List (N_Paths) :=
-                 (A => (if P = 1 then From else Joint (Float (P - 1) * Path_Stretch_M / L)),
-                  B => (if P = Pieces then To else Joint (Float (P) * Path_Stretch_M / L)), others => <>);
-            end;
+            N_Paths := N_Paths + 1;
+            Path_List (N_Paths) := Line_Piece (From, To, P, Pieces);
          end loop;
          for K in First .. N_Paths loop
             Refresh_Path (K);
@@ -111,5 +110,8 @@ begin
       N_Paths := N_Paths + 1;
       Path_List (N_Paths) := (A => From, B => To, Todo => 0, Known => True);
       Path_Refused_For := Laid_Some;
+   end if;
+   if N_Paths > Paths_Were and then N_Housing > 0 then
+      Plan_Lots;                 --  (a house fronts a path: the lots still to begin, laid out anew)
    end if;
 end Lay_Path;

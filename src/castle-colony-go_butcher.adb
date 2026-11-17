@@ -10,9 +10,7 @@ begin
          C : Cell renames Cells (K);
          D : constant Float := Flat_Dist (M.Pos, C.Centre);
       begin
-         if ((C.Kind = Meat and then C.Count + C.Incoming + Meat_N <= Cell_Limit (Meat))
-             or else (C.Kind = Nothing and then C.Incoming = 0))
-           and then D < Md
+         if Takes (K, Meat, Meat_N) and then D < Md
          then
             Md := D;
             Mc := K;
@@ -24,10 +22,7 @@ begin
          C : Cell renames Cells (K);
          D : constant Float := Flat_Dist (M.Pos, C.Centre);
       begin
-         if K /= Mc
-           and then ((C.Kind = Hide and then C.Count + C.Incoming + 1 <= Cell_Limit (Hide))
-                     or else (C.Kind = Nothing and then C.Incoming = 0))
-           and then D < Hd
+         if K /= Mc and then Takes (K, Hide, 1) and then D < Hd
          then
             Hd := D;
             Hc := K;

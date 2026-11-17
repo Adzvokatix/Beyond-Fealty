@@ -28,7 +28,16 @@ hats read from above.
   forester (greens, an axe), hunter (leather jerkin, bow), gatherer (apron,
   basket on the back), porter (sack on the back), lord (rich dyes, gold
   trim, sword) and idle. Winter adds a cloak and a hood with the face cut
-  out. Children carry no tools. (The axe and the bow are no longer boxes
+  out. **The cloak is its owner's the year round** (John, 2026-11-12:
+  "can we add cloaks, they can set down next to their bed during the
+  summer, wear it during with their winter clothes in the winter, and use
+  it as a blanket when they sleep?"): its wool is the look's (`Rig.Cloak`),
+  a third field of the outfit takes it off the back while its owner sleeps
+  under it in winter (`Cloak_Off`), and off the body it is two props to a
+  wool (`Castle.Props.Cloak_Folded`, `Cloak_Spread`), put where it belongs
+  by the game (`habitation.md`, "Cloaks"). **Since 2026-11-13 the cloak is
+  cloth** ("Cloth", below), and the rig's cloak and the two props are what
+  `--no-cloth` draws. Children carry no tools. (The axe and the bow are no longer boxes
   of the body: see "Tools", below.)
 * **Rounded boxes** (John, 2026-11-11: "a slight drift away from the voxel
   block design, something that removes the minecraft feel from the models,
@@ -112,6 +121,19 @@ hats read from above.
   head looks into turns and glances about while standing. Each serf's
   filters take their character from the genome: children quick and
   bouncy, elders slow and heavily damped.
+* **Lying down, and asleep** (`Lay_Down`, `Posed`). `Lie` tips the whole
+  body back about a line behind its heels until it is on its back, its feet
+  toward what it was driven to face: the dead lie so. `Sleep` (John,
+  2026-11-12: "have serfs sleep on their side") tips it the same way and
+  rolls it onto one side as it goes down (which side is its own, from its
+  seed; told to face something as it sleeps, `Lie_Facing`, the side that
+  turns its belly that way: the game says so for one asleep across the
+  way to the camp's fire, so that its face is to the fire), the lower
+  shoulder and hip on the ground, the legs drawn up (the
+  upper one further), the upper arm across the chest, the back and the neck
+  a little bent. `Lying_Frame` says where a sleeper's hips are, which way
+  it lies and which way its belly faces, for the cloak spread over it.
+  `--lineup N --lineup-does Sleep` shows it in daylight.
 * **Drawing** (`Castle.Figures`, `Castle.Render`). Each look's skin is one
   layer of a texture array (256 resident at once). Each frame the game
   hands over every figure's bone frames, and every box of every figure is
@@ -158,7 +180,87 @@ flat ground (pace, reach, bob, no sliding feet, one foot always down, arms
 against legs, the same stride at 30 and 120 fps); `--png FILE` writes a
 sheet of skins to look at.
 
-Not there yet: cloth (skirts and cloaks are rigid,
-so a long stride can push a leg through a skirt), culling figures off
+## Cloth
+
+John, 2026-11-13: "can we have the cloaks be dynamic cloth, that they wear
+at the start, then take off when they make their bed, and then draped over
+them when they sleep, if we can do it, it would be a very cool touch and
+would translate well when we get to other wearable items later in
+production." An experiment, built with first values of mine; drawing only:
+nothing of it is saved, the colony knows nothing of it, and `--no-cloth`
+is the cloaks as they were, exactly.
+
+- **`Castle.Cloth`** is a sheet of six particles across and seven down
+  (thirty panels), knowing nothing of cloaks: held to its rest lengths
+  (across, down, each to the next but one, and corner to corner), falling
+  under its weight, kept out of the capsules of whatever body it hangs on
+  or lies over and off the ground; its top row pinned to points given each
+  frame, or let go. Where it touches it holds (no sliding); and stepped to
+  stick (`Stick`, a sleeper's cloak), a point that has come to rest on the
+  body or the ground stays there until the sheet is laid, hung or let go
+  again, so that it drapes from where it first rests and does not slide
+  off a narrow back. Let go, it is
+  frozen once still, or five seconds of drawn time on at the latest: a
+  frozen sheet is not stepped at all, so it and its shadow are dead still.
+  It is stepped by drawn time after `Castle.Serfs.Submit`, so a recording
+  repeats. Six passes over its lengths a step, two steps a frame, the body
+  and the ground every other pass: about 0.045 ms a worn cloak a frame (48
+  worn, 2.2 ms with the pack's capsule, 2.1 before it; a sleeper's, nothing
+  once it lies still).
+- **Drawn as boxes** (`Castle.Props.Put_Cloth`): each panel a thin box
+  2 px square on a bone of its own (the bow's way: thirty panels are two
+  figures of fifteen bones), framed onto its four points, a tenth wider
+  than them so that none parts, sharp-edged (`Round` 0) so that they meet;
+  one look pair to a wool. Lit and shadowed as any figure, with nothing
+  more to do. Six cloaks cost 0.02 to 0.07 ms of GPU at the camp's fixed
+  view (2.00 and 2.05 ms with them, 1.98 and 1.98 without).
+- **The cloak** (the game's `Show_Cloths`): its top row held across the
+  shoulders (the upper arms' joints), behind the neck; the body it is kept
+  out of is ten capsules on the solved bones (the trunk, the hips, the
+  head, thighs, shins, upper arms, and what is carried on the back all
+  day: a gatherer's basket, a porter's sack). **Over a pack the cloak is
+  thrown round the pack's far edge** (its top row arched out behind the
+  pack by the chest's own back and up, so that it leans with its bearer)
+  and hangs round and behind it: pinned across the shoulders alone it
+  hung between the back and the basket, and the basket came through it.
+  Arch and capsule go by the pack's kind and the season (`Pack_Mid`,
+  `Pack_Far`: a basket is a pixel deeper than a sack, and both sit a pixel
+  further off over winter clothes, as `Castle.Bodies` places them). From
+  above the pack's top shows at the collar; in winter a sliver of a
+  basket's edge still shows in some poses. **Worn from the start until its owner
+  has made the bed it sleeps on; then taken off where it is**: let go, it
+  falls, and lies there. **Over its owner asleep**: once it is all the way
+  down (`Lies` past 0.97: laid over a body still lying down it falls
+  beside it) and its body has held still ten frames (over one still easing
+  into its place it was lain on), the sheet is laid flat a little above it
+  from the head end down and settles over it, sticking where it rests; if
+  the body moves more than 0.2 m from under it, it is laid again. (Looked
+  at in a hovel through its cleared roof, 2026-11-13, a sleeper's cloak
+  slid off its side onto the bed and the sleeper was seen lying on it:
+  that is what the sticking and the wait mend.) Awake again it is left lying on the bed. In
+  winter it is worn whenever its owner is awake, as before. It is put on
+  again (hung straight from the shoulders) after a jump of the shoulders
+  (a load, a fast clock), and a cloak more than 40 m from the eye hangs
+  straight and is not stepped. The outfit's own cloak is never drawn while
+  cloth is on (`Cloak_Off`).
+
+Where it clips (John, 2026-11-13, of the cloaks: "it works great, it would
+be nice if the clipping was less, but it's workable"; looked for close up
+on the band setting off and at its work, and asleep): a basket or a sack
+on the back came through a worn cloak (mended, above); a hunter's bow and
+quiver lie over and through its cloak; a sheaf or a log on the shoulder
+cuts its collar; where the cloth bends sharply its thirty panels part into
+shards; and the sleeper's, below. The last four stand.
+
+Not there yet: on the sleeper looked at in a hovel a brown shape on its
+flank shows through the cloak (by its place its upper arm, whose sleeve
+is wider than the capsule the cloth is kept off; not identified for
+certain: capsules for the forearms were tried and changed nothing seen);
+cloth for anything else (skirts are rigid,
+so a long stride can push a leg through a skirt; the cloth package is made
+to hang from anything, and nothing else hangs from it yet), the cloak
+taken up again by hand (it is put on, or laid over its sleeper, at once),
+a cloak on the row put to sleep in daylight (`--lineup`: the old spread
+cloak), cloth that blows in the wind, culling figures off
 screen, tools for the other jobs. Left out on purpose (John, above): a
 hand that goes to the hip, the shoulder or the quiver for what it takes.

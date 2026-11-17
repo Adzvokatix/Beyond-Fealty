@@ -26,7 +26,7 @@ begin
             loop
                if SX + DX in Indexed_Grid'Range (1) and then SY + DY in Indexed_Grid'Range (2)
                  and then not Indexed (SX + DX, SY + DY)
-                 and then Version_Src (SX + DX, SY + DY) > 0
+                 and then Own_V (SX + DX, SY + DY) > 0
                then
                   Index_Stack (SX + DX, SY + DY, Far => R > Near);
                   Done := Done + 1;

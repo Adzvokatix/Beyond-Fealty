@@ -146,6 +146,32 @@ the edits come from. That nothing else moved them was proved by running the four
 forty-eight's year and the forty-eight at work again with `--no-mending --no-memos`: the same three
 states.
 
+On 2026-11-13, with the lord's cart pulled into the stockpile, the forty-eight at work took 22 to 24 s
+where they had taken 12 to 15: a herd with no dry way out, frightened every three seconds by a forester
+left standing by it, asked the walking map the same way 721 times, 40,000 floors each
+(`docs/systems/routes.md`, "A plan that ran out of budget is remembered"). Remembered now, the run takes
+13.3 s and ends in the same state (1f768b5277de9411); the runner has a line for it (`crowd_no_memos`:
+the same sixty days with nothing remembered must end the same). The same day the herds' flight was
+changed at John's word (a chain from the deer nearest the danger, the deer locked to the node:
+`docs/systems/deer.md`): every state of the runner with herds fleeing together is another from then
+on (the crowd at work: 3a6cb2a0731299bf, 13.8 s, with the memory or without; on that history no herd
+is cornered by one who stands by it). And with his answer to the calls of that finding (2026-11-13: "a
+person standing still doesn't frighten a herd, and let them know that water blocks them"), a commit
+each, they are others twice more: a herd's ways refused where water blocks them (e35cc00db1987aeb,
+12.9 s, no plan out of budget where there were 40), then one who stands still frightening no herd
+(65f6a73c7070c7b9, 9.1 s: the herds frightened 32 times in the sixty days). The memory has had nothing
+to remember since; `crowd_no_memos` still holds the two states equal, and a line beside it
+(`crowd_prove_dry`) runs the same sixty days with every refusal of a herd's way searched for whole
+and every kept piece of ground for dry going worked out again: it must end in the same state. And one
+more since a stack's ground summary is kept small (2026-11-14: `docs/systems/world.md`, "What a stack
+costs to keep"): `crowd_full_sums`, the same sixty days with every summary kept whole, the same state; and
+`crowd_whole_bricks`, with every fine brick written whole, likewise; and `crowd_whole_map`, with
+every stack of the world in (`--ground-stacks 400 --no-mesh`), which must end in the same state too:
+the colony reads its own ground and nothing beyond (`docs/systems/colony.md`, "The colony's own
+ground"), and this line stands in for the game, which holds the whole map. The same day the boulders were
+thinned (generator 14): every state and every figure of the runner is another from then on (the gate's
+log has them).
+
 ### The game
 
 | run | before | on `pathing` |

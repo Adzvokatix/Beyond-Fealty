@@ -2,6 +2,7 @@ with Ada.Unchecked_Deallocation;
 with Castle.Blocks;  use Castle.Blocks;
 with Castle.Dims;    use Castle.Dims;
 with Castle.Geology; use Castle.Geology;
+with Castle.Flora;
 
 package body Castle.Mesher is
 
@@ -142,30 +143,89 @@ package body Castle.Mesher is
       --  not, 1 up the axis, 2 down it.  A corner on the stack's edge is left
       --  where it is: the neighbour's trees are not known here, and the two
       --  stacks must agree on where it goes.
-      function Pull (Gx, Gy, Gz : Integer) return Unsigned_32 is
-         Sx, Sy, Sz, C : Integer := 0;
-         function Code (S : Integer) return Unsigned_32 is
-           (if 2 * abs S >= C then (if S > 0 then 1 else 2) else 0);
+      --  (Round_Boulders) On a stack's edge a boulder's corner is drawn in
+      --  all the same, by what the stacks on both sides can work out alike
+      --  from the generator alone: the ground as it was made, and the
+      --  boulders' shapes as they were made (the boulders near the stack,
+      --  looked up once, when the first such corner comes).  An edit there
+      --  is not seen (the corner may lean toward a stone taken away), but
+      --  the two stacks never disagree, so no slit opens between them.
+      Rocks   : array (1 .. 25) of Castle.Flora.Lump;
+      Rocks_N : Integer := -1;
+      --  0 open, 1 ground, 2 a boulder
+      function Made_Body (Bx, By, Bz : Integer) return Natural is
       begin
-         if Gx = 0 or else Gx = Chunk_B or else Gy = 0 or else Gy = Chunk_B then
+         if Rocks_N < 0 then
+            Rocks_N := 0;
+            for J in Floor_Div (Y0 - 9, Castle.Flora.Rock_Cell) .. Floor_Div (Y0 + Chunk_B + 8, Castle.Flora.Rock_Cell) loop
+               for I in Floor_Div (X0 - 9, Castle.Flora.Rock_Cell) .. Floor_Div (X0 + Chunk_B + 8, Castle.Flora.Rock_Cell) loop
+                  declare
+                     L : constant Castle.Flora.Lump := Castle.Flora.Boulder_At (W, I, J);
+                  begin
+                     if L.Valid and then Rocks_N < Rocks'Last then
+                        Rocks_N := Rocks_N + 1;
+                        Rocks (Rocks_N) := L;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+         end if;
+         if Bx < 0 or else By < 0 or else Bx >= Size_B or else By >= Size_B then
+            return 0;                              --  (past the world's rim: open, as Edge_Of has it)
+         end if;
+         for K in 1 .. Rocks_N loop
+            if Castle.Flora.In_Rock (Rocks (K), Bx, By, Bz) then
+               return 2;
+            end if;
+         end loop;
+         return (if Bz < Prepare_Column (W, Bx, By).Solid then 1 else 0);
+      end Made_Body;
+
+      --  (Rock: a boulder's corner.  Its body is what is solid about it, grass
+      --  round its foot or a bush no part of it; and a hollow in the rock
+      --  itself, a corner with rock on five sides or more and nothing else,
+      --  is drawn out toward the open as an edge is drawn in, so a notch or
+      --  a step in it is filled to a slope as well: then the code has 64 in
+      --  it besides.)
+      function Pull (Gx, Gy, Gz : Integer; Rock : Boolean := False) return Unsigned_32 is
+         Sx, Sy, Sz, C, R : Integer := 0;
+         function Code (S : Integer; Of_N : Integer) return Unsigned_32 is
+           (if 2 * abs S >= Of_N then (if S > 0 then 1 else 2) else 0);
+         Edge : constant Boolean := Gx = 0 or else Gx = Chunk_B or else Gy = 0 or else Gy = Chunk_B;
+      begin
+         if Edge and then not Rock then
             return 0;
          end if;
          for Dz in -1 .. 0 loop
             for Dy in -1 .. 0 loop
                for Dx in -1 .. 0 loop
-                  if Class_Of (Mat (Gx + Dx, Gy + Dy, Gz + Dz)) in Solid | Plant then
-                     C := C + 1;
-                     Sx := Sx + 2 * Dx + 1;
-                     Sy := Sy + 2 * Dy + 1;
-                     Sz := Sz + 2 * Dz + 1;
-                  end if;
+                  --  (a boulder's body is what is solid about it: grass round its foot,
+                  --  or a bush, is no part of it)
+                  declare
+                     M : constant Material := (if Edge then Air else Mat (Gx + Dx, Gy + Dy, Gz + Dz));
+                     K : constant Natural :=
+                       (if Edge then Made_Body (X0 + Gx + Dx, Y0 + Gy + Dy, Gz + Dz)
+                        elsif Rock then (if M = Boulder then 2 elsif Class_Of (M) = Solid then 1 else 0)
+                        elsif Class_Of (M) in Solid | Plant then 1 else 0);
+                  begin
+                     if K > 0 then
+                        C := C + 1;
+                        R := R + (if K = 2 then 1 else 0);
+                        Sx := Sx + 2 * Dx + 1;
+                        Sy := Sy + 2 * Dy + 1;
+                        Sz := Sz + 2 * Dz + 1;
+                     end if;
+                  end;
                end loop;
             end loop;
          end loop;
          if C = 0 or else C = 8 then
             return 0;
+         elsif Rock and then C >= 5 and then R = C then
+            --  (the open part's sums are the whole's, less the body's: the whole's are 0)
+            return Code (-Sx, 8 - C) or Shift_Left (Code (-Sy, 8 - C), 2) or Shift_Left (Code (-Sz, 8 - C), 4) or 64;
          end if;
-         return Code (Sx) or Shift_Left (Code (Sy), 2) or Shift_Left (Code (Sz), 4);
+         return Code (Sx, C) or Shift_Left (Code (Sy, C), 2) or Shift_Left (Code (Sz, C), 4);
       end Pull;
 
       --  The ground at the top of the column beside a top face at height Z:
@@ -244,7 +304,8 @@ package body Castle.Mesher is
       --  How the four corners of a face of foliage are drawn in: six bits a
       --  corner, in the order the occlusion's are; and whether any of them
       --  is moved (drawn in on two axes or three: a flat side stays put).
-      procedure Corner_Pulls (Face, X, Y, Z : Integer; F : out Unsigned_32; Moved : out Boolean) is
+      procedure Corner_Pulls (Face, X, Y, Z : Integer; F : out Unsigned_32; Moved : out Boolean;
+                              Rock : Boolean := False; Outs : out Unsigned_32) is
          D  : constant Integer := Face / 2;
          Up : constant Integer := (if Face mod 2 = 0 then 1 else 0);   --  the face's own plane
          type Steps is array (0 .. 3) of Integer;
@@ -253,34 +314,92 @@ package body Castle.Mesher is
       begin
          F := 0;
          Moved := False;
+         Outs := 0;
          for K in Steps'Range loop
             declare
                P : constant Unsigned_32 :=
                  (case D is
-                     when 0      => Pull (X + Up, Y + Cu (K), Z + Cv (K)),
-                     when 1      => Pull (X + Cu (K), Y + Up, Z + Cv (K)),
-                     when others => Pull (X + Cu (K), Y + Cv (K), Z + Up));
+                     when 0      => Pull (X + Up, Y + Cu (K), Z + Cv (K), Rock),
+                     when 1      => Pull (X + Cu (K), Y + Up, Z + Cv (K), Rock),
+                     when others => Pull (X + Cu (K), Y + Cv (K), Z + Up, Rock));
                N : constant Natural :=
                  (if (P and 3) /= 0 then 1 else 0) + (if (P and 12) /= 0 then 1 else 0)
                  + (if (P and 48) /= 0 then 1 else 0);
             begin
                if N >= 2 then
-                  F := F or Shift_Left (P, 6 * K);
+                  F := F or Shift_Left (P and 63, 6 * K);
+                  Outs := Outs or (if (P and 64) /= 0 then Shift_Left (1, K) else 0);
                   Moved := True;
                end if;
             end;
          end loop;
       end Corner_Pulls;
 
-      --  One face of one block of foliage, some corner of it moved.
-      procedure Emit_Soft (Face, X, Y, Z : Integer; Mt : Material; F : Unsigned_32) is
+      --  A dressed block of thatch (see the spec): how the corner of it at
+      --  (Cx, Cy, Cz), each 0 or 1 within the block, is moved, by its state.
+      function Slope_Code (Mt : Material; State : Unsigned_8; Cx, Cy, Cz : Integer) return Unsigned_32 is
+         Falls  : constant Unsigned_8 := State and Falls_Mask;
+         Out_C  : constant Integer := (if Falls < 2 then Cx else Cy);        --  along the way it falls
+         Side_C : constant Integer := (if Falls < 2 then Cy else Cx);        --  along its row
+         Outer  : constant Boolean := Out_C = (if Falls mod 2 = 0 then 1 else 0);
+         Ridge  : constant Boolean := (State and At_Ridge) /= 0;
+         Drawn  : constant Boolean :=
+           (Side_C = 0 and then (State and Verge_Lo) /= 0) or else (Side_C = 1 and then (State and Verge_Hi) /= 0);
+         Code   : Unsigned_32 := 0;
+      begin
+         if Mt = Daub then                                                   --  a gable's top: its inner edge up a block
+            return (if Cz = 1 and then not Outer then Shift_Left (1, 4) else 0);
+         end if;
+         if (State and Under) /= 0 then                                      --  its underside: the inner edge up a block
+            return (if Cz = 0 and then not Outer then Shift_Left (1, 4) else 0)
+              or (if Drawn then Shift_Left ((if Side_C = 0 then 1 else 2), (if Falls < 2 then 2 else 0)) else 0);
+         end if;
+         if Cz = 0 then
+            return (if Drawn and then (State and At_Eave) = 0
+                    then Shift_Left ((if Side_C = 0 then 1 else 2), (if Falls < 2 then 2 else 0)) else 0);
+         end if;
+         if Ridge then
+            Code := Shift_Left (3, 4);                                       --  both its edges half a block down
+         elsif Outer then
+            Code := Shift_Left ((if (State and At_Eave) /= 0 then 3 else 2), 4);
+         end if;
+         if Drawn then                                                       --  a quarter in from the roof's end
+            Code := Code or Shift_Left ((if Side_C = 0 then 1 else 2), (if Falls < 2 then 2 else 0));
+         end if;
+         return Code;
+      end Slope_Code;
+
+      --  The four corners of a face of a dressed block, in the occlusion's order.
+      function Slope_Pulls (Face : Integer; Mt : Material; State : Unsigned_8) return Unsigned_32 is
+         D  : constant Integer := Face / 2;
+         Up : constant Integer := (if Face mod 2 = 0 then 1 else 0);
+         type Steps is array (0 .. 3) of Integer;
+         Cu : constant Steps := (0, 1, 1, 0);
+         Cv : constant Steps := (0, 0, 1, 1);
+         F  : Unsigned_32 := 0;
+      begin
+         for K in Steps'Range loop
+            F := F or Shift_Left ((case D is
+                                      when 0      => Slope_Code (Mt, State, Up, Cu (K), Cv (K)),
+                                      when 1      => Slope_Code (Mt, State, Cu (K), Up, Cv (K)),
+                                      when others => Slope_Code (Mt, State, Cu (K), Cv (K), Up)),
+                                  6 * K);
+         end loop;
+         return F;
+      end Slope_Pulls;
+
+      --  One face of one block of foliage, some corner of it moved (Slope: of
+      --  a dressed block of thatch).
+      procedure Emit_Soft (Face, X, Y, Z : Integer; Mt : Material; F : Unsigned_32; Slope : Boolean := False;
+                           Outs : Unsigned_32 := 0) is
       begin
          Push (Solid_B,
                (W0 => Unsigned_32 (X)
                       or Shift_Left (Unsigned_32 (Y), 5)
                       or Shift_Left (Unsigned_32 (Z), 10)
+                      or Shift_Left (Outs, 20)
                       or Shift_Left (Unsigned_32 (Face), 25)
-                      or Soft_Bit,
+                      or Soft_Bit or (if Slope then Slope_Bit else 0),
                 W1 => (Shift_Right (F, 16) and 16#FF#)
                       or Shift_Left (Unsigned_32 (Material'Pos (Mt)), 8)
                       or Shift_Left (F and 16#FFFF#, 16)));
@@ -396,21 +515,55 @@ package body Castle.Mesher is
                                     V : constant Material := (if R.Grade < 128 then R.Host else R.Mat);
                                  begin
                                     (if V in Air | Deep | Castle.Blocks.Water then Granite else V)));
+                        State : constant Unsigned_8 := Work.G (X, Y, Z).State;
+                        Trim  : constant Boolean := Raw in Thatch | Daub and then (State and Dressed) /= 0;
+                        --  what it faces is a dressed block of thatch of this stack that it looks along the
+                        --  row of (and is not its like): the trimmed block no longer hides this face
+                        Past_Trim : constant Boolean :=
+                          D < 2 and then X + Dx in 0 .. Chunk_B - 1 and then Y + Dy in 0 .. Chunk_B - 1
+                          and then Work.G (X + Dx, Y + Dy, Z).Mat = Thatch
+                          and then (Work.G (X + Dx, Y + Dy, Z).State and Dressed) /= 0
+                          and then ((Work.G (X + Dx, Y + Dy, Z).State and Falls_Mask) < 2) = (D = 1)
+                          and then not (Trim and then Work.G (X + Dx, Y + Dy, Z).State = State);
+                        --  under a roof: a face of a wall, a gable or the frame that thatch lies on is
+                        --  drawn (hidden while the roof is whole), since a roof can be cleared on the
+                        --  camera's ray (Castle.Cutaway) and the wall's top would be open under it
+                        Under_Roof : constant Boolean :=
+                          Mb /= Thatch and then not Trim and then Class_Of (Mb) = Solid
+                          and then Mat (X + Dx, Y + Dy, Z + Dz) = Thatch;
+                        --  under a wall: the top of the ground a house's wall stands on (daub, or the
+                        --  frame's timber, which is a trunk's too: so the ground under a tree as well)
+                        --  is drawn, since the walls on the camera's side can be cleared with the roof
+                        Under_Wall : constant Boolean :=
+                          Dz = 1 and then Class_Of (Mb) = Solid and then Mb not in Daub | Log
+                          and then Mat (X, Y, Z + 1) in Daub | Log;
+                        --  against a boulder (Round_Boulders): drawn, as its corners are drawn in
+                        Under_Rock : constant Boolean :=
+                          Round_Boulders and then Class_Of (Mb) = Solid and then Mb /= Boulder
+                          and then Mat (X + Dx, Y + Dy, Z + Dz) = Boulder;
                         Shows : constant Boolean :=
                           Mb /= Air
                           and then not (Mb = Castle.Blocks.Water and then Z > Top_Solid (X, Y))
                           and then (if Mb in Tuft and then D < 2
                                     then Class_Of (Mat (X + Dx, Y + Dy, Z + Dz)) /= Solid   --  a tuft is whole by itself
-                                    else Visible (Mb, Mat (X + Dx, Y + Dy, Z + Dz)));
+                                    else Visible (Mb, Mat (X + Dx, Y + Dy, Z + Dz))
+                                         or else (Past_Trim and then Class_Of (Mb) = Solid)
+                                         or else Under_Roof or else Under_Wall or else Under_Rock);
                         Pulls : Unsigned_32 := 0;
+                        Outs  : Unsigned_32 := 0;
                         Moved : Boolean := False;
                      begin
-                        if Shows and then Mb in Soft then
-                           Corner_Pulls (Face, X, Y, Z, Pulls, Moved);
-                        end if;
-                        if Moved then
+                        if Shows and then Trim then
                            Mask (U, V) := 0;
-                           Emit_Soft (Face, X, Y, Z, Mb, Pulls);   --  a block's face of its own, never merged
+                           Emit_Soft (Face, X, Y, Z, Mb, Slope_Pulls (Face, Mb, State), Slope => True);
+                        elsif Shows and then (Mb in Soft or else (Round_Boulders and then Mb = Boulder)) then
+                           Corner_Pulls (Face, X, Y, Z, Pulls, Moved, Rock => Mb = Boulder, Outs => Outs);
+                        end if;
+                        if Shows and then Trim then
+                           null;
+                        elsif Moved then
+                           Mask (U, V) := 0;
+                           Emit_Soft (Face, X, Y, Z, Mb, Pulls, Outs => Outs);   --  a block's face of its own, never merged
                         elsif Shows and then Mb in Tuft then
                            Mask (U, V) :=
                              Unsigned_32 (Material'Pos (Mb) + 1) or 16#FF00# or Mask_Tuft
@@ -420,7 +573,8 @@ package body Castle.Mesher is
                            Mask (U, V) :=
                              (if Shows
                               then Unsigned_32 (Material'Pos (Mb) + 1)
-                                   or Shift_Left (Corners (X + Dx, Y + Dy, Z + Dz), 8)
+                                   or Shift_Left ((if Under_Roof or else Under_Wall or else Under_Rock then 16#FF#
+                                                   else Corners (X + Dx, Y + Dy, Z + Dz)), 8)
                                    or (if Face = 4 then Shift_Left (Fringe (X, Y, Z, Mb), 16) else 0)
                               else 0);
                         end if;

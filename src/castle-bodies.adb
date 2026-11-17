@@ -544,6 +544,7 @@ package body Castle.Bodies is
       Hose := Times (Pick ([Brown, Grey_Wool, Dark_Wool, Russet], R (12)), 0.9 + 0.15 * R (13));
       Cloak_C := (if O.Job = Lord then Times (Tunic, 0.6) else Pick ([Dark_Wool, Brown, Moss, Grey_Wool], R (14)));
       Hood_C := (if O.Job = Forester then Moss else Times (Cloak_C, 1.1));
+      B.Cloak := Cloak_C;
       Trim := (if O.Job = Lord then Gold else Times (Tunic, 0.78));
 
       --  The skeleton, standing: joint offsets from each parent (metres).
@@ -633,11 +634,14 @@ package body Castle.Bodies is
          end if;
       end;
 
-      --  Winter: a cloak down the back and a hood (its face open).
+      --  Winter: its cloak down the back (unless it is off: asleep, it lies
+      --  under it) and a hood (its face open).
       if O.Winter then
-         Cloak_B := Add (Chest, (-Float (Chest_W) / 2.0 - 0.5, -Float (Chest_D) / 2.0 - 1.5,
-                                 -Float (Pelvis_P + Thigh_P - 1)),
-                         (Float (Chest_W) + 1.0, 1.0, Float (Chest_P + Pelvis_P + Thigh_P - 1)));
+         if not O.Cloak_Off then
+            Cloak_B := Add (Chest, (-Float (Chest_W) / 2.0 - 0.5, -Float (Chest_D) / 2.0 - 1.5,
+                                    -Float (Pelvis_P + Thigh_P - 1)),
+                            (Float (Chest_W) + 1.0, 1.0, Float (Chest_P + Pelvis_P + Thigh_P - 1)));
+         end if;
          Hood_B := Add (Head, (-4.0, -4.5, -1.5), (8.0, 8.0, 8.0), Cutout => True);
       end if;
 

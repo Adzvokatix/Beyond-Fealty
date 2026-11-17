@@ -14,7 +14,7 @@ use type Castle.Water.View_Access;
 --  Quad layout (two words, decoded in the vertex shader):
 --    W0: x 0..4, y 5..9, z 10..19 (block in the stack), w-1 20..24, face 25..27,
 --        28 a cell of open water (the renderer's own), 29 soft (below),
---        30 a tuft (below)
+--        30 a tuft (below), 31 a dressed roof's face (below; with 29)
 --    W1: h-1 0..7, material 8..15, corner occlusion 16..23, fringe 24..31
 --  Corner occlusion is two bits per corner of each block face (3 open .. 0
 --  boxed in), in the order (u-, v-), (u+, v-), (u+, v+), (u-, v+); faces
@@ -46,6 +46,25 @@ use type Castle.Water.View_Access;
 --  a face none of whose corners is moved (a flat side of a clump) is meshed
 --  and merged like any other.
 --
+--  A dressed roof (John, 2026-11-12: "the roofs, are to be smoothed, but not
+--  rendered smooth instantly, the builders smooth the roofs so they don't
+--  step, rounded edges around the peremeter"): a block of thatch whose
+--  state says it is dressed (Castle.Blocks.Dressed) is meshed as soft quads
+--  are, a face of its own to each of its faces that shows, and marked with
+--  bit 31 as well.  Its corners' six bits then say exactly how far each is
+--  moved (Castle.Render): on the two flat axes 1 is a quarter of a block up
+--  the axis and 2 a quarter down it; on z, 2 is a whole block down, 3 half
+--  a block down and 1 a whole block up (the underside of the lower block
+--  where a roof hangs out past its gable or lies on it, and the top of the
+--  gable's daub under that, which is dressed with it).  The top edge on the side its slope falls to is brought
+--  down a block (half a block at the eave, and to either side of a ridge's
+--  one middle block), so that the steps of a roof are one slope, and at the
+--  roof's two ends that edge is drawn in a quarter.  The moves are the
+--  block's own, by its state alone: nothing of them depends on what stands
+--  beside it, so a roof across a stack's edge is whole.  A face of anything
+--  that looks along a roof at a dressed block shows (a roof half dressed
+--  has no hole where the trimmed part ends).
+--
 --  Tufts (John, 2026-11-11: "grass can get a slight overhaul"): a plant
 --  that stands on the ground by itself (Tuft, below: tall grass, wild
 --  grain, wild vegetables) is meshed a column at a time, not merged with
@@ -62,6 +81,7 @@ package Castle.Mesher is
 
    Soft_Bit : constant Unsigned_32 := 2 ** 29;
    Tuft_Bit : constant Unsigned_32 := 2 ** 30;
+   Slope_Bit : constant Unsigned_32 := 2 ** 31;
 
    subtype Tuft is Castle.Blocks.Material
      with Static_Predicate =>
@@ -70,7 +90,26 @@ package Castle.Mesher is
 
    subtype Soft is Castle.Blocks.Material
      with Static_Predicate => Soft in Castle.Blocks.Crown | Castle.Blocks.Berry_Bush | Castle.Blocks.Bare_Bush;
-   --  What is meshed as soft quads.
+   --  What is meshed as soft quads (and drawn as foliage).
+
+   Round_Boulders : Boolean := True;
+   --  A boulder is meshed as soft quads too (John, 2026-11-16: "Let's
+   --  smooth the boulders"), so the renderer draws its edges and corners in
+   --  (Castle.Render.Boulder_Cut) and they no longer stand in steps; what
+   --  it is made of is untouched.  As foliage's, but: its body is what is
+   --  solid about it (grass round its foot is not); a hollow in the rock
+   --  itself (a corner with rock on five sides or more and nothing else)
+   --  is drawn out toward the open as an edge is drawn in, so a notch or a
+   --  step is filled to a slope, and such a corner is marked in the quad's
+   --  w field, unused by a soft quad (bit 20 + the corner's number); and a
+   --  corner on the stack's edge is moved as well, by what the stacks on
+   --  both sides can work out alike from the generator alone (the ground
+   --  and the boulders as they were made), so the two agree.  A face of
+   --  anything solid that looks at a block of boulder is meshed as well,
+   --  though the boulder hides it while it is whole: a corner of the
+   --  boulder drawn in would otherwise leave a slit where the ground under
+   --  it should show (the ground's own corners stay where they are).  Set
+   --  before any stack is meshed (--no-round-boulders: as it was).
 
    subtype Turf is Castle.Blocks.Material with Static_Predicate => Turf in Castle.Blocks.Grass;
    subtype Bare is Castle.Blocks.Material

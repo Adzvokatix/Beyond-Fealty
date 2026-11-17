@@ -13,7 +13,7 @@ begin
       Seg_T : constant Float := R.Pts (M.Leg + 1).T - R.Pts (M.Leg).T;
       Want  : constant Float :=
         (if Seg_T > 0.001 and then Seg_L > 0.001 then Seg_L / Seg_T else Castle.Nav.Walk_Speed)
-        * M.Speed / Castle.Nav.Walk_Speed * Scale * Vigour (M);
+        * M.Speed / Castle.Nav.Walk_Speed * Scale * Vigour (M) * Pace_Now;
       Left  : constant Float := R.Pts (R.N).D - (R.Pts (M.Leg).D + M.Along);
       Move  : Float;
    begin

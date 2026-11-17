@@ -106,6 +106,28 @@ for part in $PARTS; do
     alive crowd_at_work
     run crowd_again   "$BIN/colony_run" $SITE $CROWD $LONG --day 20 --time 7 --days 60 --log-hours 1440 --workers 3
     [ "$(state crowd_at_work)" = "$(state crowd_again)" ] || fail "the crowd's year ends otherwise on three workers"
+    # (a herd with no dry way out, frightened by one who stands by it, asks the same way every three
+    # seconds: a plan that ran out of budget is remembered, and remembering must change no run)
+    run crowd_no_memos "$BIN/colony_run" $SITE $CROWD $LONG --day 20 --time 7 --days 60 --log-hours 1440 --no-memos
+    [ "$(state crowd_at_work)" = "$(state crowd_no_memos)" ] || fail "the crowd's year ends otherwise with nothing remembered"
+    # (a herd's ways are refused where its pieces of ground for dry going say out of reach, and those
+    # pieces are kept from one asking to the next: with the proving on, every such answer is searched
+    # for whole and every kept piece worked out again beside it; a wrong one stops the run, and the
+    # proving must change no run)
+    run crowd_prove_dry "$BIN/colony_run" $SITE $CROWD $LONG --day 20 --time 7 --days 60 --log-hours 1440 --prove-dry
+    [ "$(state crowd_at_work)" = "$(state crowd_prove_dry)" ] || fail "the crowd's year ends otherwise with every refusal proved"
+    # (a stack's ground summary is kept small, nothing lost: with each kept whole, as it always was,
+    # the run must end the same)
+    run crowd_full_sums "$BIN/colony_run" $SITE $CROWD $LONG --day 20 --time 7 --days 60 --log-hours 1440 --full-summaries
+    [ "$(state crowd_at_work)" = "$(state crowd_full_sums)" ] || fail "the crowd's year ends otherwise with the ground summaries kept whole"
+    # (and a chunk's fine bricks are kept small, nothing lost: written whole, the same)
+    run crowd_whole_bricks "$BIN/colony_run" $SITE $CROWD $LONG --day 20 --time 7 --days 60 --log-hours 1440 --whole-bricks
+    [ "$(state crowd_at_work)" = "$(state crowd_whole_bricks)" ] || fail "the crowd's year ends otherwise with the fine bricks written whole"
+    # (the game holds the whole map; the colony reads its own ground and nothing beyond, so with
+    # every stack of the world in, the run must be the very run it is on the colony's ground alone:
+    # this line stands in for the game)
+    run crowd_whole_map "$BIN/colony_run" $SITE $CROWD $LONG --day 20 --time 7 --days 60 --log-hours 1440 --ground-stacks 400 --no-mesh
+    [ "$(state crowd_at_work)" = "$(state crowd_whole_map)" ] || fail "the crowd's year ends otherwise with the whole map in"
     ;;
   game)
     echo "-- the game (release)"

@@ -71,9 +71,12 @@ begin
          Step_Fetch (I);
       when To_Patch | Tamping =>
          Step_Build (I);
-      when To_Site | Raising =>
+      when To_Site | Raising | Making | To_Ladder =>
          Step_House (I);
-      when Stalking | Aiming | Recovering | To_Carcass | Lifting_Carcass | To_Butcher | Butchering =>
+      when Stalking | Aiming | Recovering | To_Carcass | Lifting_Carcass | To_Butcher | Butchering
+         | To_Cart | At_Cart =>
          Step_Hunt (I);
+      when To_Tow | Towing =>
+         Step_Tow (I);
    end case;
 end Step_Member;

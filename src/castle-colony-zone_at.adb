@@ -24,7 +24,7 @@ begin
             declare
                M : Member renames Band (I);
             begin
-               if not M.Is_Dead and then M.State in To_Camp | Putting_In and then M.Use_For /= For_Store
+               if not M.Is_Dead and then M.State in To_Camp | Putting_In and then M.Use_For not in For_Store | For_Bed
                  and then M.Carried > 0
                then
                   V.Coming (M.Carry) := V.Coming (M.Carry) + M.Carried;
@@ -57,8 +57,12 @@ begin
                end if;
             end;
          end loop;
-         V.No_Room := Lots_Full and then Lots_As_They_Were
-           and then (for some I in 1 .. N_Members => not Band (I).Is_Dead and then Home_Of (I) = 0);
+         V.No_Room := Room_Short;
+         for K in 1 .. N_Lots loop
+            if Lots (K).Zone = Z then
+               V.Lots := V.Lots + 1;
+            end if;
+         end loop;
    end case;
    for I in 1 .. N_Members loop
       declare

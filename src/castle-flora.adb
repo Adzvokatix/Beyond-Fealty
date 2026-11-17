@@ -211,8 +211,11 @@ package body Castle.Flora is
            0.02 + 0.45 * Smoothstep (0.35, 0.90, Sample (W.Slope.all, Xm, Ym))
            + 0.30 * Sample (W.Mountain.all, Xm, Ym)
            + 0.35 * Smoothstep (0.45, 0.75, FBM_2 (W.Ch (Ch.Rocky), Xm / 90.0, Ym / 90.0, 2));
+         Share : constant Float :=
+           Boulders_Open + (Boulders_Mountain - Boulders_Open)
+                           * Smoothstep (0.0, Boulder_Foot, Sample (W.Mountain.all, Xm, Ym));
       begin
-         if Unit (Mix (H xor 16#C0C0#)) >= Rocky then
+         if Unit (Mix (H xor 16#C0C0#)) >= Rocky * Share then
             return L;
          end if;
          declare
@@ -234,6 +237,29 @@ package body Castle.Flora is
       end;
       return L;
    end Boulder_At;
+
+   -------------
+   -- In_Rock --
+   -------------
+
+   function In_Rock (L : Lump; Bx, By, Bz : Integer) return Boolean is
+      Rh : constant Float := Float (L.Rh) + 0.5;
+      Rv : constant Float := Float (L.Rv) + 0.5;
+   begin
+      if not L.Valid or else Bz < 1 or else abs (Bx - L.Cx) > L.Rh + 1 or else abs (By - L.Cy) > L.Rh + 1
+        or else abs (Bz - L.Cz) > L.Rv + 1
+      then
+         return False;
+      end if;
+      declare
+         Dx : constant Float := Float (Bx - L.Cx) / Rh;
+         Dy : constant Float := Float (By - L.Cy) / Rh;
+         Dz : constant Float := Float (Bz - L.Cz) / Rv;
+      begin
+         return Dx * Dx + Dy * Dy + Dz * Dz
+                < 1.0 + 0.45 * Perlin_3 (L.Seed, Float (Bx) / 2.5, Float (By) / 2.5, Float (Bz) / 2.5);
+      end;
+   end In_Rock;
 
    ----------
    -- Line --

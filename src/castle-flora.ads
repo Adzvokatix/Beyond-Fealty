@@ -63,6 +63,20 @@ package Castle.Flora is
    Bush_Cell : constant := 12;   --  3 m
    Rock_Cell : constant := 24;   --  6 m
 
+   --  How many of the boulders the ground would bear there are (John,
+   --  2026-11-14, looking at the mountains: "I propose we scale back boulders
+   --  on mountainous terrain by about 80%, let's compensate with increasing
+   --  boulders on open terrain by 30% ... they are littered with boulders,
+   --  and the player probably won't be accessing a majority of them").  By
+   --  the generator's own mountain mask (0 open land .. 1 mountain): the
+   --  open land's share where the mask is nothing, the mountains' from
+   --  Boulder_Foot up, eased between.  A boulder's chance is rolled once for
+   --  its place, so those left on a mountain are of those that were there,
+   --  and those of the open land are all still there with more among them.
+   Boulders_Open     : constant := 1.3;
+   Boulders_Mountain : constant := 0.2;
+   Boulder_Foot      : constant := 0.2;
+
    Lone_Chance : constant := 0.018;   --  of a lone tree in a 4 m cell of open land
    Bush_Share  : constant := 0.82;    --  berry bushes, against the first rule (half as many in all)
 
@@ -85,6 +99,12 @@ package Castle.Flora is
    function Tree_At (W : World; I, J : Integer) return Tree;
    function Bush_At (W : World; I, J : Integer) return Lump;
    function Boulder_At (W : World; I, J : Integer) return Lump;
+
+   function In_Rock (L : Lump; Bx, By, Bz : Integer) return Boolean;
+   --  Whether boulder L by its shape takes in block (Bx, By, Bz), whatever
+   --  it would find there: the test the generator draws it by.  For the
+   --  mesher, which rounds a boulder off on a stack's edge by what the
+   --  stacks on both sides of it can work out alike.
 
    procedure Tree_Blocks
      (T     : Tree;

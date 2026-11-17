@@ -2,8 +2,8 @@
 
 - Packages: Castle.Colony, Castle.Actions, Castle.Scenario
 - Source: `src/castle-colony.ads` (the tunables and capacities), `src/castle-colony.adb` (state, helpers, and a stub per larger subprogram: the index), `src/castle-colony-<name>.adb` (one subprogram each)
-- Check: colony_check (475 checks, about 25 s); colony_run --expect for runs on the real world; tools/reference_check.sh
-- Saves: the colony blob, version 19, inside the game save
+- Check: colony_check (635 checks, about 85 s); colony_run --expect for runs on the real world; tools/reference_check.sh
+- Saves: the colony blob, version 25, inside the game save
 - Stage: stages 1 to 3, 4R, 5a to 5c, and the camp and zones work of 2026-11-10 (Handoff_2026_11_07_ui.md, _08_stage_2.md, _08_stage_3.md, _09_stage_4R_runner.md, _10_stage_5a_scaffold.md, _10_stage_5b_skills.md, _10_stage_5c_demand.md, _10_camp_and_zones.md, _10_paths_and_reach.md, _11_hands_and_level.md)
 
 ## The colony
@@ -41,6 +41,28 @@ wood.
     top of the ground turned to footpath, the metre all at once. Footpaths
     are 15 % quicker than grass, so routes take them where that pays, once
     they are laid.
+  * **Holes filled** (John, 2026-11-13: "It would be nice if there was a
+    way for serfs to fill in holes in the path when they are compacting
+    the ground"; first rules of mine, his to change). A hole in the ground
+    under a metre is filled with earth as the metre is laid, to the lowest
+    of the ground round it, and the path laid over it (`Fill_Hollows` over
+    the ground `Hollow_Reach_B`, ten columns, round the metre, in
+    `Lay_Metre`: a hollow is ground at one level closed in on every side by
+    higher ground, at most 64 columns, the same test a hovel's pad is
+    levelled by: `habitation.md`). So a pit, a dent, a ditch closed at its
+    ends; a step of a slope, its inside corner and a notch into it go on to
+    lower ground and are no hollow, and a path goes up and down a hillside
+    as it did. A column is raised only where the ground read round the
+    metre is its own top, by a metre at most (`Hollow_Rise_B`), and only
+    earth, turf and path are read as ground: a log or a bough a few rows
+    over a hump is never taken for it. What was left growing over a hole is
+    cut (`Cut_Plants`). The earth is
+    the turf cut where the path is laid: nothing is carried for it. Only a
+    metre the band lays (or `--paths-built` lays) is filled; with the band's
+    labour off a path is laid the moment it is marked, as it was. None lies
+    under the reference paths. `--no-path-holes` (`Set_Path_Holes
+    (False)`) lays a path down into a hole, as it was; the seven older
+    reference runs are held at it. Saved with the colony (blob 24).
   * **A stretch to a serf** (John, 2026-11-11: "for roads I suggest that
     when a serf starts compacting a road they are assigned a stretch, say
     20m for example"; first rules of mine, his to change). A path is kept
@@ -378,8 +400,121 @@ wood.
   looses: the hit is decided then, likelier nearer; the arrow is only drawn.
   Hit or miss, the herd bolts. The kill lies where it fell; the hunter
   carries it home across its shoulders and butchers it at the stockpile
-  (meat: doe 8, stag 10, young stag 6, fawn 3; and a hide) into cells
-  reserved first.
+  (meat and a hide) into cells reserved first. **Meat is counted in
+  pounds, and a deer's is salted as it is butchered** (2026-11-12; "The
+  lord's cart", below): a doe gives 60 lb, a stag 75, a young stag 45, a
+  fawn 20, all of it kept if the stockpiles hold a pound of salt for every
+  ten of meat, a quarter of it if they hold none. (Until then, and with
+  `--no-curing`: joints, doe 8, stag 10, young stag 6, fawn 3.)
+* **The lord's cart** (John, 2026-11-12: "we need to up the amount of meat
+  a single deer can provide, we are looking at 60lbs of field dressed meat
+  from a deer that should be enough to feed a camp for a couple of days
+  when smoked or cured ... the player is a minor noble tasked wtih
+  improving the land by their lord, taxes on production would come after a
+  few years, so the lord provides a small workforce a minimum of starting
+  supplies so for now lets just add a cart with salt in it for curing, we
+  can expand the supplies later and work the story in as we get to the
+  players role, but for now that way a single deer can provide for the
+  camp for a couple of days"; first values and first rules of mine, his to
+  tune; the tunables are in `castle-colony.ads`, "The lord's cart").
+  * **Meat by the pound.** A pound is worth 48 points in the pot
+    (`Pound_Stew`), so a doe's 60 lb are 2,880 points: two days' food for
+    six, who eat 1,392 a day. Twenty pounds to a load, 120 to a
+    stockpile's place. The meat reserve is in pounds too (the default is
+    20 as it was: hunters go out when less than that is stored or on its
+    way; the reference runs' `--reserve meat 60` is a deer's worth).
+  * **The cart.** The band arrives with it. At the colony's first step
+    with a stake raised it is stood on the first level, open ground found
+    going out from the stake a metre at a time from 4 m (to 20 m at the
+    most) and round it from the north, its long side to the stake: grass or
+    bare earth with nothing on it but grass, no zone's and no path's
+    (whatever a scripted start has marked by then it keeps clear of), and
+    nothing about it standing higher than its middle. It holds 240 lb of
+    salt (`Cart_Salt_Lb`: forty does' worth). **It is a thing in the
+    world**: its bed is a slab of timber over the ground, 2 m by 1 m, its
+    top at 0.75 m (32 blocks of `Log`, hidden under the boards that are
+    drawn round it), so nobody walks through or under it, a stockpile or
+    housing marked across it leaves its ground out as it would a tree's, a
+    camp marked over it and a path laid through it are refused ("the
+    lord's cart stands there: it cannot be moved yet"), it casts its
+    shadow, and it can be pointed at (`Castle.Pick`: `A_Cart`; its sheet,
+    `Castle.Views.Cart`: the salt left in it, the salt in the stores, what
+    a pound cures, the deer salted and the meat lost unsalted, where it
+    stands). It cannot be emptied by the player or filled again yet. **A way asked to
+    a place on the cart is planned to the nearest place beside it**
+    (`Off_Cart`, in `Route_To`): a goal under its bed has no ground to
+    stand on, and the planner looks over all the band's ground before it
+    gives such a one up (57 ms, where a plan is 1; found in the stage 6
+    run, whose idle hands strolled there).
+  * **Pulled into the stockpile nearest it** (John, 2026-11-13: "the cart,
+    can they pull it into the closest stockpile zone?"; first rules of mine,
+    his to change). Once there is a stockpile zone, one of the band pulls
+    it there, as an extra task (`Go_Tow`, in `Think_Build` after the camp
+    and its seats and before the paths; counted against the limit on
+    extra hands; the states `To_Tow` and `Towing`, on the end): it goes to
+    the bar across its shafts, takes them up (its bed out of the world:
+    `Lay_Bed`) and pulls it at six tenths of its walk (`Cart_Tow_Pace`) to
+    a place held for it from the moment it set out (`Find_Cart_Place`,
+    `Cart_Bound`, `Goal_P`): two of the zone's places side by side, empty,
+    the nearest such to the cart, in the zone nearest it that has them,
+    its bed square to the grid along the way the two lie, on level ground
+    (any ground a path is laid on), nothing over it, nobody standing
+    there, a way from the stake to beside it and to its shafts. There it
+    is set down, its bed in the world again, its shafts the way it came.
+    **The cart is in one place at every moment**: standing (`Cart_Set`,
+    its bed in the world) or in tow (`Cart_Towed`, no bed; drawn its middle
+    2.3 m behind its puller, `Cart_Shaft_M`, turned as it goes, the prop
+    under its shafts gone, the puller's hands forward on them). Its puller
+    called away, interrupted or dead, it is set down where it is, or the
+    nearest place within ten metres it fits, or back where it stood
+    (`Keep_Cart`, `Set_Cart_Down`, every step). **Nothing is put on a
+    place under it** (`Under_Cart`, in `Takes`, the one test of what a
+    place takes: `Go_Store`, `Room_For`, `Can_Store`, the butchering's,
+    `Supply`'s). Standing on a stockpile's ground it stays. Nothing else
+    of it changes: its salt is fetched to the stockpile and used as before,
+    and nobody sets out with it while a hunter is at it for salt.
+    `--no-cart-pull` (`Set_Cart_Pull (False)`, saved: blob 25) leaves it
+    where it stood; `colony_check`'s own `Reset` holds it off. By the
+    reference stake it is pulled the first morning, at a quarter past
+    seven with the camp built, at half past nine when the band builds it.
+  * **A hunter keeps salt by for its kills.** With empty hands, before it
+    goes after deer: while the stockpiles and the band's hands hold less
+    than 16 lb of salt (`Salt_Keep_Lb`: two stags' worth), the cart has
+    some, there is room to store it and nobody is at the cart already, it
+    fetches a sackful (20 lb) from the cart to a stockpile ("going to the
+    lord's cart for salt", "taking salt from the lord's cart"). Salt is a
+    stored good like any other (a place holds 240 lb; a sack to twenty
+    pounds is drawn), but nobody of the band can make it, so it is never
+    in the demand table and never asked for.
+  * **Salting.** As a deer is butchered, a pound of salt is used for every
+    ten of its meat (`Lb_Per_Salt`: six for a doe) and all of it is kept.
+    With none in the stockpiles only what can be eaten before the rest
+    turns is kept, one pound in four (`Fresh_Div`); with some, that much
+    of it is salted and the rest goes as unsalted meat does. **Nothing
+    spoils once it is stored**: spoilage is a later stage's, and until
+    then this is the whole of what salt does. Smoking is not built.
+  * `--no-curing` (`Set_Curing (False)`, said before the stake) is the
+    band as it was: no cart, no salt, meat in joints. The seven older
+    reference runs are held at it, and `colony_check` runs every section
+    but the cart's with it. `--cart-salt LB` sets what the cart starts
+    with (0: a band whose salt has run out). The log has a line for it
+    ("salt: 140 lb in the cart, 16 stored; 14 deer salted, 0 not, 0 lb of
+    meat lost"), and the food line the same on its end.
+  * Measured on the reference band (seed 1, today's pace, the standing
+    orders, 41 days through the first winter): 17 deer are killed where 33
+    were, 102 lb of salt used (120 left in the cart, 18 stored), no meat
+    lost; from the fifth midnight on the band has eleven to seventeen days of
+    food in hand (it had three to twelve), with some 300 lb of meat stored; nobody
+    is hungry at any midnight and all six see the spring, as they did at
+    this pace without it; food is asked for at three of the forty-two
+    midnights (vegetables at most of them: the gatherers go for those and
+    little else, and put 423 berries in the pot where they put some
+    7,000). **Nothing was retuned for it**: what a first winter should
+    cost now is John's to say. With no salt (`--cart-salt 0`) the same
+    band kills 34 deer and loses 1,432 lb of their meat, has between five
+    and a half and twelve days of food in hand, and nobody is hungry or
+    dies: an unsalted doe's fifteen pounds
+    are still three times what her eight joints were.
 * **Demand** (stage 5c; its rules stand as built, John's polish to come;
   `docs/production/briefs/Stage_5c_brief.md`). Nothing sets a producer to
   work but something asked of the stores (all the stockpiles together).
@@ -436,8 +571,11 @@ wood.
   the band looks further afield for what its camp takes (next), and as far
   as any stretch of path still to lay. And, since stage 6a, as far as
   any housing zone reaches, for good: people build there and live there.
-  (A stockpile or the camp zoned beyond the 60 m is not covered so: an
-  older limit.) The game asks for the wider ground
+  And, since 2026-11-14, as far as a stockpile or the camp reaches
+  (`Stores_Far`: those within the 256 m the band's ground ever goes; one
+  zoned past the work radius used to be served only while the camera kept
+  its ground loaded, and further than 256 m is still not served). The game
+  asks for the wider ground
   and the colony pauses until it is in (a moment's stop each time it
   widens); the runner brings it in before the next step.
 * **How far the band looks** (John, 2026-11-10: "Don't place a distance
@@ -500,10 +638,11 @@ wood.
   the level of this one's, the turf's earth lying on it and what is left
   to dig and fill as last counted, and what is asked and kept of earth
   (the kinds a version knew are fixed ranges, `V4_Kinds` to `V16_Kinds`:
-  the next kind added closes the last and opens its own); 19 the houses
-  and the house each builder is at (`habitation.md`, "Saves"; a blob of
-  before loads with none, but 18, housing's first layout on the stage's
-  branch, which is refused). Older blobs still load: a version 1
+  the next kind added closes the last and opens its own); 20 the houses
+  (their front yards and their stone with them) and the house each
+  builder is at (`habitation.md`, "Saves"; a blob of before loads with
+  none, but 18 and 19, housing before its ground was walled, which are
+  refused). Older blobs still load: a version 1
   colony finds the trees of the stacks it had looked through once its
   ground is in; before 4, piles are nobody's (a forester takes them over)
   and the stone reserve becomes the stone wanted; before 5 the herds are
@@ -555,8 +694,17 @@ measuring start: no stone for the camp from nearer the stake than M),
 `--extra-hands N` (at most N at extra tasks at once, not a third of the
 band), `--all-hands` (extra tasks as before they were limited: everyone
 before its job, paths laid by the metre), `--no-level` (a camp's floor
-left as it lies),
-`--housing X0 Y0 X1 Y1` (a housing zone, up to 8) and `--homes-built` (a hovel for everyone those
+left as it lies), `--no-beds` (nobody makes itself a bed of straw: the
+band as it was before the pass after stage 6a; `habitation.md`),
+`--pace P` (the band's pace, below: 1 is the band as it worked and walked
+until 2026-11-12), `--no-cook-hold` (the cook keeps nothing in the stores
+for the pot, as before the pass's fourth round: `needs.md`, "What the cook
+keeps"), `--no-curing` (no cart, no salt, meat in joints, as before that
+round) and `--cart-salt LB` (the salt the lord's cart starts with): "The
+lord's cart", above, `--no-ladders` (roofs thatched from the ground:
+`habitation.md`, "A ladder for the roof"),
+`--housing X0 Y0 X1 Y1` (a housing zone, up to 8), `--housing-inside X Y` (all the ground inside
+the paths round that point) and `--homes-built` (a hovel for everyone those
 zones have room for, built on the spot): `habitation.md`,
 `--winter-store DAYS`, `--supply KIND N` (N of it in the stockpiles at the start: meat, berries,
 vegetables, apples, wood, stone or straw), `--wood-reserve N`,
@@ -571,7 +719,10 @@ forester, porter, hunter, cook or none),
 `--band N`, `--speed N` (0 to 3 in the panel, up to 240 here for long
 runs), `--log-hours H` (a line on the band's food every H game hours: the
 living, confidence, bellies, stew, stores, what went into the pot, raw
-food eaten, kills, vegetables pulled). `--record DIR N`
+food eaten, kills, vegetables pulled; the runner's `--who` puts under each a
+line for each of the living: its belly and what it is doing, and one for
+each herd: its deer, where its node is, whether it is in flight, and who
+of the band is nearest it, how far off and at what). `--record DIR N`
 saves N frames a thirtieth of a second apart (times the speed), and
 `--save FILE` writes a save when `--frames` or `--record` ends; the log
 gets one line on the colony at every save and load. `--deer-scatter` is the herds as they were before they fled
@@ -586,6 +737,30 @@ together (`deer.md`).
                   --stockpile 1180 1073 1184 1075 --foresters 2 --porters 1 --speed 3
 ```
 
+### The band's pace
+
+John, 2026-11-12: "also can we increase the work and travel speed of serfs
+by about 50%". A colony has a pace (`Castle.Colony.Pace`, `Set_Pace`;
+`Serf_Pace`, 1.5, is what one is founded with) and **every work rate and
+every pace over the ground is multiplied by it**: `Work_Rate` (so every
+timer of work: picking, felling, reaping, butchering, tamping, laying a
+block, lifting, putting down) and `Walk`. Nothing else goes by it: not
+hunger or sleep (the clock's), not `Vigour` (practice goes by that: an
+hour at the work teaches what it taught), not a hunter's patience at its
+aim, not `Castle.Nav.Walk_Speed` (the herds, the walkers and `path_check`
+go by that), not the deer. It is saved with the colony (since blob 22); a
+colony loaded from before it keeps pace 1. `--pace 1` is the band as it
+was: the seven older reference runs are held at it, and `colony_check`
+starts every section at it but the one that checks the pace (its own
+`Reset`), since both were tuned at it.
+
+What it does to the reference band (seed 1, the reference site with its
+standing orders, `tools/reference_run.sh 41 --winter-store 10 --reserve
+meat 60`, the game's defaults otherwise) is in the pass's handoff,
+"Measured": more food in hand sooner, and a stockpile of 48 places
+filled. **Nothing was retuned for it** (`needs.md`, "How it was tuned",
+was measured at pace 1): his to ask for.
+
 ### colony_run: the real world with no window
 
 `./bin/colony_run` runs the colony on the generated world with no window
@@ -598,7 +773,7 @@ machine or the number of workers; the last line is a hash of the colony's
 save blob (`state: ...`) and `--expect HASH` turns that into a test. It
 takes the colony's options above (they are parsed and applied by
 `Castle.Scenario`, which the game uses too), and `--seed N`, `--day D`,
-`--time H`, `--days N`, `--log-hours H`, `--workers N`, `--load FILE`, `--nav-stats` (at the end: what the colony's steps, the walking map and the routes cost, and the twelve slowest plans), `--no-mending` and `--no-memos` (the walking map read whole after every change, and every search for a source reading the ground again: the two that only save work, so a run must end the same with them off),
+`--time H`, `--days N`, `--log-hours H`, `--workers N`, `--load FILE`, `--nav-stats` (at the end: what the colony's steps, the walking map and the routes cost, the twelve slowest plans, how often the herds were frightened, how many of their ways were refused as out of reach dry, how many plans ran out of budget and what the pieces of ground had said of them, and how many were answered from the memory of one that had), `--nav-log FILE` (run it with `--no-memos`, or the askings answered from memory are left out; a line for each plan that runs out of budget as it happens: the day and hour, from where to where, its budget and wade, what the pieces said, how far short it ended, and who of the band stood nearest where it began and what they were doing), `--try-plan X0 Y0 Z0 X1 Y1 Z1 WADE` (at the end: a herd's way asked of the ground as it then is, with what it came to; `--try-budget N` the floors it may look at, `--try-within X Y R` the ground it keeps to, `--try-refuse` not made for if out of reach), `--prove-dry` (slow: every dry way the pieces of ground call out of reach is searched for whole, and the run stops if one is there; `routes.md`), `--full-summaries` and `--whole-bricks` (each stack's ground summary kept whole, each fine brick written whole, as before they were kept small: storage only, the run the same), `--ground-stacks N`, `--mem` and `--no-mesh` (measuring what the ground costs to keep: the ground within N stacks of the stake brought in, in batches, 400 being the whole map; what is kept of every stack that is in, counted by part, with what the process holds; the workers making no meshes, which the runner throws away anyway. A run with more ground in ends in the very state of a run on the colony's own ground, since 2026-11-15: the colony reads its own ground and nothing beyond, "The colony's own ground" below; before that it was another run. `world.md`, "What a stack costs to keep"), `--no-mending` and `--no-memos` (the walking map read whole after every change; every search for a source reading the ground again, nothing of housing kept, and no plan that ran out of budget remembered: what only saves work, so a run must end the same with them off),
 `--save FILE` (a save the game opens with `--load`), and `--deer-track
 FILE` (a line for every deer after every colony second: the second, the
 deer, its herd, where it is, whether it is in panic, the rows of water it
@@ -615,10 +790,17 @@ tools/reference_check.sh        # the same 41 days, seven ways, each against its
 rest of the colony alone. (An eighth run, since stage 6a, has what none
 of the seven has: a path west over the level ground, housing marked on
 both sides of it and a porter in the second hunter's place, against
-`reference_run_stage6.txt`.) It runs the 41 days seven ways and each must
+`reference_run_stage6.txt`, the one run of the eight with beds and at
+the band's pace of today; since 2026-11-12 it has a second stockpile
+south of the path, because at that pace the band fills one of 48 places
+by its thirty-seventh day.) It runs
+the 41 days seven ways, **each with `--no-beds`** (none of the seven had
+beds: with them each of the band spends an hour or three of its first
+afternoon on one) **and `--pace 1`** (the band as it worked and walked
+when they were recorded), and each must
 match its log in `docs/production/reference_runs/` but for the lines that
 time it, the state hash and the lines that say how the paths were laid:
-with everything on (`reference_run_herds_flight.txt`), with
+with nothing else off (`reference_run_herds_flight.txt`), with
 `--deer-scatter` (the hands and levelling log: the herds as they were
 before they fled together), and, with that, `--all-hands --no-level` (the
 paths and reach log: extra tasks before they were limited, the camp's
@@ -834,9 +1016,9 @@ the band's labour off a path is laid as it is marked. The version 14 blob
 loads with the camp being built and its paths read as laid, and the band
 finishes its hearth.
 
-Housing (stage 6a; `habitation.md` has the rules): a zone refused away
-from a path and where not one hovel would fit, planned with nothing
-changed, taken beside the path; with no forester one hovel begun all the
+Housing (stage 6a and the pass after it; `habitation.md` has the rules):
+housing begun 16 m from any path refused, and begun and ended past the
+end of its path; planned with nothing changed, taken beside the path; with no forester one hovel begun all the
 same, for the first of the band, fronting the path half a metre to a metre
 off its edge at the end nearest the stake, its blueprint's logs and
 sheaves asked of the stores by its zone, and nobody touching it; a
@@ -861,7 +1043,22 @@ midnight and not cold on a winter night with no fire, the rest cold; the
 night coming on a builder with a log in its arms, the log carried to its
 house and the builder asleep; four hundred blueprints held to their order (floor, frame, walls, gables,
 roof; all the timber before anything of straw; no block twice; what they
-take); seven hovels either side of a path aslant across made-up ground
+take) and to the roof's trimming after it (the top thatch of every column
+once); housing pulled along a path (a strip shorter than a hovel taken;
+pulled on from inside it over the joints of the path's stretches; seven
+blocks past a turn and no further; a pull that overlaps two zones making
+them one; a strip aslant and a straight one combined; ground that is
+housing already; zone numbers through a combining that does away with a
+zone, for the camp, a stockpile's places and the houses, and through a
+save; two hovels or more on 28 m beside a path at every angle, on the
+flat and on ground that falls 2 m in 7, every hovel built there with a way
+in and its walls); the made-up hillside built from the foot of its path
+up and from its head down, every step of more than a block round a hovel
+walled with stone; a hovel walled by hand below a hillside path (the
+hearth's stones left alone, waiting for stone and saying so, every stone
+accounted for, its builder never anywhere it cannot walk back from),
+above the path as below it; a way back to the stake from every spot round
+those hovels that a serf can get to (no yard a pit); seven hovels either side of a path aslant across made-up ground
 that falls a block every metre and a half, a way from the stake to every
 bed and every owner asleep in its own at midnight; trees felled whose
 shapes reach through a house's corner post, the house whole; a vegetable
@@ -875,6 +1072,57 @@ and people leaving when confidence runs low; the serf menu with tiers;
 stockpile improvements (stage 6b); a player character is held back on
 purpose. Trees don't topple (the crown goes at once), and
 they don't grow back.
+
+## The colony's own ground (2026-11-14)
+
+The game holds the whole map for the simulation (`world.md`, "The whole
+map held"), so "what is loaded" no longer bounds anything. The colony is
+told its own ground by its host (`Castle.Colony.Set_Ground_Stacks (N)`:
+every stack within N stacks of the stake's, counted stack to stack) and
+reads nothing beyond it, whatever else is loaded:
+
+- one function asks whether a stack is in (`Own_V` in the colony's body:
+  the ground's version on its own ground, nothing off it), used by the
+  index, the search for sources, the far look, a path's stretches and the
+  laying out of lots: nothing else in the colony may ask the world's
+  version reader itself;
+- its routes keep to it (`Castle.Nav.Plan (..., Within => Own_Region)`: a
+  region counted in stacks, `Castle.Nav.Within_Stacks`), and the herds as
+  they were plan on it too (`Castle.Herds.Set_Ground`).
+
+N is `Integer (Ground_Reach_M / 8) + 5`, and never less than it has been:
+the runner's rule since it was written, now the game's as well (it kept 3
+more than the reach, and the colony read whatever else the camera had
+passed over: it knew of a few more bushes and trees at the corners of its
+index by where the player had looked). So the colony is the same colony
+in the runner, in the game with the camera anywhere, and with the whole
+map in. **Measured before it was built**: the band's 41 days with the
+whole map in took 85 s for 5.5, the walking map read over 57,946 stacks
+and one plan took 3.8 s, because a goal out of reach was looked for over
+all the ground there was. With it: the same 5.8 s, and **the run ends in
+the very state of a run on the colony's own ground** (the band's 41 days,
+the housing band's, the crowd's sixty with needs and without); the eight
+reference logs are line for line with none recorded again, and the three
+states of the stress runner are those of `main`. `tools/stress.sh runner`
+holds it (`crowd_whole_map`: the crowd's sixty days with every stack of
+the world in must end as on its own ground), and that line stands in for
+the game. `colony_check`: told its ground is two stacks, the colony knows
+of no bush five stacks off on loaded ground, and nobody goes. Until the
+host says, the colony reads whatever is loaded (the checks' made-up
+worlds). Not bounded: the demo walkers of `--walk` and `--deer`, which
+plan as they always did.
+
+**What the player plans is not the band's doing**, and is read from all
+the ground that is held (the world's version reader itself, in three
+places that each say so): the line of a path as it is shown and counted
+when marked (`Stretch_In (S, Held => True)`: a path over bare rock out
+there is refused as it is near the stake, where taken on trust it was
+recorded and never laid), and the ground inside a round of paths for
+housing. A path, housing, a stockpile or the camp so marked further out
+widens `Ground_Reach_M`, the host says that ground is the colony's own,
+and the band goes. `colony_check` has each (with the band's ground set to
+two stacks: the made-up world is 64 m, less than the rule's ground), and
+each fails with the read put back on the band's own ground.
 
 ## What a search for a source keeps (2026-11-11)
 

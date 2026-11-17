@@ -11,7 +11,7 @@ package Castle.Input is
       Zoom_In, Zoom_Out, Reset_View, Time_Back, Time_Forward, Day_Back, Day_Forward,
       Brush_Size, Next_Material, Quick_Save, Quick_Load, Place_Mode,
       Show_Help, Show_Survey, Show_Debug, Hide_HUD, Show_Routes, Show_Nav, Show_Wells,
-      Show_Band, Pause_Game, Speed_1, Speed_2, Speed_3,
+      Show_Band, Open_Roofs, Pause_Game, Speed_1, Speed_2, Speed_3,
       UI_Smaller, UI_Larger,
       Screenshot, Quit);
 
@@ -46,6 +46,7 @@ package Castle.Input is
       Show_Nav    => [Castle.GLFW.Key_F7, 0],
       Show_Wells  => [Castle.GLFW.Key_F8, 0],
       Show_Band   => [Castle.GLFW.Key_Tab, 0],
+      Open_Roofs  => [Castle.GLFW.Key_H, 0],          --  houses opened where the eye and the pointer are, all of them, or none
       Pause_Game  => [Castle.GLFW.Key_Space, 0],
       Speed_1     => [Castle.GLFW.Key_1, 0],
       Speed_2     => [Castle.GLFW.Key_2, 0],

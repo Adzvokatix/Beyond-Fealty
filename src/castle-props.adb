@@ -332,6 +332,119 @@ package body Castle.Props is
       return Sheaf_L;
    end Sheaf;
 
+   --  Cloaks: a folded one and a spread one of each colour asked for (the
+   --  band's cloaks are of a handful of wools).
+   Max_Cloaks : constant := 12;
+   type Cloak_Looks is record
+      C      : RGB;
+      Folded : Castle.Figures.Look_Id := 1;
+      Spread : Castle.Figures.Look_Id := 1;
+   end record;
+   Cloaks   : array (1 .. Max_Cloaks) of Cloak_Looks;
+   N_Cloaks : Natural := 0;
+
+   function Wool (C : RGB; Gain : Float) return Unsigned_32 is
+      function B8 (F : Float) return Integer is (Integer (Float'Max (0.0, Float'Min (255.0, F * Gain * 255.0))));
+   begin
+      return RGBA (B8 (C.R), B8 (C.G), B8 (C.B));
+   end Wool;
+
+   --  A look of boxes all of one wool: woven (a little lighter and darker,
+   --  texel by texel), a lighter hem along the rim of each top.
+   function Wool_Look (C : RGB; R0 : Rig) return Castle.Figures.Look_Id is
+      R    : Rig := R0;
+      Skin : Skin_Pixels := [others => [others => 0]];
+      V_At : Natural := 0;
+   begin
+      for K in 1 .. R.Count loop
+         R.Boxes (K).W := Natural (R.Boxes (K).Size.X);
+         R.Boxes (K).D := Natural (R.Boxes (K).Size.Y);
+         R.Boxes (K).H := Natural (R.Boxes (K).Size.Z);
+         R.Boxes (K).U := 0;
+         R.Boxes (K).V := V_At;
+         V_At := V_At + R.Boxes (K).D + R.Boxes (K).H;
+         for F in Face loop
+            declare
+               U0, V0, Wf, Hf : Natural;
+            begin
+               Face_Rect (R.Boxes (K), F, U0, V0, Wf, Hf);
+               for V in 0 .. Hf - 1 loop
+                  for U in 0 .. Wf - 1 loop
+                     declare
+                        H   : constant Float := Castle.Hash.Unit_2 (131, U0 + U, V0 + V);
+                        Hem : constant Boolean :=
+                          F = Pos_Z and then (U = 0 or else V = 0 or else U = Wf - 1 or else V = Hf - 1);
+                     begin
+                        Skin (V0 + V, U0 + U) :=
+                          Wool (C, (if Hem then 1.22 elsif F = Neg_Z then 0.8 else 0.9 + 0.2 * H));
+                     end;
+                  end loop;
+               end loop;
+            end;
+         end loop;
+      end loop;
+      return Castle.Figures.New_Look (R, Skin, True, False);
+   end Wool_Look;
+
+   function Cloak_Slot (C : RGB) return Positive is
+      Folded, Spread : Rig;
+   begin
+      for K in 1 .. N_Cloaks loop
+         if abs (Cloaks (K).C.R - C.R) + abs (Cloaks (K).C.G - C.G) + abs (Cloaks (K).C.B - C.B) < 0.02 then
+            return K;
+         end if;
+      end loop;
+      if N_Cloaks = Max_Cloaks then
+         return 1;                                   --  (more wools than there is room for: the first)
+      end if;
+      --  folded: three thicknesses of cloth, 45 x 30 cm
+      Folded.Count := 2;
+      Folded.Boxes (1) := (On => Pelvis, Lo => (-4.5, -3.0, 0.0), Size => (9.0, 6.0, 1.0), others => <>);
+      Folded.Boxes (2) := (On => Pelvis, Lo => (-4.0, -3.0, 1.0), Size => (8.0, 5.0, 1.0), others => <>);
+      --  spread over a sleeper on its side: over its shoulders and its
+      --  body, and lower over its legs drawn up
+      Spread.Count := 2;
+      Spread.Boxes (1) := (On => Pelvis, Lo => (-5.0, -7.0, 0.0), Size => (18.0, 15.0, 12.0), Round => 3.0, others => <>);
+      Spread.Boxes (2) := (On => Pelvis, Lo => (-14.0, -7.5, 0.0), Size => (14.0, 16.0, 11.0), Round => 3.0, others => <>);
+      N_Cloaks := N_Cloaks + 1;
+      Cloaks (N_Cloaks) := (C => C, Folded => Wool_Look (C, Folded), Spread => Wool_Look (C, Spread));
+      return N_Cloaks;
+   end Cloak_Slot;
+
+   function Cloak_Folded (C : RGB) return Castle.Figures.Look_Id is (Cloaks (Cloak_Slot (C)).Folded);
+   function Cloak_Spread (C : RGB) return Castle.Figures.Look_Id is (Cloaks (Cloak_Slot (C)).Spread);
+
+   Pallet_Made : Boolean := False;
+   Pallet_L    : Castle.Figures.Look_Id := 1;
+
+   --  (loose straw: short stalks lying mostly along it, pale and dull, darker
+   --  where they part; their cut ends at its ends)
+   function Paint_Pallet (F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Wf, Hf);
+      Run : constant Float := Castle.Hash.Unit_2 (211, (U + 2 * (V mod 3)) / 3, V);   --  a stalk: three texels of a row
+   begin
+      if F in Pos_X | Neg_X then
+         return (if H < 0.5 then RGBA (146, 124, 70) else RGBA (120, 100, 56));
+      elsif H < 0.12 then
+         return RGBA (124, 104, 58);                 --  a gap between stalks
+      elsif Run < 0.3 then
+         return (if H < 0.55 then RGBA (168, 146, 86) else RGBA (156, 134, 78));
+      elsif Run < 0.75 then
+         return (if H < 0.55 then RGBA (188, 166, 100) else RGBA (178, 156, 92));
+      else
+         return (if H < 0.55 then RGBA (202, 182, 116) else RGBA (194, 172, 106));
+      end if;
+   end Paint_Pallet;
+
+   function Pallet return Castle.Figures.Look_Id is
+   begin
+      if not Pallet_Made then
+         Pallet_L := One_Box ((-19.0, -8.0, 0.0), (38.0, 16.0, 2.0), Paint_Pallet'Access, Casts => False);
+         Pallet_Made := True;
+      end if;
+      return Pallet_L;
+   end Pallet;
+
    function Stone return Castle.Figures.Look_Id is
    begin
       if not Stone_Made then
@@ -443,6 +556,9 @@ package body Castle.Props is
                Round => Specs (K).Round, Taper => Specs (K).Taper);
             U_At := U_At + Net_W;
             Row_H := Natural'Max (Row_H, Net_H);
+            if Net_W > Skin'Length (2) or else V_At + Row_H > Skin'Length (1) then
+               raise Program_Error with "a prop's boxes do not fit one skin: make it of several looks";
+            end if;
          end;
       end loop;
       for K in Specs'Range loop
@@ -462,6 +578,82 @@ package body Castle.Props is
       end loop;
       return Castle.Figures.New_Look (R, Skin);
    end Many_Boxes;
+
+   --  A cloth's panels in a wool: fifteen thin boxes 2 px square, each on a
+   --  bone of its own, twice (a sheet has thirty)
+   Tile_Px : constant := 2.0;
+   Tile_Thick_Px : constant := 0.5;
+   Max_Cloth_Wools : constant := 16;
+   type Tile_Looks is array (1 .. 2) of Castle.Figures.Look_Id;
+   Cloth_Wools : array (1 .. Max_Cloth_Wools) of RGB;
+   Cloth_Tiles : array (1 .. Max_Cloth_Wools) of Tile_Looks;
+   N_Cloth_Wools : Natural := 0;
+
+   function Tiles_Of (C : RGB) return Tile_Looks is
+      function Paint (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+         pragma Unreferenced (Box, U, V, Wf, Hf);
+      begin
+         return Wool (C, (if F = Neg_Z then 0.84 else 0.95 + 0.03 * H));
+      end Paint;
+      Specs : Box_Specs (1 .. 15);
+   begin
+      for K in 1 .. N_Cloth_Wools loop
+         if abs (Cloth_Wools (K).R - C.R) + abs (Cloth_Wools (K).G - C.G) + abs (Cloth_Wools (K).B - C.B) < 0.02 then
+            return Cloth_Tiles (K);
+         end if;
+      end loop;
+      for K in Specs'Range loop
+         Specs (K) := (Lo => (0.0, 0.0, 0.0), Size => (Tile_Px, Tile_Px, Tile_Thick_Px), On => Bone'Val (K - 1),
+                       Round => 0.0, others => <>);
+      end loop;
+      declare
+         T : constant Tile_Looks := [Many_Boxes (Specs, Paint'Access), Many_Boxes (Specs, Paint'Access)];
+      begin
+         if N_Cloth_Wools < Max_Cloth_Wools then
+            N_Cloth_Wools := N_Cloth_Wools + 1;
+            Cloth_Wools (N_Cloth_Wools) := C;
+            Cloth_Tiles (N_Cloth_Wools) := T;
+         end if;
+         return T;
+      end;
+   end Tiles_Of;
+
+   procedure Put_Cloth (C : Castle.Cloth.Cloth_Id; Colour : RGB) is
+      use Castle.Cloth;
+      T  : constant Tile_Looks := Tiles_Of (Colour);
+      Fs : array (1 .. 2) of Frames;
+      K  : Natural := 0;
+      Over : constant := 1.1;            --  each panel a little wider than its four points, so that none parts
+      Thick : constant := 0.014;         --  metres
+   begin
+      for J in 1 .. Nv - 1 loop
+         for I in 1 .. Nu - 1 loop
+            declare
+               P00 : constant Vec3 := Point (C, I, J);
+               P10 : constant Vec3 := Point (C, I + 1, J);
+               P01 : constant Vec3 := Point (C, I, J + 1);
+               P11 : constant Vec3 := Point (C, I + 1, J + 1);
+               Eu  : constant Vec3 := ((P10 - P00) + (P11 - P01)) * (0.5 * Over);
+               Ev  : constant Vec3 := ((P01 - P00) + (P11 - P10)) * (0.5 * Over);
+               Ctr : constant Vec3 := (P00 + P10 + P01 + P11) * 0.25;
+               N   : constant Vec3 := Cross (Eu, Ev);
+               Nl  : constant Float := Sqrt (Dot (N, N));
+               Nz  : constant Vec3 := (if Nl > 1.0e-6 then N * (1.0 / Nl) else (0.0, 0.0, 1.0));
+               X   : constant Vec3 := Eu * (1.0 / (Tile_Px * Px));
+               Y   : constant Vec3 := Ev * (1.0 / (Tile_Px * Px));
+               Z   : constant Vec3 := Nz * (Thick / (Tile_Thick_Px * Px));
+            begin
+               K := K + 1;
+               Fs ((K - 1) / 15 + 1) (Bone'Val ((K - 1) mod 15)) :=
+                 (X => X, Y => Y, Z => Z,
+                  O => Ctr - X * (0.5 * Tile_Px * Px) - Y * (0.5 * Tile_Px * Px) - Z * (0.5 * Tile_Thick_Px * Px));
+            end;
+         end loop;
+      end loop;
+      Castle.Figures.Add (T (1), Fs (1));
+      Castle.Figures.Add (T (2), Fs (2));
+   end Put_Cloth;
+
 
    function Paint_Crossbar (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
       pragma Unreferenced (U, Wf, Hf);
@@ -839,6 +1031,269 @@ package body Castle.Props is
    begin
       Castle.Figures.Add (L, [others => F]);
    end Put_Scaled;
+
+   ------------------------------------------------------------------ the lord's cart
+
+   --  A skin is 128 by 64 texels and a box's net 2 (W + D) by H + 2 D of
+   --  them, so the cart is several looks of a few boxes each, long boxes
+   --  lying along X, put together by Put_Cart.
+   Cart_Made, Wheel_Made, Sack_Made : Boolean := False;
+   Bed_L, Side_L, End_L, Shafts_L, Prop_L, Wheel_L, Sack_L : Castle.Figures.Look_Id := 1;
+
+   --  boards: uneven grain, a darker line between two of them
+   function Board (H : Float; Line : Boolean) return Unsigned_32 is
+      use Castle.Colors;
+   begin
+      return (if Line then Hex (Dark_Bark, 0.85)
+              elsif H < 0.15 then Hex (Mudstone, 1.1) elsif H < 0.6 then Hex (Weathered_Oak, 1.12)
+              else Hex (Weathered_Oak, 1.28));
+   end Board;
+
+   function Paint_Bed (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, F, V, Wf, Hf);
+   begin
+      return Board (H, U mod 4 = 0);                      --  laid across the cart
+   end Paint_Bed;
+
+   --  a side or an end: two boards one over the other, a post at one end of
+   --  it (box 2), and under an end its axle (box 3)
+   function Paint_Side (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (U, Wf);
+      use Castle.Colors;
+   begin
+      if Box = 3 then                                     --  the axle: dark, greased
+         return (if H < 0.5 then Hex (Dark_Bark, 0.8) else Hex (Charcoal, 1.2));
+      elsif Box = 2 then                                  --  the post: its top sawn pale
+         return (if F = Pos_Z then Hex (Sand_Tan, 0.9) elsif H < 0.5 then Hex (Weathered_Oak) else Hex (Dark_Bark, 1.1));
+      end if;
+      return Board (H, F not in Pos_Z | Neg_Z and then V = Hf / 2);
+   end Paint_Side;
+
+   function Paint_Shafts (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, F, U, V, Wf, Hf);
+      use Castle.Colors;
+   begin
+      return (if H < 0.3 then Hex (Dark_Bark, 1.1) else Hex (Weathered_Oak));
+   end Paint_Shafts;
+
+   --  A wheel is three slabs that make a stepped round (18 px across), and
+   --  a hub.  On its two faces: the tyre on the rim, the felloes inside it,
+   --  eight spokes to the hub.
+   Wheel_Lo : constant array (1 .. 4) of Vec3 :=
+     [(-9.0, -1.0, 5.0), (-5.0, -1.0, 0.0), (-7.5, -1.05, 1.5), (-1.5, -1.8, 7.5)];
+   Wheel_Size : constant array (1 .. 4) of Vec3 :=
+     [(18.0, 2.0, 8.0), (10.0, 2.0, 18.0), (15.0, 2.1, 15.0), (3.0, 3.6, 3.0)];
+
+   function Paint_Wheel (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Wf, Hf);
+      use Castle.Colors;
+   begin
+      if Box = 4 then                                     --  the hub
+         return (if F in Pos_Y | Neg_Y then Hex (Iron, 0.9) elsif H < 0.5 then Hex (Dark_Bark) else Hex (Weathered_Oak, 0.9));
+      elsif F not in Pos_Y | Neg_Y then                   --  the tread: the iron tyre
+         return (if H < 0.5 then Hex (Iron, 0.8) else Hex (Charcoal, 1.3));
+      end if;
+      declare
+         --  where this texel is on the wheel, from its middle (pixels; a face's V runs down from its top)
+         X : constant Float := Wheel_Lo (Box).X + Float (U) + 0.5;
+         Z : constant Float := Wheel_Lo (Box).Z + Wheel_Size (Box).Z - Float (V) - 0.5 - 9.0;
+         R : constant Float := Sqrt (X * X + Z * Z);
+         On_Spoke : constant Boolean :=
+           abs X < 0.8 or else abs Z < 0.8 or else abs (abs X - abs Z) < 0.8;
+      begin
+         return (if R > 8.1 then Hex (Iron, 0.8)
+                 elsif R > 6.2 then (if H < 0.5 then Hex (Weathered_Oak) else Hex (Dark_Bark, 1.15))
+                 elsif R < 2.0 then Hex (Dark_Bark)
+                 elsif On_Spoke then Hex (Weathered_Oak, 1.2)
+                 else Hex (Shadow_Earth, 0.55));           --  between the spokes: the dark under the cart
+      end;
+   end Paint_Wheel;
+
+   function Wheel return Castle.Figures.Look_Id is
+   begin
+      if not Wheel_Made then
+         Wheel_L := Many_Boxes
+           ([(Lo => Wheel_Lo (1), Size => Wheel_Size (1), Round => 0.6, others => <>),
+             (Lo => Wheel_Lo (2), Size => Wheel_Size (2), Round => 0.6, others => <>),
+             (Lo => Wheel_Lo (3), Size => Wheel_Size (3), Round => 0.6, others => <>),
+             (Lo => Wheel_Lo (4), Size => Wheel_Size (4), others => <>)],
+            Paint_Wheel'Access);
+         Wheel_Made := True;
+      end if;
+      return Wheel_L;
+   end Wheel;
+
+   function Paint_Sack (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (F, Wf, Hf);
+      use Castle.Colors;
+   begin
+      if Box = 2 then                                     --  its neck, tied with cord
+         return (if U = 0 then Hex (Dark_Bark) elsif H < 0.5 then Hex (Sand_Tan, 0.9) else Hex (Sand_Tan, 1.05));
+      end if;
+      return (if (U + 2 * V) mod 5 = 0 then Hex (Sand_Tan, 0.85)       --  coarse cloth, a seam, salt showing pale
+              elsif H < 0.08 then Hex (Salt_Pale)
+              elsif H < 0.5 then Hex (Sand_Tan) else Hex (Sand_Tan, 1.12));
+   end Paint_Sack;
+
+   function Sack return Castle.Figures.Look_Id is
+   begin
+      if not Sack_Made then
+         Sack_L := Many_Boxes
+           ([(Lo => (-6.0, -3.5, 0.0), Size => (11.0, 7.0, 5.0), Round => 2.2, others => <>),
+             (Lo => (4.6, -1.3, 1.3), Size => (2.4, 2.6, 2.6), Round => 0.8, others => <>)],
+            Paint_Sack'Access);
+         Sack_Made := True;
+      end if;
+      return Sack_L;
+   end Sack;
+
+   procedure Put_Cart (Ground : Vec3; Turn : Float; Sacks : Natural; Towed : Boolean := False) is
+      Ct : constant Float := Cos (Turn);
+      St : constant Float := Sin (Turn);
+      Pi : constant := Ada.Numerics.Pi;
+      function At_Cart (A, Bb, Up : Float) return Vec3 is (Ground + (A * Ct - Bb * St, A * St + Bb * Ct, Up));
+   begin
+      if not Cart_Made then
+         --  the bed's boards, over the slab (its top at 15 px)
+         Bed_L := Many_Boxes ([(Lo => (-20.3, -10.3, 15.0), Size => (40.6, 20.6, 0.5), Round => 0.0, others => <>)],
+                              Paint_Bed'Access);
+         --  a side: its boards along X at the look's -Y edge, a post at its -X end
+         Side_L := Many_Boxes
+           ([(Lo => (-20.8, -11.0, 9.6), Size => (41.6, 0.8, 11.4), Round => 0.2, others => <>),
+             (Lo => (-21.2, -11.4, 9.6), Size => (1.6, 1.6, 13.4), others => <>)],
+            Paint_Side'Access);
+         --  an end, as it lies turned a quarter: its boards along X at the look's -Y edge (the cart's
+         --  end), a post at its -X end, and its axle 7 px in from it, under the bed
+         End_L := Many_Boxes
+           ([(Lo => (-10.6, -20.9, 9.6), Size => (21.2, 0.8, 11.4), Round => 0.2, others => <>),
+             (Lo => (9.8, -21.2, 9.6), Size => (1.6, 1.6, 13.4), others => <>),
+             (Lo => (-12.6, -13.8, 8.0), Size => (25.2, 1.6, 1.6), others => <>)],
+            Paint_Side'Access);
+         --  the shafts out of its front end, the bar across them, the prop they rest on
+         Shafts_L := Many_Boxes
+           ([(Lo => (20.6, -7.4, 9.0), Size => (26.0, 1.4, 1.4), others => <>),
+             (Lo => (20.6, 6.0, 9.0), Size => (26.0, 1.4, 1.4), others => <>),
+             (Lo => (45.0, -7.4, 9.0), Size => (1.4, 14.8, 1.4), others => <>)],
+            Paint_Shafts'Access);
+         Prop_L := Many_Boxes ([(Lo => (44.0, -0.6, 0.0), Size => (1.2, 1.2, 9.2), others => <>)], Paint_Shafts'Access);
+         Cart_Made := True;
+      end if;
+      Put (Bed_L, Ground, Turn);
+      Put (Side_L, Ground, Turn);
+      Put (Side_L, Ground, Turn + Pi);
+      Put (End_L, Ground, Turn + Pi / 2.0);
+      Put (End_L, Ground, Turn - Pi / 2.0);
+      Put (Shafts_L, Ground, Turn);
+      if not Towed then
+         Put (Prop_L, Ground, Turn);
+      end if;
+      for Ax in 0 .. 1 loop
+         for Side in 0 .. 1 loop
+            Put (Wheel, At_Cart ((if Ax = 0 then -Cart_Axle_M else Cart_Axle_M),
+                                 (if Side = 0 then -Cart_Track_M else Cart_Track_M), 0.0), Turn);
+         end loop;
+      end loop;
+      --  the sacks left in it: three across the bed, and three more on those
+      for K in 1 .. Natural'Min (6, Sacks) loop
+         declare
+            Layer : constant Natural := (K - 1) / 3;
+            Slot  : constant Natural := (K - 1) mod 3;
+         begin
+            Put (Sack,
+                 At_Cart (-0.62 + 0.62 * Float (Slot) + (if Layer = 1 then 0.2 else 0.0),
+                          (if Layer = 1 then 0.0 else (if Slot mod 2 = 0 then -0.1 else 0.1)),
+                          Cart_Bed_M + 0.24 * Float (Layer)),
+                 Turn + Pi / 2.0 + 0.15 * Float (K mod 3 - 1));
+         end;
+      end loop;
+   end Put_Cart;
+
+   ------------------------------------------------------------------ a ladder
+
+   Ladder_Made : Boolean := False;
+   Ladder_L    : Castle.Figures.Look_Id := 1;
+
+   function Paint_Ladder (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (F, V, Wf, Hf);
+      use Castle.Colors;
+   begin
+      if Box > 4 then                                     --  a rung: split ash, paler
+         return (if H < 0.5 then Hex (Sand_Tan, 0.9) else Hex (Gilded_Amber, 0.8));
+      end if;
+      return (if U mod 9 = 4 then Hex (Dark_Bark)          --  a rail: a pole with its knots
+              elsif H < 0.4 then Hex (Weathered_Oak, 1.1) else Hex (Weathered_Oak, 1.3));
+   end Paint_Ladder;
+
+   function Ladder return Castle.Figures.Look_Id is
+      Specs : Box_Specs (1 .. 14);
+   begin
+      if not Ladder_Made then
+         --  each rail in two lengths (a net 68 px long would not fit the skin's width)
+         Specs (1) := (Lo => (-34.0, -4.6, -0.6), Size => (34.0, 1.2, 1.2), others => <>);
+         Specs (2) := (Lo => (0.0, -4.6, -0.6), Size => (34.0, 1.2, 1.2), others => <>);
+         Specs (3) := (Lo => (-34.0, 3.4, -0.6), Size => (34.0, 1.2, 1.2), others => <>);
+         Specs (4) := (Lo => (0.0, 3.4, -0.6), Size => (34.0, 1.2, 1.2), others => <>);
+         for K in 0 .. 9 loop
+            Specs (5 + K) := (Lo => (-29.4 + 6.4 * Float (K), -4.0, -0.4), Size => (0.8, 8.0, 0.8), others => <>);
+         end loop;
+         Ladder_L := Many_Boxes (Specs, Paint_Ladder'Access);
+         Ladder_Made := True;
+      end if;
+      return Ladder_L;
+   end Ladder;
+
+   --  A look that lies 3.4 m along its X about its middle, leaning from
+   --  Foot toward Top.
+   procedure Put_Leaning (L : Castle.Figures.Look_Id; Foot, Top : Vec3) is
+      D   : constant Vec3 := Top - Foot;
+      Len : constant Float := Sqrt (Dot (D, D));
+      Flat : constant Float := Sqrt (D.X * D.X + D.Y * D.Y);
+   begin
+      if Len < 0.3 then
+         return;
+      end if;
+      declare
+         X  : constant Vec3 := D * (1.0 / Len);                           --  up it
+         Y  : constant Vec3 := (if Flat > 0.01 then (-D.Y / Flat, D.X / Flat, 0.0) else (0.0, 1.0, 0.0));   --  across it, level
+         Z  : constant Vec3 := (X.Y * Y.Z - X.Z * Y.Y, X.Z * Y.X - X.X * Y.Z, X.X * Y.Y - X.Y * Y.X);
+         F  : constant Frame := (X => X, Y => Y, Z => Z, O => Foot + X * 1.7);
+      begin
+         Put_In (L, F);
+      end;
+   end Put_Leaning;
+
+   procedure Put_Ladder (Foot, Top : Vec3) is
+   begin
+      Put_Leaning (Ladder, Foot, Top);
+   end Put_Ladder;
+
+   Pole_Made : Boolean := False;
+   Pole_L    : Castle.Figures.Look_Id := 1;
+
+   function Paint_Pole (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, F, V, Wf, Hf);
+      use Castle.Colors;
+   begin
+      return (if U mod 11 = 5 then Hex (Dark_Bark) elsif H < 0.4 then Hex (Weathered_Oak) else Hex (Weathered_Oak, 1.2));
+   end Paint_Pole;
+
+   procedure Put_Ladder_Stood (Ground : Vec3; Turn : Float; Nth : Positive := 1) is
+      D    : constant Vec3 := (Cos (Turn), Sin (Turn), 0.0);
+      Side : constant Vec3 := (-Sin (Turn), Cos (Turn), 0.0) * (0.28 * Float (Nth - 1));
+      Apex : constant Vec3 := Ground + (0.0, 0.0, 3.37);
+   begin
+      if not Pole_Made then            --  (the pole it is propped on: in two lengths, as a ladder's rails are)
+         Pole_L := Many_Boxes
+           ([(Lo => (-34.0, -0.7, -0.7), Size => (34.0, 1.4, 1.4), others => <>),
+             (Lo => (0.0, -0.7, -0.7), Size => (34.0, 1.4, 1.4), others => <>)],
+            Paint_Pole'Access);
+         Pole_Made := True;
+      end if;
+      Put_Leaning (Ladder, Ground + Side - D * 0.40, Apex + Side);
+      if Nth = 1 then
+         Put_Leaning (Pole_L, Ground + D * 0.40, Apex);
+      end if;
+   end Put_Ladder_Stood;
 
    procedure Put (L : Castle.Figures.Look_Id; Ground : Vec3; Turn : Float) is
       F  : constant Frame := (X => (Cos (Turn), Sin (Turn), 0.0), Y => (-Sin (Turn), Cos (Turn), 0.0),

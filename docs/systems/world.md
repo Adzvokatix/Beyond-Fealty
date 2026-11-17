@@ -2,7 +2,7 @@
 
 - Packages: Castle.Terrain, Geology, Deposits, Hydrology, Flora, Chunks, Worldgen, Maps, Channels, Stacks
 - Check: none of its own (worldgen_preview's survey checksum; terrain_stats, flora_stats, probe, water_probe, fall_find measure it)
-- Saves: nothing is saved: the world is the seed and Generator_Version (13)
+- Saves: nothing is saved: the world is the seed and Generator_Version (14)
 - Stage: phase A, and the palette and forests of 2026-11-08 (Handoff_2026_11_08_world_look.md); wild vegetables in
   stage 4; trees reshaped and tall grass in drifts, 2026-11-11 (Handoff_2026_11_11_models_pass.md)
 
@@ -79,6 +79,39 @@ The survey prints a content checksum that must not change with `--workers`.
   `Tree_Reach`, 20 blocks: no stack and no felling looks further), how
   much bark stands off the trunk under a serf's height, and a hash of all
   their shapes, which the debug and the release build must agree on.
+* **Boulders** (`Castle.Flora.Boulder_At`; generator 14). A place for one
+  every 6 m, held or not by how rocky the ground is there (a little
+  everywhere, more on slopes, in the mountains and in rocky patches), a
+  chance rolled once for the place. John, 2026-11-14, looking at the
+  mountains: "I propose we scale back boulders on mountainous terrain by
+  about 80%, let's compensate with increasing boulders on open terrain by
+  30% ... they are littered with boulders, and the player probably won't
+  be accessing a majority of them". So the chance is taken 1.3 times
+  where the generator's mountain mask is nothing and a fifth from 0.2 of
+  it up, eased between (`Boulders_Open`, `Boulders_Mountain`,
+  `Boulder_Foot`, at the top of `castle-flora.ads`). Counted by
+  `flora_stats` over the map (seed 1), by that mask:
+
+  | | of the map | boulders, generator 13 | generator 14 |
+  |---|---|---|---|
+  | open land (mask under 0.1) | 79.5 % | 2,217 | 2,828 (+28 %) |
+  | the foot of the mountains (0.1 to 0.2) | 3.2 % | 443 | 202 |
+  | mountains (0.2 and over) | 17.3 % | 7,275 | 1,447 (-80 %) |
+  | the whole map | | 9,935 | 4,477 |
+  | within 60 m of the reference stake | | 30 | 16 |
+
+  Those left on a mountain are of those that were there, and the open
+  land's are all still there with more among them (the roll is the
+  place's). Round the reference stake there are fewer: it stands at a
+  mountain's foot (the mask is 0.38 to 0.52 on the crag north-east of
+  it, and 0.1 or more at a quarter of the places within 60 m). Every run's scene is set as
+  it was (the stockpiles' places, the camp's floor, the hovels' room, to
+  the line), and all eight reference logs were recorded again. What it
+  saves in memory is nothing to speak of (boulders were 0.8 % of the fine
+  bricks; the map kept small is 990 MB for 992); in a view of that
+  mountainside from above it is 2 % of the quads. It is for the eye.
+  Since 2026-11-16 a boulder is drawn round, its blocks as they were
+  (`rendering.md`, "Boulders drawn round").
 * **Tall grass** (generator 13, `Castle.Geology`; John, 2026-11-11: "grass
   can get a slight overhaul"). It stands in drifts, not evenly: a noise
   about 9 m across (`Grass_Drift_M`, a channel of its own) says how thick.
@@ -206,6 +239,227 @@ water table) -> deposits -> aquifer field.
 
 A chunk is an 8 m cube = 8 x 8 x 8 bricks. A brick is 32 bits: material,
 host rock, ore grade, owning deposit. A skin brick whose 64 blocks differ
-keeps them (128 bytes). Chunks below the skin hold `Deep_Fill`. The skin is
+keeps them (a fine brick: 128 bytes whole; kept small since 2026-11-14,
+14 to 66 bytes, "What a stack costs to keep" below). Chunks below the
+skin hold `Deep_Fill`. The skin is
 a regenerable cache; a save is the seed, `Generator_Version`, clock,
 climate, camera and the edits (see Editing and saves).
+
+## What a stack costs to keep (2026-11-14)
+
+John, of holding ground for the simulation that nobody is looking at:
+"the inhabitants don't care what texture the objects are only the player
+does, so let's find out what the 68kb is, 4.7 GB isn't going to be
+acceptable, so we need to be smart about this". And his ceiling, the same
+day: "we want to be comfortable on 8gb of ram, that means consuming 4gb
+is our ceiling".
+
+What is kept of a loaded stack for the simulation (`Castle.World_Blocks`:
+its packed blocks and its ground summary; the game keeps its mesh
+besides, in the renderer's arena) is counted by `colony_run --mem`, from
+the sizes of the objects and how many of each are allocated, and
+`--ground-stacks N` brings in as much ground as is asked (400: the whole
+map, 65,536 stacks), `--no-mesh` with no mesh built. Over the whole map,
+seed 1, generator 13, as it was before anything was changed:
+
+| part of a stack | bytes | of it | read by |
+|---|---|---|---|
+| the ground summary: for each of 1,024 block columns, room for four stretches of open space and their water | 32,768 | 47 % | the walking map, the water |
+| fine bricks: a cubic metre whose 64 blocks differ, 225 of them | 28,800 | 41 % | `Block_At`: the walking map (two materials a floor), the colony, the pointer |
+| brick and ref grids of the 2.2 chunks that are not uniform | 6,800 | 10 % | with them |
+| the array of chunks | 1,280 | 2 % | with them |
+
+68.0 KB a stack, 4,355 MB for the map, the process holding 4.76 GB (the
+map-wide fields of the generator are some 290 MB of that). Fine bricks by
+what they hold: trees 38 %, plants 20.5 %, ground with no air in it
+(under the surface, where materials meet) 28.5 %, open surface 9 %, water
+2.7 %, boulders 0.8 %. A stack's blocks run from 5 KB to 75 (half under
+31, nine tenths under 56; the heaviest is forest). A stack's blocks are
+made in 1.4 ms of CPU and its mesh in 6.6 more: the whole map comes in
+without meshes in 3.9 s on 32 threads.
+
+**The ground summary is kept small** (`Castle.Water.Small_Summary`; his
+word: "Sure build the compact summary"). Of every hundred block columns
+89 are plain: one stretch, open to the sky, dry and not source water,
+which the row of their floor says whole. Each column has a place of 16
+bits: a plain column's is its floor; any other's is where its record
+begins in a pool of 16-bit words (how many stretches and whether it
+flows, its rest level, three words a stretch). Nothing is lost. It is
+read a column at a time and written the same: over itself where a plain
+column stays plain or another keeps its number of stretches, and by
+packing the stack's summary again where not (three edits in a hundred of
+the crowd's: 4,353 of 151,199 in its sixty days, with no time to
+measure). **3.7 KB a stack where it was 32: the map 2,546 MB kept, the
+process 2.87 GB.** `Castle.World_Blocks.Small_Summaries` off (`colony_run
+--full-summaries`, and the game's) keeps it whole as it always was; a run
+is the same either way (`tools/stress.sh runner`, `crowd_full_sums`), and
+the debug build unpacks every summary it keeps and every column it writes
+and compares with the whole. `edit_check` has it (four stacks of the
+world, a made-up summary with columns of every kind, four thousand
+columns written one at a time, a stack kept and dug into by the game's
+own calls, small and whole); broken six ways, it fails each.
+
+**Fine bricks are kept small** (`Castle.Chunks`, the same day; his words,
+of the ground under the surface: "Let's see if we can cut the burried
+skin down to 4kb a stack, and see what that buys us"). Counted over the
+whole map, no fine brick holds more than sixteen different blocks, and
+seven in ten hold two (leaf and air, turf and earth, earth and rock): of
+the 4.2 million with no air in them, 98 in a hundred. So a fine brick is
+kept as a record of 16-bit words in its chunk's pool: how many different
+blocks it holds, those blocks, and for each of its 64 places which of
+them it is, in one bit (two blocks), two (to four) or four (to sixteen):
+14, 26 and 66 bytes; a brick of more is written whole. Nothing is lost.
+`Castle.Chunks.Block_In` reads a block out of it (the one reader;
+`Fine_At` gives a brick whole). **3.9 KB of fine bricks a stack where
+they were 28.2; the ground with no air in it 0.9 KB where it was 8.0.**
+`Small_Bricks` off (`colony_run --whole-bricks`) writes them whole as
+they always were: a run is the same either way (`crowd_whole_bricks` in
+`tools/stress.sh runner`), and the debug build reads back every brick it
+packs, place by place, against the blocks it was made of: run over the
+whole map, 14.7 million bricks, none other. `edit_check` has bricks made
+up of 2, 3, 4, 5, 15, 16, 17 and 64 different blocks; broken five ways,
+it fails each. **It costs a little time**: a block read out of a fine
+brick is a few shifts where it was an index; the band's 41 days take 5.5
+s where they took 5.3 to 5.4, the crowd's 60 days 8.9 for 8.7 (the
+machine quiet, the switch turned to and fro).
+
+The other way to his 4 KB was tried and not taken: **the generator's
+skin 1 m deep in place of 2** (a scratch build, not committed). The
+ground with no air in it came to 3.4 KB a stack (fine bricks 23.6 for
+28.2; the map 314 MB less), and the reference band's 41 days and the
+housing run's ended in the same states. But the housing run read 23
+blocks below the skin where it reads 15 (of 247 million): with a thinner
+skin the colony is answered "not made yet" a little more often when it
+digs. Nothing came of it in those runs; it changes what a reader can be
+told, and kept small the same bricks come to 0.9 KB at the full 2 m. His
+to say if he wants it besides.
+
+Where that leaves a stack, over the whole map:
+
+| | bytes a stack | the whole map kept | the process holds |
+|---|---|---|---|
+| as it was | 68.0 KB | 4,355 MB | 4.76 GB |
+| the summary kept small | 39.8 KB | 2,546 MB | 2.87 GB |
+| and the fine bricks | 15.5 KB | 992 MB | 1.28 GB |
+
+Of the 15.5 KB: the summary 3.7, fine bricks 3.9, the brick and ref
+grids of chunks that are not uniform 6.6 (now the largest part: 3 KB a
+chunk, not looked into), the array of chunks 1.3. A stack's blocks run
+from 4 KB to 22 (half under 11). The walking map is beside all this:
+14.4 KB for a stack someone has walked, and 5.2 for each kind of dry
+going asked there.
+
+(On generator 14, the boulders thinned: 990 MB kept, the process 1.27
+GB.) **The game itself, at its default view of 1,257 stacks, holds 62 MB
+less**, measured: `main`'s build and this one in a hidden window with
+software drawing, 1,829 MB and 1,767 MB once the view had filled (the
+totals are that renderer's; the difference is the game's). The
+whole-map figures above are the runner's; the game holds the whole map
+since the same day (next).
+
+## The whole map held (2026-11-14)
+
+John: "can make the whole map solid and stream only the mesh?", and,
+with the counts above before him: "ok build it with the whole map solid
+we can do that now before the stockpile".
+
+**The game keeps every stack's blocks and its ground summary** (what the
+simulation reads: `Castle.World_Blocks`) from soon after it starts, and
+streams the meshes alone. In `game/castle_game.adb`:
+
+- `States` is the mesh's state. A stack out of view is asked for
+  **without a mesh** (`Castle.Streaming.Request (..., Mesh => False)`: its
+  blocks and summary alone, 1.4 ms of a worker where a meshed stack is
+  9), in rings round the stack first looked at, 256 out at a time, behind
+  everything the view asks for (their results wait in a ring of their
+  own, so a mesh the view asked for is never behind them). The main
+  thread keeps them for at most half a millisecond of a frame.
+- A stack that leaves the view gives up its mesh and what is drawn of
+  its water, and **keeps its blocks**. The colony's own ground stays
+  meshed wherever the camera is, as it always did (`Colony_Holds`).
+- **What is held and not drawn is made again when its edits have moved**:
+  the map is looked over all the time (`Hold_More`: 4,096 stacks a frame
+  while it finds any to ask for, 256 once a whole round has found none),
+  and a held stack whose edit generation is not the one it was kept at
+  (`Held_Gen`: a dig across its edge; a load) is asked for again. After a
+  load every stack held and not drawn is (`Hold_Stale`). A result older
+  than what is held never replaces it.
+- Live water in a stack that is not drawn is the water simulation's, as
+  it always was while a stack was unloaded; the stack's kept blocks have
+  the water it was last made with, and it is made again with the live
+  water when it comes into view.
+- `--no-whole-map`: as before, a stack is dropped with its mesh.
+
+**What it costs, measured in the game** (the default view at the
+reference stake, a real window of 1,280 x 720, twice each way):
+
+| | the old way | the whole map held |
+|---|---|---|
+| the process holds, no band | 548 MB | 1,526 to 1,533 MB |
+| with the reference band, panned 520 m off and back | 609 MB | 1,582 MB |
+| the view filled | 0.49 s | 0.47 s |
+| the whole map held | never | 12.1 s after the first frame |
+| the main thread's work a frame, over the first fifteen seconds | 0.12 ms | 0.93 to 1.00 ms |
+| its longest frame after the view filled, no band | 0.4 to 0.8 ms | 4.9 to 5.2 ms |
+
+**About 0.98 GB more, 1.5 to 1.6 GB in all: under his ceiling of 4 GB.**
+The peak is the same as the end (nothing is held twice). The holding
+takes 0.4 s of the main thread in all, and 1.1 to 2.3 ms in its worst
+frame (4.6 once, with a band at work and the camera panning); the
+longer frames while it runs (some forty of seven hundred over 2.5 ms,
+none over 5.2) are the drawing waiting on processors the workers have,
+for those twelve seconds. A pan of 520 m with a band at work has the same
+long frames both ways (10 to 14 ms, the view's own meshes coming in).
+On a machine with few processors it takes longer in the background (64
+thousand stacks at 1.4 ms each, over the workers) and the main thread's
+half millisecond a frame is the same. (With the
+far view's tiles made before what is only held, the map is held 18.3 s
+after the first frame on 31 workers, and 67.6 s on three, 23.8 without
+the far view: `rendering.md`, "The far view".)
+
+**What changes besides the memory:**
+
+- **Released water runs as it does at a wide view, whatever the view.**
+  Ground that was not loaded was a wall to the water. A lake let out
+  through a cut with a view of 16 m piled 194 m³ against the edge of the
+  loaded ground (13 stacks simulated); with the whole map held it does
+  what it does at any view (28.6 m³ out of its sources, 21 stacks). How
+  far and how fast it runs is as it was (`Max_Awake` and John's dials in
+  `water.md`). In the first seconds after a start the far ground is still
+  coming in.
+- **The colony goes by its own ground, not by what is loaded**
+  (`colony.md`, "The colony's own ground"): with everything loaded,
+  nothing else bounds it. `--walk` and `--deer-walk` keep to the ground
+  round their two ends for the same reason (`Castle.Serfs.Walker_Round_M`).
+- **What the player plans can be read anywhere**, at once (a path's
+  line, a zone), where it could be read only on ground the camera had
+  passed over.
+
+**Proved** (scripted, `--save-at F PATH`, `--load-at F PATH`,
+`--probe-block X Y Z`, `--hold-wait`, `--mem`):
+
+- a hole dug, the camera panned 520 m off: the block in the hole reads
+  air, the one under it the rock the dig laid open, "its stack is held
+  and not drawn" (the old way: nothing is held there);
+- the same with a save from before the dig loaded while the camera is
+  away: the block reads earth again. With the asking-again taken out it
+  reads air, the stale hole;
+- the debug build through both, and through a lake let out, a pan away
+  and back (every summary kept is unpacked and compared, every loaded
+  stack in the water's window holds its own texels): nothing raised, the
+  water drawn on coming back as the old way draws it;
+- 65,536 of 65,536 stacks held at the end of each run (the run's own
+  count), and no job lost.
+
+**The streaming's two silent limits are gone** (`Castle.Streaming`): the
+queue held 32,768 jobs and dropped what came after, and a result that
+found the ring of 8,192 full was dropped and leaked. That was the
+"crawl" of asking the runner for every stack at once: on `main` it does
+not end (stopped after 60 s); now it takes 8 s. The queue has room for
+every stack twice, a worker with a result waits while the ring is full,
+and a job lost would be said loudly at the end of a run.
+
+Not done: the colony's own ground is still meshed while out of view (a
+rebuild of an edited stack there costs a mesh nobody sees: 995 in the
+band's 41 days); a held stack coming into view is made again from the
+generator, not meshed from what is held.

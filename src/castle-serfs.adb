@@ -56,6 +56,7 @@ package body Castle.Serfs is
 
    type Serf is record
       Used     : Boolean := False;
+      Last_F   : Frames;                --  its bones as last submitted (what a cloth hangs on)
       G        : Genome;
       O        : Outfit;
       R        : Rig;
@@ -70,6 +71,7 @@ package body Castle.Serfs is
       Pause    : Float := 0.0;
       Facing   : Float := 0.0;
       Prev_Target : Vec3;
+      Up_Want, Up : Float := 0.0;          --  how far over the ground it stands (on a ladder), asked and as drawn
       Route    : Castle.Nav.Route;         --  walkers: the way to the end they are heading for
       Leg      : Positive := 1;            --  between Route points Leg and Leg + 1
       Along    : Float := 0.0;             --  metres along that leg
@@ -86,6 +88,9 @@ package body Castle.Serfs is
       Work_W   : S1.Filter;                --  0 .. 1: how far into the work pose
       Work     : Motion_Kind := Stand;      --  the work that pose is of (kept while it fades out)
       Lie_W    : S1.Filter;                --  0 .. 1: lying down
+      Side_W   : S1.Filter;                --  0 .. 1: and on its side, curled up (asleep)
+      Faces    : Boolean := False;         --  asleep, it turns its face to
+      Faces_P  : Vec3 := (0.0, 0.0, 0.0);  --  this (Lie_Facing)
       Tool_W   : S1.Filter;                --  0 .. 1: its tool from where it is stowed into the hand
       Tool_Hold : Float := 0.0;            --  seconds the tool stays in the hand yet
       --  how it shows it
@@ -122,6 +127,7 @@ package body Castle.Serfs is
       else (0.0, 0.0, 0.0));
 
    function Posed (I : Positive) return Pose is (Serfs (I).P);
+   function Frames_Of (I : Positive) return Frames is (Serfs (I).Last_F);
    function Rig_Of (I : Positive) return Rig is (Serfs (I).R);
 
    function Hash01 (S : Serf; K, J : Integer) return Float is (Unit (Hash_2 (S.G.Seed + 99, K, J)));
@@ -165,6 +171,7 @@ package body Castle.Serfs is
          S.Work_W  := S1.Make ((2.0 * S.Lively, 1.0, 0.0), 0.0);
          S.Log_W   := S1.Make ((2.5 * S.Lively, 1.0, 0.0), 0.0);
          S.Lie_W   := S1.Make ((0.9 * S.Lively, 1.0, 0.0), 0.0);
+         S.Side_W  := S1.Make ((0.9 * S.Lively, 1.0, 0.0), 0.0);
          S.Tool_W  := S1.Make ((2.2 * S.Lively, 1.0, 0.0), 0.0);
          for Sd in Side loop
             S.Arms (Sd) := S1.Make ((2.8 * S.Lively, 0.45 + 0.25 * S.Bounce, 0.0), 0.0);   --  trails the legs by about 30 degrees
@@ -190,7 +197,7 @@ package body Castle.Serfs is
             G : constant Genome :=
               Random_Genome (Derive (Seed, U64 (I)), Child => I mod 5 = 0, Elder => I mod 7 = 3);
             O : constant Outfit := (Job => Job_Kind'Val (I mod (Job_Kind'Pos (Job_Kind'Last) + 1)),
-                                    Winter => Winter);
+                                    Winter => Winter, Cloak_Off => False);
             Off : constant Float := (Float (I) - Float (N + 1) / 2.0) * 0.9;
          begin
             Spawn (G, O, Centre + Across * Off, Facing, False, Centre, 0.0);
@@ -202,7 +209,7 @@ package body Castle.Serfs is
                            Speed : Float := 1.3) is
       Top : constant Float := Castle.Nav.Surface_Z (From.X, From.Y);
    begin
-      Spawn (Random_Genome (Seed), (Job, Winter), (From.X, From.Y, (if Top >= 0.0 then Top else From.Z)),
+      Spawn (Random_Genome (Seed), (Job, Winter, False), (From.X, From.Y, (if Top >= 0.0 then Top else From.Z)),
              0.0, True, (To.X, To.Y, -1.0), Speed);
    end Spawn_Walker;
 
@@ -210,8 +217,14 @@ package body Castle.Serfs is
 
    procedure Plan_Route (S : in out Serf) is
       Goal : constant Vec3 := (if S.To_B then S.B else S.A);
+      --  (kept to the ground round its two ends: the game holds the whole map
+      --  since 2026-11-14, and an end that cannot be got to would be looked
+      --  for over all of it)
+      Mid  : constant Vec3 := ((S.A.X + S.B.X) / 2.0, (S.A.Y + S.B.Y) / 2.0, 0.0);
+      Half : constant Float := Sqrt ((S.A.X - S.B.X) ** 2 + (S.A.Y - S.B.Y) ** 2) / 2.0;
    begin
-      S.Route := Castle.Nav.Plan ((S.Target.X, S.Target.Y, S.Ground), Goal);
+      S.Route := Castle.Nav.Plan ((S.Target.X, S.Target.Y, S.Ground), Goal,
+                                  Within => Castle.Nav.Within_M (Mid.X, Mid.Y, Half + Walker_Round_M));
       S.Plan_Ms := Castle.Nav.Last_Stats.Seconds * 1000.0;
       S.Looked := Castle.Nav.Last_Stats.Looked_At;
       S.Leg := 1;
@@ -394,6 +407,7 @@ package body Castle.Serfs is
       R : Rig renames S.R;
    begin
       S.Clock := S.Clock + Dt;
+      S.Up := S.Up + (S.Up_Want - S.Up) * Float'Min (1.0, 4.0 * Dt);      --  (up or down its ladder in a moment)
 
       --  1. where it is meant to be: walkers go back and forth along routes
       S.Prev_Target := S.Target;
@@ -411,7 +425,7 @@ package body Castle.Serfs is
          Working : constant Boolean := S.Driven and then S.Motion in Pick | Put_Down | Chop | Aim | Eat | Stir | Sit_Eat;
          Want_H : constant Float :=
            (if Spd > 0.25 then Arctan (V.Y, V.X)
-            elsif (Working and then S.Motion /= Eat) or else (S.Driven and then S.Motion = Lie)
+            elsif (Working and then S.Motion /= Eat) or else (S.Driven and then S.Motion in Lie | Sleep)
             then Heading_Of (S.Spot - Root, S1.Value (S.Heading))   --  face the work (lying: feet to it)
             elsif S.Walker or else S.Driven then S1.Value (S.Heading) else S.Facing);
          Sitting : constant Boolean := S.Driven and then S.Motion = Sit_Eat and then Spd < 0.35;
@@ -425,7 +439,8 @@ package body Castle.Serfs is
       begin
          S.Ground := Ground_At (Root.X, Root.Y, S.Ground);
          S1.Update (S.Work_W, Dt, (if Working and then Spd < 0.35 then 1.0 else 0.0));
-         S1.Update (S.Lie_W, Dt, (if S.Driven and then S.Motion = Lie and then Spd < 0.35 then 1.0 else 0.0));
+         S1.Update (S.Lie_W, Dt, (if S.Driven and then S.Motion in Lie | Sleep and then Spd < 0.35 then 1.0 else 0.0));
+         S1.Update (S.Side_W, Dt, (if S.Driven and then S.Motion = Sleep and then Spd < 0.35 then 1.0 else 0.0));
          W := Clamp (S1.Value (S.Work_W), 0.0, 1.0);
          if Working then
             S.Work := S.Motion;   --  the work pose fades out of this one, not toward the next motion's
@@ -639,7 +654,7 @@ package body Castle.Serfs is
                      Goal : constant Vec3 :=
                        (case S.Work is
                            when Pick =>
-                              S.Spot + Rt * (Out_Of (Sd) * 0.09) - Fw * 0.04 + Fw * (0.05 * Sin (A))
+                              S.Spot - (0.0, 0.0, S.Up) + Rt * (Out_Of (Sd) * 0.09) - Fw * 0.04 + Fw * (0.05 * Sin (A))
                               + (0.0, 0.0, 0.05 * Cos (A)),
                            when Chop =>
                              (if Sd = Dom then Axe_Hand
@@ -663,7 +678,7 @@ package body Castle.Serfs is
                                   * Smooth (0.5 + 0.5 * Sin (2.0 * Pi * 0.45 * S.Clock))
                                 + Rt * (Out_Of (Dom) * 0.03)
                               else S.P.Pelvis + Up * (0.26 * R.Height) + Fw * 0.2 + Rt * (Out_Of (Off) * 0.04)),
-                           when others => S.Spot + Rt * (Out_Of (Sd) * 0.1) + (0.0, 0.0, 0.12));
+                           when others => S.Spot - (0.0, 0.0, S.Up) + Rt * (Out_Of (Sd) * 0.1) + (0.0, 0.0, 0.12));
                      Steady : constant Vec3 :=
                        S.P.Pelvis + Rt * (Out_Of (Off) * (R.Hip_Half + 0.06)) + Fw * 0.12
                        + Up * (0.36 * R.Height);
@@ -743,6 +758,13 @@ package body Castle.Serfs is
       Serfs (N_Serfs).Driven := True;
       return N_Serfs;
    end Spawn_Driven;
+
+   procedure Perch (I : Positive; Up : Float) is
+   begin
+      if I <= N_Serfs then
+         Serfs (I).Up_Want := Float'Max (0.0, Up);
+      end if;
+   end Perch;
 
    procedure Drive (I : Positive; Where : Vec3; M : Motion_Kind; Spot : Vec3; Log : Boolean := False;
                     Buckets : Boolean := False) is
@@ -835,9 +857,67 @@ package body Castle.Serfs is
       end loop;
    end Update;
 
+   --  Asleep it lies on its side, a little curled up (John, 2026-11-12:
+   --  "have serfs sleep on their side"): which side is its own, from its seed.
+   --  (told to face something as it sleeps, it lies on the side that turns
+   --  its belly that way: lying back from the way it faced, on its right
+   --  side its belly is to what was its right)
+   function Lies_On (S : Serf) return Side is
+      H : constant Float := S1.Value (S.Heading);
+      R : constant Vec3 := S3.Value (S.Root);
+   begin
+      if S.Faces then
+         return (if Sin (H) * (S.Faces_P.X - R.X) - Cos (H) * (S.Faces_P.Y - R.Y) > 0.0 then Right else Left);
+      end if;
+      return (if Hash01 (S, 11, 0) < 0.5 then Left else Right);
+   end Lies_On;
+
+   procedure Lie_Facing (I : Positive; On : Boolean; P : Vec3 := (0.0, 0.0, 0.0)) is
+   begin
+      if I <= N_Serfs then
+         Serfs (I).Faces := On;
+         Serfs (I).Faces_P := P;
+      end if;
+   end Lie_Facing;
+
+   --  The pose it is drawn in: as animated; asleep (Side_W), with its legs
+   --  drawn up (the upper one further), its arms folded before its chest,
+   --  its back and its neck a little bent.
+   function Posed (S : Serf) return Pose is
+      W : constant Float := Clamp (S1.Value (S.Side_W), 0.0, 1.0);
+      P : Pose := S.P;
+   begin
+      if W < 0.01 then
+         return P;
+      end if;
+      declare
+         Fw : constant Vec3 := (Cos (P.Heading), Sin (P.Heading), 0.0);
+      begin
+         for Sd in Side loop
+            declare
+               Upper : constant Boolean := Sd /= Lies_On (S);
+            begin
+               P.Foot (Sd) := P.Foot (Sd)
+                 + (Fw * (if Upper then 0.32 else 0.22) + (0.0, 0.0, (if Upper then 0.25 else 0.14))) * W;
+               P.Reach (Sd) := P.Reach (Sd) and then W < 0.5;
+               --  (the upper arm across its chest, the hand down before it: it lies under its cloak)
+               P.Swing (Sd) := P.Swing (Sd) + ((if Upper then 0.45 else 0.6) - P.Swing (Sd)) * W;
+               P.Elbow (Sd) := P.Elbow (Sd) + ((if Upper then 1.4 else 2.1) - P.Elbow (Sd)) * W;
+               P.Spread (Sd) := P.Spread (Sd) + ((if Upper then -0.55 else 0.04) - P.Spread (Sd)) * W;
+            end;
+         end loop;
+         P.Bend := P.Bend + (0.2 - P.Bend) * W;
+         P.Look_Pitch := P.Look_Pitch + (0.25 - P.Look_Pitch) * W;
+         P.Look_Yaw := P.Look_Yaw * (1.0 - W);
+         P.Twist := P.Twist * (1.0 - W);
+      end;
+      return P;
+   end Posed;
+
    --  Lying down (Lie_W): the whole body tipped back about a line on the
-   --  ground behind its heels, so it ends on its back, its head where the
-   --  way it faced was behind it.
+   --  ground behind its heels, so that it ends on its back, its head where
+   --  the way it faced was behind it; and asleep (Side_W) rolled onto its
+   --  side as it goes down, that shoulder and hip on the ground.
    procedure Lay_Down (S : Serf; F : in out Frames) is
       W : constant Float := Float'Min (1.0, Float'Max (0.0, S1.Value (S.Lie_W)));
    begin
@@ -851,13 +931,59 @@ package body Castle.Serfs is
          Root  : constant Vec3 := S3.Value (S.Root);
          Pivot : constant Vec3 := (Root.X, Root.Y, S.Ground + 0.03) - Fw * 0.15;
          A     : constant Float := W * Pi / 2.0;
+         --  the roll: about the line of its spine as it lies (0.15 m over
+         --  the pivot's ground), toward the side it sleeps on; and up, so
+         --  that the lower shoulder rests on the ground
+         Spine : constant Vec3 := Pivot + (0.0, 0.0, 0.15);
+         Along_It : constant Vec3 := Fw * (-1.0);
+         Ws    : constant Float := Float'Min (W, Clamp (S1.Value (S.Side_W), 0.0, 1.0));
+         Roll  : constant Float := (if Lies_On (S) = Right then -1.0 else 1.0) * Ws * Pi / 2.0;
+         Half  : constant Float := abs S.R.Joint (Upper_Arm_L).X + 0.05;       --  half its width at the shoulders
+         Lift  : constant Vec3 := (0.0, 0.0, Ws * Float'Max (0.0, Half - 0.16));
       begin
          for B in F'Range loop
             F (B) := (X => Rotate (F (B).X, Rt, A), Y => Rotate (F (B).Y, Rt, A), Z => Rotate (F (B).Z, Rt, A),
                       O => Pivot + Rotate (F (B).O - Pivot, Rt, A));
+            F (B) := (X => Rotate (F (B).X, Along_It, Roll), Y => Rotate (F (B).Y, Along_It, Roll),
+                      Z => Rotate (F (B).Z, Along_It, Roll),
+                      O => Spine + Rotate (F (B).O - Spine, Along_It, Roll) + Lift);
          end loop;
       end;
    end Lay_Down;
+
+   function Cloak_Of (I : Positive) return RGB is
+     (if I <= N_Serfs then Serfs (I).R.Cloak else (0.3, 0.3, 0.3));
+   function Height_Of (I : Positive) return Float is (if I <= N_Serfs then Serfs (I).R.Height else 1.7);
+
+   function Lies (I : Positive) return Float is
+     (if I <= N_Serfs then Clamp (S1.Value (Serfs (I).Lie_W), 0.0, 1.0) else 0.0);
+
+   procedure Lying_Frame (I : Positive; Hips, Along, Belly : out Vec3) is
+      F : Frames;
+   begin
+      Hips := (0.0, 0.0, 0.0);
+      Along := (1.0, 0.0, 0.0);
+      Belly := (0.0, 1.0, 0.0);
+      if I > N_Serfs then
+         return;
+      end if;
+      declare
+         S  : Serf renames Serfs (I);
+         H  : constant Float := S1.Value (S.Heading);
+         Up : Vec3;
+         Fy : Vec3;
+      begin
+         Solve (S.R, Posed (S), F);
+         Lay_Down (S, F);
+         Hips := (F (Pelvis).O.X, F (Pelvis).O.Y, S.Ground);
+         Up := Flat (F (Chest).O - F (Pelvis).O);
+         Along := (if Len (Up) > 0.02 then Up * (1.0 / Len (Up)) else (-Cos (H), -Sin (H), 0.0));
+         --  (its belly's way, square to the way it lies)
+         Fy := Flat (F (Chest).Y);
+         Fy := Fy - Along * Dot (Fy, Along);
+         Belly := (if Len (Fy) > 0.05 then Fy * (1.0 / Len (Fy)) else (-Along.Y, Along.X, 0.0));
+      end;
+   end Lying_Frame;
 
    --  A frame T of the way from A to B (eased), its axes kept square.
    function Between (A, B : Frame; T : Float) return Frame is
@@ -1007,9 +1133,15 @@ package body Castle.Serfs is
             S : Serf renames Serfs (I);
          begin
             if S.Used then
-               Solve (S.R, S.P, F);
+               Solve (S.R, Posed (S), F);
                Lay_Down (S, F);
+               if S.Up > 0.005 then                --  (on its ladder: all of it that much higher)
+                  for B in Bone loop
+                     F (B).O := F (B).O + (0.0, 0.0, S.Up);
+                  end loop;
+               end if;
                Castle.Figures.Add (S.Slot, F);
+               S.Last_F := F;
                Show_Tool (S, F);
                declare
                   Root : constant Vec3 := S3.Value (S.Root);

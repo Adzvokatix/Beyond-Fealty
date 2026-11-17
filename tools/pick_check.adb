@@ -10,6 +10,7 @@ with Ada.Command_Line;
 with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 with Castle.Blocks;    use Castle.Blocks;
 with Castle.Colony;    use Castle.Colony;
+with Castle.Cutaway;
 with Castle.Herds;
 with Castle.Math;      use Castle.Math;
 with Castle.Pick;      use Castle.Pick;
@@ -267,7 +268,7 @@ begin
             T := See (Mid + (-6.0, -6.0, 12.0), Mid);
             Check (T.Kind = A_House and then T.Index = 1,
                    "pointing at the ground its walls are to stand on: the house (" & Said (T) & ")");
-            T := See ((53.0, 37.0, 14.0), (53.0, 41.0, Ground_M));
+            T := See ((50.0, 37.0, 14.0), (50.0, 41.0, Ground_M));
             Check (T.Kind = A_Zone and then Zone_At (T.Index).Kind = Habitation_Zone,
                    "at the zone's ground beyond its lot: the zone (" & Said (T) & ")");
             Build_Homes_Now;
@@ -279,8 +280,182 @@ begin
                    "and from the path at its front wall: the house (" & Said (T) & ")");
             T := See (Mid + (-6.0, -6.0, 14.0), Mid + (0.0, 0.0, 2.0), Reach => 6.0);
             Check (T.Kind = Nothing, "out of reach, nothing");
+
+            --  its roof cleared on the camera's ray (Castle.Cutaway: drawing and pointing only)
+            declare
+               use Castle.Cutaway;
+               B    : constant House_View := House_At (1);
+               R    : constant Roof := Of_Corners (1, B.Corner (1), B.Corner (2), B.Corner (3), B.Corner (4), B.Top_Z);
+               Eye  : constant Vec3 := Mid + (-6.0, -6.0, 14.0);
+               Eave : constant Vec3 :=                --  over the middle of its front wall, a little out from it
+                 (B.Corner (1) + B.Corner (2)) * 0.5 + Normalize (B.Corner (1) - B.Corner (4)) * 0.15;
+               Roof_Z : Float;
+               Took   : Natural := 0;
+            begin
+               Follow (Eye, Mid, [R], 0.05);
+               Check (Castle.Cutaway.Count = 1 and then abs (Shown (1).Amount - 0.2) < 1.0e-4,
+                      "the eye looks at its floor: its roof begins to clear (a fifth in a twentieth of a second)");
+               while Castle.Cutaway.Count = 1 and then Shown (1).Amount < 1.0 and then Took < 20 loop
+                  Follow (Eye, Mid, [R], 0.05);
+                  Took := Took + 1;
+               end loop;
+               Check (Castle.Cutaway.Count = 1 and then Shown (1).Amount = 1.0 and then Took = 4,
+                      "cleared in a quarter of a second (" & Img (Took + 1) & " steps)");
+               Check (abs (Cover_At (Eave.X, Eave.Y, B.Top_Z - 1.0) - Edge_Cover) < 1.0e-4
+                      and then Cover_At (Mid.X, Mid.Y, B.Top_Z) < 1.0e-4
+                      and then Cover_At (Mid.X + 40.0, Mid.Y, B.Top_Z) = 1.0,
+                      "drawn at half over its eaves, not at all in its middle, whole elsewhere");
+               T := See (Eye, Mid + (0.0, 0.0, 2.0));
+               Check (T.Kind = A_House and then T.Index = 1 and then T.Point.Z < Ground_M + 1.0,
+                      "pointing at its middle through the cleared roof: the house, at its floor (" & Said (T) & ")");
+               T := See (Eave + (0.0, 0.0, 12.0), Eave);
+               Roof_Z := T.Point.Z;
+               Check (T.Kind = A_House and then Roof_Z > Ground_M + 2.0,
+                      "down on its eave, drawn at half: the thatch (" & Said (T) & ")");
+               Took := 0;
+               while Castle.Cutaway.Count > 0 and then Took < 20 loop
+                  Follow (Eye, Mid + (30.0, 0.0, 0.0), [R], 0.05);
+                  Took := Took + 1;
+               end loop;
+               T := See (Eye, Mid + (0.0, 0.0, 2.0));
+               Check (Castle.Cutaway.Count = 0 and then Took = 5 and then T.Point.Z > Ground_M + 2.0,
+                      "the eye looks past it: its roof comes back in a quarter of a second, and the ray meets the thatch ("
+                      & Said (T) & ")");
+               Set_View (None);
+               for K in 1 .. 10 loop
+                  Follow (Eye, Mid, [R], 0.05);
+               end loop;
+               Check (Castle.Cutaway.Count = 0, "--no-cutaway: nothing clears");
+               Set_View (Dynamic);
+
+               --  the pointer's ray, a ray that only passes over, and every roof at once
+               declare
+                  Far   : constant Vec3 := Mid + (30.0, 0.0, 0.0);      --  where the eye looks: not at the house
+                  Aim   : constant Vec3 := Mid + (0.0, 0.0, 2.0);       --  where the pointer is: on its roof
+                  Dir   : constant Vec3 := Normalize (Aim - Eye);
+                  Ridge : constant Vec3 :=
+                    (if R.Half_A >= R.Half_B then R.Along else (-R.Along.Y, R.Along.X, 0.0));
+                  Aside : constant Vec3 := (-Ridge.Y, Ridge.X, 0.0) * (Float'Min (R.Half_A, R.Half_B) / 2.0);
+                  Stays : Boolean := True;
+                  Many  : Roof_List (1 .. 12);
+                  All_Clear : Boolean := True;
+               begin
+                  --  (as the game does: where the ray landed a frame ago, and a little on)
+                  for K in 1 .. 30 loop
+                     T := See (Eye, Aim);
+                     Follow (Eye, Far, [R], 0.05, Pointing => T.Ground.Found,
+                             Pointed => Eye + Dir * (T.Ground.Dist + 0.3));
+                     if K > 6 and then (Castle.Cutaway.Count /= 1 or else Shown (1).Amount < 1.0) then
+                        Stays := False;
+                     end if;
+                  end loop;
+                  T := See (Eye, Aim);
+                  Check (Stays and then T.Point.Z < Ground_M + 1.0,
+                         "the pointer on its roof, the eye elsewhere: it clears, and stays cleared with the ray gone on to "
+                         & "its floor (" & Said (T) & ")");
+                  for K in 1 .. 10 loop
+                     T := See (Eye, Far);
+                     Follow (Eye, Far, [R], 0.05, Pointing => T.Ground.Found,
+                             Pointed => Eye + Normalize (Far - Eye) * (T.Ground.Dist + 0.3));
+                  end loop;
+                  Check (Castle.Cutaway.Count = 0, "the pointer on the ground beyond it: its roof comes back");
+                  Check (Crosses (R.Centre - Ridge * 10.0 + (0.0, 0.0, R.Top_Z - R.Centre.Z + 0.3),
+                                  R.Centre + Ridge * 10.0 + (0.0, 0.0, R.Top_Z - R.Centre.Z + 0.3), R)
+                         and then not Crosses (R.Centre - Ridge * 10.0 + (0.0, 0.0, R.Top_Z - R.Centre.Z + 1.0),
+                                               R.Centre + Ridge * 10.0 + (0.0, 0.0, R.Top_Z - R.Centre.Z + 1.0), R)
+                         and then not Crosses (R.Centre + Aside - Ridge * 10.0 + (0.0, 0.0, R.Top_Z - R.Centre.Z - 0.2),
+                                               R.Centre + Aside + Ridge * 10.0 + (0.0, 0.0, R.Top_Z - R.Centre.Z - 0.2), R),
+                         "a ray along its ridge crosses it; one a metre over, or beside the ridge over a slope, does not");
+                  for K in Many'Range loop
+                     Many (K) := Of_Corners (K, (100.0 + 20.0 * Float (K), 300.0, Ground_M),
+                                             (106.0 + 20.0 * Float (K), 300.0, Ground_M),
+                                             (106.0 + 20.0 * Float (K), 305.0, Ground_M),
+                                             (100.0 + 20.0 * Float (K), 305.0, Ground_M), Ground_M + 5.0);
+                  end loop;
+                  for K in 1 .. 6 loop
+                     Follow (Eye, Far, Many, 0.05);
+                  end loop;
+                  Check (Castle.Cutaway.Count = 0, "a dozen houses the eye and the pointer are not on: none cleared");
+                  Set_View (Full);
+                  for K in 1 .. 6 loop
+                     Follow (Eye, Far, Many, 0.05);
+                  end loop;
+                  for K in 1 .. Castle.Cutaway.Count loop
+                     All_Clear := All_Clear and then Shown (K).Amount = 1.0;
+                  end loop;
+                  Check (Castle.Cutaway.Count = 12 and then All_Clear, "every roof asked for: all twelve cleared at once");
+                  Set_View (Dynamic);
+                  for K in 1 .. 6 loop
+                     Follow (Eye, Far, Many, 0.05);
+                  end loop;
+                  Check (Castle.Cutaway.Count = 0, "and no longer asked for, all back");
+                  Castle.Cutaway.Clear;
+
+                  --  the walls on the eye's side of a cleared house (John, 2026-11-13: "cut down the walls
+                  --  in-line with the camera too")
+                  declare
+                     Out_V : constant Vec3 := Normalize (B.Corner (1) - B.Corner (4));   --  out of its front wall
+                     Front : constant Vec3 := (B.Corner (1) + B.Corner (2)) * 0.5;       --  the middle of its front wall,
+                     Back  : constant Vec3 := (B.Corner (3) + B.Corner (4)) * 0.5;       --  and of its back
+                     Side  : constant Vec3 := (B.Corner (2) + B.Corner (3)) * 0.5;       --  and of one side
+                     Low   : constant Vec3 := Front + Out_V * 12.0 + (0.0, 0.0, 5.0);    --  an eye before its front, low
+                     In_W  : constant Float := 0.125;                                    --  (a wall block's middle)
+                     --  a ray through its front wall well clear of its door and under its windows
+                     Along_W : constant Vec3 := Normalize (B.Corner (2) - B.Corner (1));
+                     Wide    : constant Float := Sqrt (Dot (B.Corner (2) - B.Corner (1), B.Corner (2) - B.Corner (1)));
+                     Door_U  : constant Float := Dot (B.Door - B.Corner (1), Along_W);
+                     At_W    : constant Vec3 :=
+                       B.Corner (1) + Along_W * (if Door_U > Wide / 2.0 then Wide * 0.2 else Wide * 0.8);
+                     From_W  : constant Vec3 := At_W + Out_V * 12.0 + (0.0, 0.0, 3.0);
+                     To_W    : constant Vec3 := At_W - Out_V * 2.0 + (0.0, 0.0, 0.2);
+                     Wall_D  : constant Float := Sqrt (Dot (At_W - From_W, At_W - From_W));
+                  begin
+                     for K in 1 .. 8 loop
+                        Follow (Low, Mid, [R], 0.05);
+                     end loop;
+                     Check (Castle.Cutaway.Count = 1 and then Shown (1).Amount = 1.0
+                            and then Wall_Cover_At (Front.X - Out_V.X * In_W, Front.Y - Out_V.Y * In_W, Ground_M + 1.0) < 1.0e-4
+                            and then Wall_Cover_At (Back.X + Out_V.X * In_W, Back.Y + Out_V.Y * In_W, Ground_M + 1.0) = 1.0
+                            and then Wall_Cover_At (Mid.X, Mid.Y, Ground_M + 1.0) = 1.0
+                            and then Wall_Cover_At (Front.X - Out_V.X * In_W, Front.Y - Out_V.Y * In_W, Ground_M + 0.01) = 1.0,
+                            "an eye before its front: its front wall is cleared, its back wall, its middle and its floor whole");
+                     Check (Wall_Cover_At (Side.X - (Side.X - Mid.X) / 20.0, Side.Y - (Side.Y - Mid.Y) / 20.0, Ground_M + 1.0) = 1.0,
+                            "and a side wall the eye sees edge-on stands whole");
+                     T := See (From_W, To_W);
+                     Check (T.Kind = A_House and then T.Dist > Wall_D + 1.0,
+                            "pointing through its cleared front wall, clear of its door: the ray goes on inside ("
+                            & Said (T) & ")");
+                     Set_View (None);
+                     for K in 1 .. 8 loop
+                        Follow (Low, Mid, [R], 0.05);
+                     end loop;
+                     T := See (From_W, To_W);
+                     Check (Castle.Cutaway.Count = 0 and then T.Dist < Wall_D + 0.5,
+                            "the third view, none: nothing clears and the ray meets the wall (" & Said (T) & ")");
+                     Check (View'Succ (Dynamic) = Full and then View'Succ (Full) = None and then View'First = Dynamic
+                            and then View'Last = None,
+                            "the three views in his order: dynamic, full, none");
+                     Set_View (Dynamic);
+                     Castle.Cutaway.Clear;
+                  end;
+               end;
+            end;
          end;
       end if;
+   end;
+
+   Put_Line ("the lord's cart:");
+   declare
+      C : constant Cart_View := Cart;
+      T : Thing;
+   begin
+      T := See (C.At_P + (-3.0, -4.0, 9.0), C.At_P + (0.0, 0.0, 0.75));
+      Check (C.Here and then T.Kind = A_Cart and then T.Point.Z > C.At_P.Z + 0.5,
+             "pointing at its bed from above: the cart, where the ray meets the bed (" & Said (T) & ")");
+      T := See (C.At_P + (2.5, 0.0, 9.0), C.At_P + (2.5, 0.0, 0.0));
+      Check (T.Kind /= A_Cart, "at the ground a metre and a half past its end: not the cart (" & Said (T) & ")");
+      T := See (C.At_P + (-3.0, -4.0, 9.0), C.At_P + (0.0, 0.0, 0.75), Reach => 6.0);
+      Check (T.Kind = Nothing, "out of reach, nothing");
    end;
 
    New_Line;

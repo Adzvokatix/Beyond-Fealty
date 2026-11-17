@@ -14,10 +14,25 @@ package Castle.World_Blocks is
    --  Takes S and Summary over (they come back null) and drops the stack's
    --  older copies.  Gen: the edit generation S was built at.
 
+   Small_Summaries : Boolean := True;
+   --  A stack's ground summary is kept small (Castle.Water.Small_Summary:
+   --  3.7 KB a stack on average where it was 32, nothing lost).  Off
+   --  (colony_run --full-summaries, and the game's): kept whole, as it
+   --  always was.  It is storage and changes no run: the debug build packs
+   --  and unpacks every summary kept and every column rewritten and
+   --  compares, and tools/stress.sh runs the crowd both ways.  Set it
+   --  before any stack is kept.
+
    procedure Ground (Bx, By : Integer; C : out Castle.Water.Column; Known : out Boolean);
-   function Summary_Of (CX, CY : Integer) return Castle.Water.Summary_Access;   --  kept with the stack; null if none
+   function Summary_Of (CX, CY : Integer) return Castle.Water.Summary_Access;
    --  Where a column's water lies, for the water simulation: its stretches
    --  and the water blocks in each.  Known False: the stack is not loaded.
+   --  Summary_Of: the stack's whole summary, or null if it is not loaded.
+   --  Kept small, it is unpacked into one buffer that the next call
+   --  overwrites: read it at once and keep no access to it.
+
+   function Summary_Repacks return Natural;
+   --  Times an edit made a stack's small summary be packed again (measuring).
 
    procedure Reground (Bx, By, Z_Lo, Z_Hi : Integer);
    --  After an edit of rows Z_Lo .. Z_Hi: read the column's stretches again
@@ -69,6 +84,34 @@ package Castle.World_Blocks is
 
    function Cast (From, Dir : Vec3; Max_M : Float) return Hit;
    --  The first solid block or tree foliage along the ray (metres, Dir a
-   --  unit vector); grass, grain and water let it through.
+   --  unit vector); grass, grain and water let it through, and so does a
+   --  cleared roof where less than half of it is drawn (Castle.Rays.Stops):
+   --  it is the pointer's ray, and nothing the colony decides may use it.
+
+   --  What is kept of the stacks that are in, counted from the sizes of the
+   --  objects and how many of each are allocated (measuring only: colony_run
+   --  --mem).  Bytes over every stack kept; the spread is of a stack's
+   --  blocks (its array of chunks, their grids, its fine bricks).
+   type Stretch_Counts is array (0 .. Castle.Water.Max_Stretch) of Long_Integer;
+   type Fine_Counts is array (Castle.Chunks.Brick_Kind) of Long_Integer;
+   type Kept_Sizes is record
+      Stacks      : Natural := 0;
+      Summaries   : Long_Integer := 0;    --  the water summaries
+      Arrays      : Long_Integer := 0;
+      Grids       : Long_Integer := 0;
+      Fine        : Long_Integer := 0;
+      Notes       : Long_Integer := 0;    --  what stacks remember of their edits
+      Records     : Long_Integer := 0;    --  the record kept for each
+      Allocations : Long_Integer := 0;
+      Chunks_Fine : Long_Integer := 0;    --  chunks that are not uniform
+      Fine_By     : Fine_Counts := (others => 0);
+      Fine_Bytes_By : Fine_Counts := (others => 0);   --  and what those of each kind take
+      Columns     : Stretch_Counts := (others => 0);   --  block columns by their stretches of open space
+      Columns_Wet : Long_Integer := 0;    --  those with water
+      Columns_Plain : Long_Integer := 0;  --  those that are one stretch, open to the sky, dry and not source water
+      Least, Tenth, Median, Ninetieth, Most : Natural := 0;   --  a stack's blocks, bytes
+      Heaviest_CX, Heaviest_CY : Integer := 0;
+   end record;
+   function Sizes return Kept_Sizes;
 
 end Castle.World_Blocks;

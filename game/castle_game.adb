@@ -12,6 +12,7 @@ with Ada.Text_IO;           use Ada.Text_IO;
 with Interfaces.C;          use Interfaces.C;
 with System.Multiprocessors;
 with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
+with Castle.Lod;
 with Castle.Blocks;         use Castle.Blocks;
 with Castle.Camera;
 with Castle.Edits;
@@ -47,6 +48,8 @@ with Ada.Strings.Fixed;
 with Castle.Herds;
 with Castle.Flora;
 with Castle.Props;
+with Castle.Cloth;
+with Castle.Cutaway;
 with Castle.Fire;
 with Castle.Figures;
 with Castle.Text;
@@ -111,6 +114,8 @@ procedure Castle_Game is
    At_Set    : Boolean := False;             --  --at given: it stands after a --load too
    Cam_Yaw, Cam_Pitch, Cam_Dist : Float := 0.0;
    Pan_X, Pan_Y : Float := 0.0;
+   Pan_Back  : Boolean := False;             --  --pan-back: once there and the view filled, glide back again
+   Pan_Home  : Boolean := False;             --  (it has turned for home)
    MSAA      : Natural := 4;
    Start_Day : Float := 20.0;                --  day of the 60-day year at the start
    Start_Hour : Float := 15.0;
@@ -142,6 +147,7 @@ procedure Castle_Game is
    Frame_Seconds : Float := 0.0;             --  real time this frame covers
    Flame_T       : Float := 0.0;             --  seconds the flames have flickered (drawn time, not the colony's)
    Sky_T         : Long_Float := 0.0;
+   Drawn_Still   : Boolean := False;        --  --drawn-still: clouds, ripples and flames do not move
    --  Seconds the clouds have drifted, the water rippled and the rain
    --  fallen: drawn time too, so a recording steps it a thirtieth of a
    --  second a frame (it was the wall clock, and a recording's clouds went
@@ -205,6 +211,19 @@ procedure Castle_Game is
    Job_Shown    : array (1 .. Castle.Colony.Max_Members) of Castle.Colony.Job_Kind :=
      [others => Castle.Colony.Unassigned];
    Winter_Shown : array (1 .. Castle.Colony.Max_Members) of Boolean := [others => False];
+   Cloak_Off_Shown : array (1 .. Castle.Colony.Max_Members) of Boolean := [others => False];
+   --  Cloaks of cloth (John, 2026-11-13: "can we have the cloaks be dynamic cloth, that they wear at the
+   --  start, then take off when they make their bed, and then draped over them when they sleep"; an
+   --  experiment: --no-cloth is the cloaks as they were)
+   Cloth_On : Boolean := True;
+   type Cloak_Is is (Not_Yet, Worn, Off, Over);   --  on its back; lying where it was put down; over its sleeper
+   Cloak_Cloth : array (1 .. Castle.Colony.Max_Members) of Castle.Cloth.Cloth_Id := [others => 0];
+   Cloak_State : array (1 .. Castle.Colony.Max_Members) of Cloak_Is := [others => Not_Yet];
+   Cloak_Pin   : array (1 .. Castle.Colony.Max_Members) of Vec3 := [others => (0.0, 0.0, 0.0)];
+   Cloak_Hips  : array (1 .. Castle.Colony.Max_Members) of Vec3 := [others => (0.0, 0.0, 0.0)];   --  a frame ago,
+   Cloak_Still : array (1 .. Castle.Colony.Max_Members) of Natural := [others => 0];       --  frames held still,
+   Cloak_Laid  : array (1 .. Castle.Colony.Max_Members) of Vec3 := [others => (0.0, 0.0, 0.0)];   --  laid over here
+   Still_Frames : constant := 10;     --  a sleeper's body this many frames still before its cloak is laid over it
    --  The herds (Castle.Herds): each live deer drawn by an animal of Castle.Animals.
    Deer_Anim    : array (1 .. Castle.Herds.Max_Deer) of Natural := [others => 0];
    Last_Speed   : Positive := 1;
@@ -274,6 +293,99 @@ procedure Castle_Game is
       Active_N := Active_N + 1;
       Active (Active_N) := (Cx, Cy);
    end Activate;
+
+   --  The whole map held (John, 2026-11-14: "can make the whole map solid
+   --  and stream only the mesh?", and "ok build it with the whole map solid").
+   --  Every stack's blocks and its ground summary are kept from soon after
+   --  the start (Castle.World_Blocks: what the simulation reads); the view
+   --  streams the meshes alone.  States above is the mesh's: None is a stack
+   --  that is not drawn, held or not.  A stack out of view is asked for
+   --  without a mesh, a few hundred out at a time, behind everything the view
+   --  asks; one that leaves the view gives up its mesh and what is drawn of
+   --  its water and keeps its blocks.  A held stack whose edits have moved
+   --  since it was kept (a load; an edit across its edge) is asked for
+   --  again: Hold_More looks the map over all the time, a little a frame.
+   --  --no-whole-map: as before, a stack is dropped with its mesh.
+   Whole_Map    : Boolean := True;
+   Hold_Wait    : Boolean := False;          --  --hold-wait: a scripted run does not end before the map is held
+   Show_Mem     : Boolean := False;          --  --mem: what the process holds, said at the end of a scripted run
+   Hold_Cap     : constant := 256;           --  jobs without a mesh out at once
+   Hold_Budget  : constant := 128;           --  and their results taken a frame at most,
+   Hold_Frame_Ms : constant := 0.5;          --  or until keeping them has taken this long of the frame
+   Hold_Out     : constant Flag_Grid_Access := new Flag_Grid'(others => [others => False]);
+   Hold_Stale   : constant Flag_Grid_Access := new Flag_Grid'(others => [others => False]);   --  (kept before a load)
+   type Gen_Grid is array (0 .. Chunks_XY - 1, 0 .. Chunks_XY - 1) of Natural;
+   type Gen_Grid_Access is access Gen_Grid;
+   Held_Gen     : constant Gen_Grid_Access := new Gen_Grid'(others => [others => 0]);   --  the edits each was kept at
+   Holds_Out_N  : Natural := 0;
+   Holds_Taken  : Natural := 0;              --  results without a mesh kept, all told
+   Hold_Ms      : Float := 0.0;              --  the workers' time in them
+   Hold_Main_Ms, Hold_Main_Max : Float := 0.0;   --  the main thread's in asking and keeping, all told and the worst frame
+   type Coord_List is array (1 .. Chunks_XY * Chunks_XY) of Coord;
+   type Coord_List_Access is access Coord_List;
+   Hold_Order   : Coord_List_Access;         --  every stack, nearest the first view first
+   Hold_At      : Natural := 0;              --  how far through it the looking is
+   Hold_Since   : Natural := 0;              --  stacks looked at since one was last asked for
+   Hold_Done    : Float := -1.0;             --  seconds from the first frame to the whole map held
+   Hold_Began   : Time;
+   Hold_Whole   : Boolean := False;          --  the looking has gone all round and found nothing to ask for, and none is out
+   --  Scripted probes of what is held (the proofs in docs/systems/world.md, "The whole map held"):
+   --  --save-at F PATH and --load-at F PATH save and load at frame F after the view filled (a save at 1 is
+   --  taken before a --late dig); --probe-block X Y Z says at the end what block the simulation reads there.
+   Save_At, Load_At : Natural := 0;
+   Save_At_Path, Load_At_Path : Unbounded_String;
+   type Probe is record
+      X, Y, Z : Float := 0.0;
+   end record;
+   Probes  : array (1 .. 8) of Probe;
+   Probe_N : Natural := 0;
+   function Held (CX, CY : Integer) return Boolean is (Castle.World_Blocks.Ground_Version (CX, CY) > 0);
+
+   --  The far view (John, 2026-11-15: "let's figure out how to get everything
+   --  in view"; Castle.Render, "The far view").  Past the view, the land is
+   --  drawn from tiles of coarser cells (Castle.Lod), in rings about the
+   --  focus: level 1 from where the stacks' ring ends to twice as far, each
+   --  level after to twice as far again, and the last level over the whole
+   --  map, always, so that something is under everything from the first
+   --  seconds.  The workers make them (after all the view asks, before what
+   --  is only held); a tile whose stacks are edited is made again once it
+   --  shows, not more often than its level's Far_Again_S.  --no-lod: none.
+   Far_On    : Boolean := True;
+   Far_Wait  : Boolean := False;           --  --far-wait: a scripted run does not end before the far view is whole
+   Settle_Frames : Natural := 0;           --  --settle N: nor before N frames with nothing more coming in
+   type Far_State is (None, Requested, Loaded);
+   type Far_Tile is record
+      State    : Far_State := None;
+      Dirty    : Boolean := False;         --  one of its stacks edited since it was asked for
+      Again    : Boolean := False;         --  asked for again, its mesh drawn until the new one comes
+      Built_At : Float := 0.0;             --  when its mesh came (seconds from the first frame)
+   end record;
+   type Far_Tile_Grid is array (Castle.Lod.Level, 0 .. Chunks_XY / 2 - 1, 0 .. Chunks_XY / 2 - 1) of Far_Tile;
+   type Far_Tile_Grid_Access is access Far_Tile_Grid;
+   Far_Tiles   : constant Far_Tile_Grid_Access := new Far_Tile_Grid;
+   Far_Out     : Natural := 0;             --  tiles the workers have in hand
+   Far_Whole   : Boolean := False;         --  nothing wanted is missing, none is in hand
+   Far_Fresh   : Boolean := False;         --  and none that shows is waiting to be made again for an edit
+   Far_Made    : Natural := 0;
+   Far_Ms      : Float := 0.0;             --  the workers' time in them
+   Far_Done    : Float := -1.0;            --  seconds from the first frame to the far view whole
+   Far_Began   : Time;
+   Far_Started : Boolean := False;
+   Far_Scan    : Natural := 0;
+   Far_Scanned : Natural := 0;             --  when every tile was last looked at, and where the focus was
+   Far_At_X, Far_At_Y : Float := -1.0E6;
+   Far_Budget  : constant := 64;           --  tiles taken a frame
+   Far_Again_S : constant array (Castle.Lod.Level) of Float := [2.0, 4.0, 8.0, 16.0];
+
+   --  Stack (CX, CY) has been edited: the tiles over it are to be made again.
+   procedure Far_Touch (CX, CY : Integer) is
+   begin
+      if Far_On and then CX in 0 .. Chunks_XY - 1 and then CY in 0 .. Chunks_XY - 1 then
+         for L in Castle.Lod.Level loop
+            Far_Tiles (L, CX / 2 ** L, CY / 2 ** L).Dirty := True;
+         end loop;
+      end if;
+   end Far_Touch;
 
    W     : World;
    Flow_Debug : Boolean := False;              --  --flowmap: water coloured by its current
@@ -397,7 +509,7 @@ procedure Castle_Game is
          when Castle.Colony.Sneaking     => Castle.Serfs.Sneak,
          when Castle.Colony.Aiming       => Castle.Serfs.Aim,
          when Castle.Colony.Eating       => Castle.Serfs.Eat,
-         when Castle.Colony.Sleeping     => Castle.Serfs.Lie,
+         when Castle.Colony.Sleeping     => Castle.Serfs.Sleep,
          when Castle.Colony.Stirring     => Castle.Serfs.Stir,
          when Castle.Colony.Eating_Seated => Castle.Serfs.Sit_Eat,
          when Castle.Colony.Dead         => Castle.Serfs.Lie);
@@ -438,20 +550,30 @@ procedure Castle_Game is
       for I in 1 .. Members loop
          declare
             J : constant Job_Kind := Job_Of (I);
-            O : constant Castle.Bodies.Outfit := (Job => Body_Job (J), Winter => Winter);
+            --  (asleep in winter its cloak is off its back: it lies under it)
+            Off : constant Boolean := (Winter and then Doing (I) = Sleeping) or else Cloth_On;   --  (cloth: drawn apart)
+            O : constant Castle.Bodies.Outfit := (Job => Body_Job (J), Winter => Winter, Cloak_Off => Off);
          begin
             if Serf_Of (I) = 0 then
                Serf_Of (I) := Castle.Serfs.Spawn_Driven (Genome_Of (I), O, Where (I), 0.0);
                Job_Shown (I) := J;
                Winter_Shown (I) := Winter;
-            elsif Job_Shown (I) /= J or else Winter_Shown (I) /= Winter then
+               Cloak_Off_Shown (I) := Off;
+            elsif Job_Shown (I) /= J or else Winter_Shown (I) /= Winter or else Cloak_Off_Shown (I) /= Off then
                Castle.Serfs.Restyle (Serf_Of (I), O);
                Job_Shown (I) := J;
                Winter_Shown (I) := Winter;
+               Cloak_Off_Shown (I) := Off;
             end if;
             if Serf_Of (I) > 0 then
-               Castle.Serfs.Drive (Serf_Of (I), Where (I), Motion_Of (Doing (I)), Work_Spot (I),
-                                   Log => Carrying (I) in Wood | Straw | Carcass);
+               --  (up its ladder, where its feet are on the rungs)
+               Castle.Serfs.Drive (Serf_Of (I), Shown_At (I), Motion_Of (Doing (I)), Work_Spot (I),
+                                   Log => Carrying (I) in Wood | Straw | Carcass | Salt | Ladder
+                                          or else (Cart.Towed and then Cart.By = I));   --  (its hands on the shafts)
+               Castle.Serfs.Perch (Serf_Of (I), (if Aloft (I) then Shown_At (I).Z - Where (I).Z else 0.0));
+               --  (asleep across the way to the fire, its face is to the fire)
+               Castle.Serfs.Lie_Facing (Serf_Of (I), Doing (I) = Sleeping and then Sleeping_Place (I).By_Fire,
+                                        Castle.Colony.Camp);
             end if;
          end;
       end loop;
@@ -754,6 +876,12 @@ procedure Castle_Game is
                Prop_Grid (Castle.Props.Joint, C.Centre, (C.Count + 1) / 2, 3, 0.25, 0.15, C.Turn);
             elsif C.Count > 0 and then C.Kind = Hide then
                Prop_Grid (Castle.Props.Hide, C.Centre, C.Count, 1, 0.0, 0.05, C.Turn);
+            elsif C.Count > 0 and then C.Kind = Ladder then         --  stood in its place, propped on a pole
+               for J in 1 .. C.Count loop
+                  Castle.Props.Put_Ladder_Stood (C.Centre, C.Turn, J);
+               end loop;
+            elsif C.Count > 0 and then C.Kind = Salt then           --  a sack to twenty pounds
+               Prop_Grid (Castle.Props.Sack, C.Centre, (C.Count + 19) / 20, 2, 0.42, 0.24, C.Turn);
             end if;
          end;
       end loop;
@@ -784,16 +912,335 @@ procedure Castle_Game is
       for K in 1 .. Arrow_Count loop
          Show_Arrow (Arrow_At (K));
       end loop;
+      --  a ladder against the eave of each house that has one standing at it
+      for H in 1 .. House_Count loop
+         declare
+            L : constant Ladder_View := Ladder_At (H);
+         begin
+            if L.Standing then
+               Castle.Props.Put_Ladder (L.Foot, L.Top);
+            end if;
+         end;
+      end loop;
       --  and on shoulders (stone goes in the porter's sack)
       for I in 1 .. Members loop
-         if Serf_Of (I) > 0 and then Carrying (I) in Wood | Straw then
-            Castle.Props.Put ((if Carrying (I) = Wood then Castle.Props.Log else Castle.Props.Sheaf),
-                              Castle.Serfs.Log_Rest (Serf_Of (I)), Castle.Serfs.Heading (Serf_Of (I)));
+         if Serf_Of (I) > 0 and then Carrying (I) in Wood | Straw | Salt | Ladder then
+            Castle.Props.Put ((if Carrying (I) = Wood then Castle.Props.Log
+                               elsif Carrying (I) = Salt then Castle.Props.Sack
+                               elsif Carrying (I) = Ladder then Castle.Props.Ladder else Castle.Props.Sheaf),
+                              Castle.Serfs.Log_Rest (Serf_Of (I)) + (if Carrying (I) = Ladder then (0.0, 0.0, 0.05) else (0.0, 0.0, 0.0)),
+                              Castle.Serfs.Heading (Serf_Of (I)));
          end if;
       end loop;
    end Show_Stockpiles;
 
+   --  The lord's cart: its body and four wheels round the bed that stands
+   --  in the world, and the sacks of salt left in it (one to forty pounds,
+   --  six at the most, the last ones on top).
+   procedure Show_Cart is
+      C : constant Castle.Colony.Cart_View := Castle.Colony.Cart;
+   begin
+      if C.Here then
+         Castle.Props.Put_Cart (C.At_P, C.Turn, (C.Salt + 39) / 40, Towed => C.Towed);
+      end if;
+   end Show_Cart;
+
    --  F6: where each member is going.
+   --  The beds of straw: each one's by the fire, where it made it, and the
+   --  one in each house that has one; a bed lies back from where its
+   --  sleeper's feet are, away from the fire (in a house, toward its door).
+   procedure Show_Beds is
+      use Castle.Colony;
+      procedure Bed (Feet, Toward : Vec3) is
+         Dx : constant Float := Toward.X - Feet.X;
+         Dy : constant Float := Toward.Y - Feet.Y;
+         L  : constant Float := Sqrt (Dx * Dx + Dy * Dy);
+      begin
+         if L > 0.01 then
+            Castle.Props.Put (Castle.Props.Pallet, (Feet.X - 1.05 * Dx / L, Feet.Y - 1.05 * Dy / L, Feet.Z),
+                              Arctan (Dy, Dx));
+         end if;
+      end Bed;
+   begin
+      for I in 1 .. Members loop
+         declare
+            B : constant Bed_View := Camp_Bed (I);
+         begin
+            if B.Made then
+               Bed (B.Feet, B.Toward);
+            end if;
+         end;
+      end loop;
+      for H in 1 .. House_Count loop
+         declare
+            V : constant House_View := House_At (H);
+         begin
+            if V.Has_Bed then
+               Bed (V.Bed, V.Bed + (V.Corner (4) - V.Corner (1)));
+            end if;
+         end;
+      end loop;
+   end Show_Beds;
+
+   --  The band's cloaks (John, 2026-11-12: "they can set down next to their
+   --  bed during the summer, wear it during with their winter clothes in the
+   --  winter, and use it as a blanket when they sleep"): asleep, each lies
+   --  under its own; awake and not in winter (when it is on its back), it
+   --  lies folded by the head of its owner's bed.
+   --  Serf S's cloak spread over it as it lies.
+   procedure Spread_Cloak (S : Positive) is
+      Hips, Along, Belly : Vec3;
+      K : constant Float := Castle.Serfs.Height_Of (S) / 1.7;
+   begin
+      Castle.Serfs.Lying_Frame (S, Hips, Along, Belly);
+      Castle.Props.Put_In
+        (Castle.Props.Cloak_Spread (Castle.Serfs.Cloak_Of (S)),
+         (X => Along * K, Y => (-Along.Y * K, Along.X * K, 0.0), Z => (0.0, 0.0, K), O => Hips + Belly * (0.14 * K)));
+   end Spread_Cloak;
+
+   --  The cloaks of cloth.  Worn on its back from the start (its top held
+   --  across the shoulders, behind the neck) until its owner has made the
+   --  bed it sleeps on; then taken off where it is (let go: it falls), and
+   --  over its owner asleep (laid over it from above: it settles over its
+   --  body); awake again it is left lying on the bed.  In winter it is worn
+   --  whenever its owner is awake, as before.  Snapped onto the shoulders
+   --  again after a jump (a load, a fast clock) and whenever it is put on.
+   --  From a sleeper's feet toward its head, as its bed lies (back from its
+   --  feet, away from what they point to).
+   function Toward_Head (P : Castle.Colony.Bed_View) return Vec3 is
+      Dx : constant Float := P.Feet.X - P.Toward.X;
+      Dy : constant Float := P.Feet.Y - P.Toward.Y;
+      L  : constant Float := Sqrt (Dx * Dx + Dy * Dy);
+   begin
+      return (if L > 0.01 then (Dx / L, Dy / L, 0.0) else (1.0, 0.0, 0.0));
+   end Toward_Head;
+
+   Cloth_Near_M : constant := 40.0;   --  a cloak further than this from the eye hangs straight, not stepped
+
+   procedure Show_Cloths is
+      use Castle.Colony;
+      use Castle.Cloth;
+      Dt  : constant Float := Step_Seconds;
+      Eye : constant Vec3 := Castle.Camera.Eye (Cam);
+   begin
+      for I in 1 .. Members loop
+         if Serf_Of (I) > 0 and then not Dead (I) then
+            declare
+               S  : constant Positive := Serf_Of (I);
+               F  : constant Castle.Poses.Frames := Castle.Serfs.Frames_Of (S);
+               K  : constant Float := Castle.Serfs.Height_Of (S) / 1.7;
+               P  : constant Bed_View := Sleeping_Place (I);
+               --  (down, and still: laid over a body still lying down it falls beside it, and over one still
+               --  easing into its place, as one does into its bed in a hovel when a save is loaded, it is lain on)
+               Asleep : constant Boolean :=
+                 Doing (I) = Sleeping and then Castle.Serfs.Lies (S) > 0.97
+                 and then (Cloak_State (I) = Over or else Cloak_Still (I) >= Still_Frames);
+               Want : constant Cloak_Is :=
+                 (if Asleep then Over elsif not P.Made or else Season_Winter then Worn else Off);
+               Sl : constant Vec3 := F (Castle.Bodies.Upper_Arm_L).O;
+               Sr : constant Vec3 := F (Castle.Bodies.Upper_Arm_R).O;
+               Fw : constant Vec3 := F (Castle.Bodies.Chest).Y;
+               Fl : constant Float := Sqrt (Fw.X * Fw.X + Fw.Y * Fw.Y);
+               Back : constant Vec3 := (if Fl > 1.0e-3 then (-Fw.X / Fl, -Fw.Y / Fl, 0.0) else (0.0, 0.0, 0.0));
+               Top  : Row_Points;
+               C    : Cloth_Id renames Cloak_Cloth (I);
+               --  the body, as capsules: the trunk, the hips, the head, the limbs
+               Hips : constant Vec3 := F (Castle.Bodies.Pelvis).O - F (Castle.Bodies.Pelvis).Z * (0.08 * K);
+               --  and what it carries on its back all day, a gatherer's basket or a porter's sack (boxes of
+               --  its chest, Castle.Bodies): the cloak hangs over it, not through it
+               Packed : constant Boolean :=
+                 Castle.Bodies."=" (Body_Job (Job_Shown (I)), Castle.Bodies.Gatherer)
+                 or else Castle.Bodies."=" (Body_Job (Job_Shown (I)), Castle.Bodies.Porter);
+               Up_C   : constant Vec3 := Normalize (F (Castle.Bodies.Chest).Z);
+               Side_C : constant Vec3 := Normalize (F (Castle.Bodies.Chest).X);
+               --  (how far behind the chest's middle the pack's own middle and its far face are: a basket is
+               --  four pixels deep, a sack three, each half a pixel off the back, and a pixel further off over
+               --  winter clothes: Castle.Bodies, "Gear on the back")
+               Basket   : constant Boolean := Castle.Bodies."=" (Body_Job (Job_Shown (I)), Castle.Bodies.Gatherer);
+               Pack_Mid : constant Float :=
+                 (if Basket then 0.225 else 0.20) + (if Winter_Shown (I) then 0.05 else 0.0);
+               Pack_Far : constant Float :=
+                 (if Basket then 0.325 else 0.275) + (if Winter_Shown (I) then 0.05 else 0.0);
+               Pack   : constant Vec3 :=
+                 (if Packed
+                  then (Sl + Sr) * 0.5 - Up_C * (0.13 * K) - Normalize (F (Castle.Bodies.Chest).Y) * (Pack_Mid * K)
+                  else F (Castle.Bodies.Chest).O);
+               Caps : constant Capsules :=
+                 [(F (Castle.Bodies.Chest).O, F (Castle.Bodies.Pelvis).O, 0.15 * K),
+                  (Pack - Side_C * (if Packed then 0.06 * K else 0.0), Pack + Side_C * (if Packed then 0.06 * K else 0.0),
+                   (if Packed then 0.14 * K else 0.0)),    --  (its far edges are 0.16 from its middle)
+                  (Hips, Hips, 0.15 * K),
+                  (F (Castle.Bodies.Head).O + F (Castle.Bodies.Head).Z * (0.1 * K),
+                   F (Castle.Bodies.Head).O + F (Castle.Bodies.Head).Z * (0.1 * K), 0.11 * K),
+                  (F (Castle.Bodies.Thigh_L).O, F (Castle.Bodies.Shin_L).O, 0.08 * K),
+                  (F (Castle.Bodies.Thigh_R).O, F (Castle.Bodies.Shin_R).O, 0.08 * K),
+                  (F (Castle.Bodies.Shin_L).O, F (Castle.Bodies.Foot_L).O, 0.06 * K),
+                  (F (Castle.Bodies.Shin_R).O, F (Castle.Bodies.Foot_R).O, 0.06 * K),
+                  (F (Castle.Bodies.Upper_Arm_L).O, F (Castle.Bodies.Forearm_L).O, 0.055 * K),
+                  (F (Castle.Bodies.Upper_Arm_R).O, F (Castle.Bodies.Forearm_R).O, 0.055 * K)];
+               --  the ground it falls to: under its wearer, or under the middle of it (on a bed: the bed's top)
+               Bed_Ah : constant Vec3 := Toward_Head (P);
+               Bed_C  : constant Vec3 := P.Feet + Bed_Ah * 1.05;
+               Mid_P  : constant Vec3 := (if C > 0 and then Cloak_State (I) /= Not_Yet then Point (C, 3, 4) else Bed_C);
+               Ground : constant Float :=
+                 (if Want = Worn then Castle.Serfs.Where (S).Z
+                  else Castle.Serfs.Ground_At (Mid_P.X, Mid_P.Y, Mid_P.Z)
+                       + (if P.Made and then Sqrt ((Mid_P.X - Bed_C.X) ** 2 + (Mid_P.Y - Bed_C.Y) ** 2) < 1.1
+                          then 0.07 else 0.0));
+               --  laid flat on its bed, from the head end down
+               procedure On_Bed is
+                  Ac : constant Vec3 := (-Bed_Ah.Y, Bed_Ah.X, 0.0);
+               begin
+                  Lay (C, Bed_C + (0.0, 0.0, 0.15) + Bed_Ah * (0.5 * K) - Ac * (0.4 * K), Ac * (0.8 * K), Bed_Ah * (-1.0 * K));
+               end On_Bed;
+               --  laid flat over where it sleeps, a little above, from the head end down toward its feet
+               procedure Over_Sleeper is
+                  Head : constant Vec3 := F (Castle.Bodies.Head).O;
+                  Mid  : constant Vec3 := Hips + (Head - Hips) * 0.3;
+                  Dx   : constant Float := Hips.X - Head.X;
+                  Dy   : constant Float := Hips.Y - Head.Y;
+                  Dl   : constant Float := Float'Max (1.0e-3, Sqrt (Dx * Dx + Dy * Dy));
+                  Dn   : constant Vec3 := (Dx / Dl, Dy / Dl, 0.0);
+                  Ac   : constant Vec3 := (-Dn.Y, Dn.X, 0.0);
+               begin
+                  Lay (C, Mid + (0.0, 0.0, 0.45 * K) - Dn * (0.4 * K) - Ac * (0.4 * K), Ac * (0.8 * K), Dn * (1.0 * K));
+               end Over_Sleeper;
+            begin
+               for T in 1 .. Nu loop
+                  declare
+                     U : constant Float := Float (T - 1) / Float (Nu - 1);
+                  begin
+                     --  (over a pack it is thrown round the pack's far edge, by the chest's own back and
+                     --  up: the pack leans with its bearer)
+                     Top (T) :=
+                       (if Packed
+                        then Sl + (Sr - Sl) * U
+                             - Normalize (F (Castle.Bodies.Chest).Y)
+                               * ((0.07 + (Pack_Far - 0.04) * Sin (Ada.Numerics.Pi * U)) * K)
+                             + Up_C * (0.04 * K)
+                        else Sl + (Sr - Sl) * U
+                             + Back * ((0.07 + 0.06 * Sin (Ada.Numerics.Pi * U)) * K) + (0.0, 0.0, 0.03 * K));
+                  end;
+               end loop;
+               if C = 0 then
+                  C := New_Cloth (0.8 * K, 1.0 * K);
+                  Cloak_State (I) := Not_Yet;
+               end if;
+               if C > 0 then
+                  if Want /= Cloak_State (I) then
+                     case Want is
+                        when Worn =>
+                           Hang (C, Top, (0.0, 0.0, -1.0));
+                        when Over =>
+                           Over_Sleeper;
+                           Cloak_Laid (I) := Hips;
+                        when Off =>
+                           if Cloak_State (I) = Not_Yet then
+                              On_Bed;                          --  (first seen off: on its bed)
+                           else
+                              Unpin (C);                       --  taken off, or left as it rises: it falls
+                              Wake (C);
+                           end if;
+                        when Not_Yet =>
+                           null;
+                     end case;
+                     Cloak_State (I) := Want;
+                  elsif Want = Over and then Cloak_Still (I) >= Still_Frames
+                    and then Sqrt ((Hips.X - Cloak_Laid (I).X) ** 2 + (Hips.Y - Cloak_Laid (I).Y) ** 2) > 0.2
+                  then
+                     Over_Sleeper;                             --  (its sleeper has moved from under it: laid again)
+                     Cloak_Laid (I) := Hips;
+                  elsif Want = Worn then
+                     if Sqrt ((Top (3).X - Cloak_Pin (I).X) ** 2 + (Top (3).Y - Cloak_Pin (I).Y) ** 2) > 0.8
+                       or else Sqrt ((Top (3).X - Eye.X) ** 2 + (Top (3).Y - Eye.Y) ** 2) > Cloth_Near_M
+                     then
+                        Hang (C, Top, (0.0, 0.0, -1.0));       --  (a jump: put on again; far off: hung straight)
+                     else
+                        Pin (C, Top);
+                     end if;
+                  end if;
+                  Cloak_Pin (I) := Top (3);
+                  if Dt > 0.0 then
+                     Cloak_Still (I) :=
+                       (if Sqrt ((Hips.X - Cloak_Hips (I).X) ** 2 + (Hips.Y - Cloak_Hips (I).Y) ** 2
+                                 + (Hips.Z - Cloak_Hips (I).Z) ** 2) < 0.1 * Dt
+                        then Natural'Min (Cloak_Still (I) + 1, Still_Frames) else 0);
+                  end if;
+                  Cloak_Hips (I) := Hips;
+                  if not (Want = Worn and then Sqrt ((Top (3).X - Eye.X) ** 2 + (Top (3).Y - Eye.Y) ** 2) > Cloth_Near_M)
+                  then
+                     Step (C, Dt, (if Want = Off then Capsules'(1 .. 0 => (A => (0.0, 0.0, 0.0), B => (0.0, 0.0, 0.0), R => 0.0))
+                                   else Caps), Ground, Stick => Want = Over);
+                  end if;
+                  Castle.Props.Put_Cloth (C, Castle.Serfs.Cloak_Of (S));
+               end if;
+            end;
+         end if;
+      end loop;
+   end Show_Cloths;
+
+   --  Roofs cleared on the camera's ray (Castle.Cutaway): every house with
+   --  thatch on it, by its walls' corners and its ridge; drawn time, so a
+   --  recording repeats.
+   Point_Has : Boolean := False;                --  the pointer's ray landed on something a frame ago,
+   Point_To  : Vec3 := (0.0, 0.0, 0.0);         --  there (and a little on); kept while the pointer is on the interface
+
+   procedure Follow_Roofs is
+      use Castle.Colony;
+      Roofs : Castle.Cutaway.Roof_List (1 .. House_Count);
+      N     : Natural := 0;
+   begin
+      for K in 1 .. House_Count loop
+         declare
+            V : constant House_View := House_At (K);
+         begin
+            if V.Phase in Roofing | Trimming | Standing then
+               N := N + 1;
+               Roofs (N) := Castle.Cutaway.Of_Corners (K, V.Corner (1), V.Corner (2), V.Corner (3), V.Corner (4),
+                                                       V.Top_Z);
+            end if;
+         end;
+      end loop;
+      Castle.Cutaway.Follow (Castle.Camera.Eye (Cam), (Cam.X, Cam.Y, Cam.Z), Roofs (1 .. N), Step_Seconds,
+                             Pointing => Point_Has, Pointed => Point_To);
+   end Follow_Roofs;
+
+   procedure Show_Cloaks is
+      use Castle.Colony;
+   begin
+      if Cloth_On then
+         Show_Cloths;
+         return;
+      end if;
+      for I in 1 .. Members loop
+         if Serf_Of (I) > 0 and then not Dead (I) then
+            declare
+               S   : constant Positive := Serf_Of (I);
+               Col : constant Castle.Bodies.RGB := Castle.Serfs.Cloak_Of (S);
+            begin
+               if Doing (I) = Sleeping and then Castle.Serfs.Lies (S) > 0.6 then
+                  Spread_Cloak (S);
+               elsif not Season_Winter then
+                  declare
+                     P  : constant Bed_View := Sleeping_Place (I);
+                     Dx : constant Float := P.Toward.X - P.Feet.X;
+                     Dy : constant Float := P.Toward.Y - P.Feet.Y;
+                     L  : constant Float := Sqrt (Dx * Dx + Dy * Dy);
+                     Sd : constant Float := (if I mod 2 = 0 then 0.62 else -0.62);
+                  begin
+                     if L > 0.01 then
+                        Castle.Props.Put (Castle.Props.Cloak_Folded (Col),
+                                          (P.Feet.X - 1.5 * Dx / L - Sd * Dy / L, P.Feet.Y - 1.5 * Dy / L + Sd * Dx / L,
+                                           P.Feet.Z),
+                                          Arctan (Dy, Dx) + 0.35 * Sd);
+                     end if;
+                  end;
+               end if;
+            end;
+         end if;
+      end loop;
+   end Show_Cloaks;
+
    procedure Show_Member_Routes is
       use Castle.Colony;
       Lift : constant Vec3 := (0.0, 0.0, 0.08);
@@ -839,7 +1286,7 @@ procedure Castle_Game is
             Castle.Marks.Strip (P + (0.0, -0.4, 0.0), P + (0.0, 0.4, 0.0), 0.1, Zone);
          when Castle.HUD.Path =>
             if Tools.Path_Started then
-               Castle.Marks.Strip (Tools.Path_From + (0.0, 0.0, 0.06), P, Castle.Colony.Path_Width_M, Lay);
+               Castle.Zone_Marks.Show_Path_Line (Tools.Path_From, Ground_Point (Cursor_Hit), Lay);
             else
                Castle.Marks.Strip (P + (-0.5, 0.0, 0.0), P + (0.5, 0.0, 0.0), 0.1, Lay);
             end if;
@@ -866,7 +1313,7 @@ procedure Castle_Game is
             if Tools.Zone_Started then
                declare
                   Plan : constant Castle.Colony.Lot_Plan :=
-                    Castle.Colony.Plan_Housing (Tools.Zone_From.X, Tools.Zone_From.Y, P.X, P.Y);
+                    Castle.Colony.Plan_Housing (Tools.Zone_From.X, Tools.Zone_From.Y, P.X, P.Y, Count => False);
                begin
                   if Plan.Ok then
                      Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
@@ -986,6 +1433,8 @@ procedure Castle_Game is
             I := I + 4;
          elsif Arg (0) = "--pan" then
             Pan_X := Float'Value (Arg (1)); Pan_Y := Float'Value (Arg (2)); I := I + 3;
+         elsif Arg (0) = "--pan-back" then      --  with --pan: there, and when that view has filled, back again
+            Pan_Back := True; I := I + 1;
          elsif Arg (0) = "--hud" then
             --  comma list: help, survey, debug, none
             declare
@@ -1102,6 +1551,8 @@ procedure Castle_Game is
             Forced_Snow := Float'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--day" then
             Start_Day := Float'Value (Arg (1)); I := I + 2;
+         elsif Arg (0) = "--drawn-still" then
+            Drawn_Still := True; I := I + 1;
          elsif Arg (0) = "--timescale" then
             Time_Scale := Long_Float'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--time" then
@@ -1110,6 +1561,55 @@ procedure Castle_Game is
             MSAA := Natural'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--novsync" then
             Vsync := False; I := I + 1;
+         elsif Arg (0) = "--no-whole-map" then
+            Whole_Map := False; I := I + 1;
+         elsif Arg (0) = "--no-lod" then
+            Far_On := False; I := I + 1;
+         elsif Arg (0) = "--no-far-shadows" then    --  (past the view's edge nothing casts or takes a shadow, as it was)
+            Castle.Render.Far_Shadows := False; I := I + 1;
+         elsif Arg (0) = "--no-ground-haze" then    --  (no haze on the ground and none at the map's rim)
+            Castle.Render.Ground_Haze := False; I := I + 1;
+         elsif Arg (0) = "--haze" then              --  (the ground haze this many times as thick; 1: as built)
+            Castle.Render.Haze_Amount := Float'Value (Arg (1)); I := I + 2;
+         elsif Arg (0) = "--rim" then               --  (the map's rim goes into the haze over this many metres; 0: not)
+            Castle.Render.Haze_Rim_M := Float'Value (Arg (1)); I := I + 2;
+         elsif Arg (0) = "--no-far-mirror" then     --  (far water mirrors the sky alone, as it did)
+            Castle.Render.Far_Reflections := False; I := I + 1;
+         elsif Arg (0) = "--no-round-boulders" then --  (a boulder's edges and corners in steps, as they were)
+            Castle.Mesher.Round_Boulders := False; I := I + 1;
+         elsif Arg (0) = "--no-low-horizon" then    --  (the sun and the moon cut off at eye level, as they were)
+            Castle.Render.Low_Horizon := False; I := I + 1;
+         elsif Arg (0) = "--no-floor" then          --  (holes in the land show the sky, as they did)
+            Castle.Render.Ground_Floor := False; I := I + 1;
+         elsif Arg (0) = "--far-wait" then
+            Far_Wait := True; I := I + 1;
+         elsif Arg (0) = "--no-far-cull" then
+            Castle.Render.Far_Cull := False; I := I + 1;
+         elsif Arg (0) = "--settle" then           --  a scripted run goes on for N frames after all is in
+            Settle_Frames := Natural'Value (Arg (1)); I := I + 2;
+         --  The far land (Castle.Far; `docs/systems/rendering.md`, "The far land")
+         --  is out of the game: John, 2026-11-15, "remove the old far land,
+         --  but keep the functionality just comment it out or something, just
+         --  in case".  Its code is all still there and still compiled; these
+         --  two lines are what brought it in, and bring it back:
+         --  elsif Arg (0) = "--far" then
+         --     Castle.Render.Far_Land := True; I := I + 1;
+         elsif Arg (0) = "--no-far" then            --  (the default since 2026-11-15; taken still)
+            Castle.Render.Far_Land := False; I := I + 1;
+         elsif Arg (0) = "--hold-wait" then
+            Hold_Wait := True; I := I + 1;
+         elsif Arg (0) = "--mem" then
+            Show_Mem := True; I := I + 1;
+         elsif Arg (0) = "--save-at" then
+            Save_At := Natural'Value (Arg (1)); Save_At_Path := To_Unbounded_String (Arg (2)); I := I + 3;
+         elsif Arg (0) = "--load-at" then
+            Load_At := Natural'Value (Arg (1)); Load_At_Path := To_Unbounded_String (Arg (2)); I := I + 3;
+         elsif Arg (0) = "--probe-block" then
+            if Probe_N < Probes'Last then
+               Probe_N := Probe_N + 1;
+               Probes (Probe_N) := (Float'Value (Arg (1)), Float'Value (Arg (2)), Float'Value (Arg (3)));
+            end if;
+            I := I + 4;
          elsif Arg (0) = "--load" then
             Load_Path := To_Unbounded_String (Arg (1)); I := I + 2;
          elsif Arg (0) = "--save" then
@@ -1121,6 +1621,14 @@ procedure Castle_Game is
             Fill_Set := True; I := I + 7;
          elsif Arg (0) = "--simticks" then
             Sim_Ticks := Natural'Value (Arg (1)); I := I + 2;
+         elsif Arg (0) = "--no-cloth" then      --  the cloaks as they were: boxes on the body, laid over a sleeper
+            Cloth_On := False; I := I + 1;
+         elsif Arg (0) = "--full-summaries" then   --  each stack's ground summary kept whole, as it always was
+            Castle.World_Blocks.Small_Summaries := False; I := I + 1;
+         elsif Arg (0) = "--no-cutaway" then    --  no roof or wall cleared (the H key's third way, for a scripted run)
+            Castle.Cutaway.Set_View (Castle.Cutaway.None); I := I + 1;
+         elsif Arg (0) = "--all-roofs" then     --  every house cleared (the H key's second way)
+            Castle.Cutaway.Set_View (Castle.Cutaway.Full); I := I + 1;
          elsif Arg (0) = "--nofalls" then      --  falls drawn as they were: a curtain on the face, a film on a slope
             Castle.Falls.Set_On (False); I := I + 1;
          elsif Arg (0) = "--throw" then        --  the share of the lip's simulated speed a fall's sheet leaves with
@@ -1190,6 +1698,13 @@ procedure Castle_Game is
            or else (M /= Air and then Class_Of (Now) /= Solid and then Now /= M);
       end Takes;
 
+      --  (what is there now, this edit's blocks too: the column is noted as edited only below)
+      function Mat_Now (X, Y, Z : Integer) return Material is
+         B : Block;
+      begin
+         return (if Castle.Edits.Find (X, Y, Z, B) then B.Mat else Castle.World_Blocks.Block_At (X, Y, Z).Mat);
+      end Mat_Now;
+
       Xa : constant Integer := Integer'Max (0, X0);
       Ya : constant Integer := Integer'Max (0, Y0);
       Za : constant Integer := Integer'Max (0, Z0);
@@ -1241,18 +1756,34 @@ procedure Castle_Game is
             end loop;
          end loop;
       end loop;
+      --  what grew on ground dug out from under it goes with it (John,
+      --  2026-11-13: "dirt having been removed, and the grass stays in the
+      --  air"): a plant is never left over a hole
+      if M = Air and then Zb + 1 < Height_B then
+         for X in Xa .. Xb loop
+            for Y in Ya .. Yb loop
+               for Z in Zb + 1 .. Integer'Min (Height_B - 1, Zb + 3) loop
+                  exit when Mat_Now (X, Y, Z) not in Tall_Grass | Wild_Grain | Wild_Vegetables
+                    or else Mat_Now (X, Y, Z - 1) /= Air;
+                  Castle.Edits.Set (X, Y, Z, Air_Block);
+                  Changed := Changed + 1;
+               end loop;
+            end loop;
+         end loop;
+      end if;
       if Changed > 0 then
          for X in Xa .. Xb loop
             for Y in Ya .. Yb loop
                Castle.Water.About_To_Change (X, Y);  --  the water round it wakes, as it lay
                Castle.World_Blocks.Note_Edit (X, Y);
-               Castle.World_Blocks.Reground (X, Y, Za, Zb);
+               Castle.World_Blocks.Reground (X, Y, Za, (if M = Air then Integer'Min (Height_B - 1, Zb + 3) else Zb));
                Castle.Water.Ground_Changed (X, Y);
             end loop;
          end loop;
          for CX in Integer'Max (0, Xa - 1) / Chunk_B .. Integer'Min (Size_B - 1, Xb + 1) / Chunk_B loop
             for CY in Integer'Max (0, Ya - 1) / Chunk_B .. Integer'Min (Size_B - 1, Yb + 1) / Chunk_B loop
                Remesh (CX, CY);
+               Far_Touch (CX, CY);
             end loop;
          end loop;
       end if;
@@ -1295,6 +1826,7 @@ procedure Castle_Game is
    begin
       for K in 1 .. Dirty_N loop
          Remesh (Dirty (K).CX, Dirty (K).CY);
+         Far_Touch (Dirty (K).CX, Dirty (K).CY);
       end loop;
       Dirty_N := 0;
    end Flush_Colony_Edits;
@@ -1469,6 +2001,28 @@ procedure Castle_Game is
          Castle.Render.Set_Surface (CX * 32, CY * 32, Tex);
       end if;
    end Refresh_Texels;
+
+   --  A loaded stack's texels written again whatever its water is doing: it
+   --  has come back into the surface texture's window (Castle.Render, "a
+   --  slot is its window stack's alone"), its slot having been another's or
+   --  hidden while the camera was far off.  Awake, the texels of its last
+   --  tick; at rest, its pool's.
+   procedure Own_Texels (CX, CY : Integer) is
+      K : constant Integer := Stack_Key (CX, CY);
+   begin
+      if Mirrors.Contains (K) then
+         Castle.Render.Set_Surface (CX * 32, CY * 32, Mirrors.Element (K).all);
+      else
+         declare
+            Tex  : Castle.Render.Surface_Block;
+            Wet  : Wet_Grid;
+            Have : Boolean;
+         begin
+            Make_Texels (CX, CY, Castle.World_Blocks.Summary_Of (CX, CY), Tex, Wet, Have);
+            Castle.Render.Set_Surface (CX * 32, CY * 32, Tex);
+         end;
+      end if;
+   end Own_Texels;
 
    --  Source water and drying: what a resting river column can give a step
    --  (its share of the discharge), and what a floor soaks up (mm a game
@@ -1663,7 +2217,18 @@ procedure Castle_Game is
    --  (Its reach is its work radius as a rule, and wider while the band
    --  looks further afield for what its camp takes, or has a path to lay
    --  further out: Castle.Colony.Ground_Reach_M.)
-   function Colony_R return Integer is (Integer (Castle.Colony.Ground_Reach_M / 8.0) + 3);
+   --  (The herds' ways are looked for only on ground this keeps:
+   --  Castle.Herds.Dry_Reach_M.  colony_check has the sum; change the 3
+   --  here and run it.)
+   --  (The colony's own ground: the same stacks the runner brings in, so that
+   --  the two keep one colony.  It was 3 more than the reach, and the colony
+   --  read whatever else the camera had loaded.)
+   Colony_R_Most : Integer := 0;            --  the most it has been: no stack once the colony's is let go
+   function Colony_R return Integer is
+   begin
+      Colony_R_Most := Integer'Max (Colony_R_Most, Integer (Castle.Colony.Ground_Reach_M / 8.0) + 5);
+      return Colony_R_Most;
+   end Colony_R;
 
    function Stake_Stack return Coord is
      ((Integer (Float'Floor (Castle.Colony.Stake.X / 8.0)), Integer (Float'Floor (Castle.Colony.Stake.Y / 8.0))));
@@ -1696,6 +2261,273 @@ procedure Castle_Game is
       R    : constant Integer := Integer (View_M / 8.0);
       Keep : constant Integer := (R + 2) ** 2;
       Res  : Castle.Streaming.Result_Access;
+      Window_Moved : Boolean;
+      Holds   : Natural := 0;                  --  results without a mesh taken this frame
+      Hold_T0 : Time;
+      Hold_Frame : Float := 0.0;               --  the main thread's milliseconds in holding, this frame
+
+      --  (the debug build) Every loaded stack inside the surface texture's
+      --  window holds its own slot of it.
+      procedure Check_Surfaces is
+      begin
+         for I in 1 .. Active_N loop
+            if States (Active (I).CX, Active (I).CY) = Loaded
+              and then Castle.Render.In_Surface_Window (Active (I).CX, Active (I).CY)
+              and then not Castle.Render.Owns_Surface (Active (I).CX, Active (I).CY)
+            then
+               raise Program_Error with "the water's surface: stack" & Active (I).CX'Image & Active (I).CY'Image
+                 & " is loaded inside the window and its texels are not its own";
+            end if;
+         end loop;
+      end Check_Surfaces;
+
+      --  The stacks of the map in the order they are held: rings round the
+      --  stack first looked at.
+      procedure Order_Holds is
+         N : Natural := 0;
+         procedure Put (Dx, Dy : Integer) is
+         begin
+            if Fcx + Dx in 0 .. Chunks_XY - 1 and then Fcy + Dy in 0 .. Chunks_XY - 1 then
+               N := N + 1;
+               Hold_Order (N) := (Fcx + Dx, Fcy + Dy);
+            end if;
+         end Put;
+      begin
+         Hold_Order := new Coord_List;
+         Put (0, 0);
+         for Ring in 1 .. Chunks_XY - 1 loop
+            for D in -Ring .. Ring loop                 --  the ring's two whole sides
+               Put (D, -Ring);
+               Put (D, Ring);
+            end loop;
+            for D in -Ring + 1 .. Ring - 1 loop         --  and what is left of the other two
+               Put (-Ring, D);
+               Put (Ring, D);
+            end loop;
+         end loop;
+         pragma Assert (N = Hold_Order'Last);
+      end Order_Holds;
+
+      --  Ask for stacks that are not drawn and not held as they are now,
+      --  without a mesh: up to Hold_Cap out at once.  The looking goes round
+      --  the map for ever, fast while it finds any and slowly once a whole
+      --  round has found none.
+      procedure Hold_More is
+         Total  : constant Natural := Chunks_XY * Chunks_XY;
+         Budget : constant Natural := (if Hold_Since < Total then 4_096 else 256);
+         Looked : Natural := 0;
+      begin
+         if Hold_Order = null then
+            Order_Holds;
+            Hold_Began := Clock;
+         end if;
+         while Holds_Out_N < Hold_Cap and then Looked < Budget loop
+            Hold_At := Hold_At mod Total + 1;
+            Looked := Looked + 1;
+            Hold_Since := Natural'Min (Total, Hold_Since + 1);
+            declare
+               C : constant Coord := Hold_Order (Hold_At);
+            begin
+               if States (C.CX, C.CY) /= None then
+                  if not Held (C.CX, C.CY) then
+                     Hold_Since := 0;                  --  (the view's to bring in: not held yet)
+                  end if;
+               elsif not Hold_Out (C.CX, C.CY)
+                 and then (not Held (C.CX, C.CY) or else Hold_Stale (C.CX, C.CY)
+                           or else Held_Gen (C.CX, C.CY) /= Castle.Edits.Generation (C.CX, C.CY))
+               then
+                  Hold_Out (C.CX, C.CY) := True;
+                  Holds_Out_N := Holds_Out_N + 1;
+                  Hold_Since := 0;
+                  Castle.Streaming.Request (C.CX, C.CY, 1.0E9 + Float (Hold_At),
+                                            Castle.Water.View_Of (C.CX, C.CY), Castle.Water.Version (C.CX, C.CY),
+                                            Mesh => False);
+               elsif Hold_Out (C.CX, C.CY) then
+                  Hold_Since := 0;
+               end if;
+            end;
+         end loop;
+         Hold_Whole := Hold_Since >= Total and then Holds_Out_N = 0;
+         if Hold_Done < 0.0 and then Hold_Whole then
+            Hold_Done := Float (To_Duration (Clock - Hold_Began));
+         end if;
+      end Hold_More;
+
+      --  The blocks of a result for a stack that is not drawn (asked for
+      --  without a mesh, or gone from the view while its mesh was made): kept
+      --  if they are newer than what is held of it.  (A stack that is drawn
+      --  has its own, kept by its mesh's results.)
+      procedure Take_Blocks (R : Castle.Streaming.Result_Access) is
+         T0 : constant Time := Clock;
+      begin
+         if Whole_Map and then States (R.CX, R.CY) = None
+           and then (not Held (R.CX, R.CY) or else Hold_Stale (R.CX, R.CY) or else R.Gen > Held_Gen (R.CX, R.CY))
+         then
+            Castle.World_Blocks.Keep (R.CX, R.CY, R.Packed, R.Gen, R.Summary);
+            Held_Gen (R.CX, R.CY) := R.Gen;
+            Hold_Stale (R.CX, R.CY) := False;
+            if not R.Meshed then
+               Holds_Taken := Holds_Taken + 1;
+               Hold_Ms := Hold_Ms + R.Millis;
+            end if;
+            Hold_Frame := Hold_Frame + Float (To_Duration (Clock - T0)) * 1000.0;
+         end if;
+      end Take_Blocks;
+
+      --  The far view's tiles: those the workers have made taken in, those
+      --  wanted asked for (the nearest first, the last level's before any
+      --  other's), those out of their rings let go.
+      procedure Far_Stream is
+         use Castle.Lod;
+         subtype Level is Castle.Lod.Level;
+         R0    : constant Float := View_M;
+         --  (how many the workers have in hand or waiting at once.  What the view
+         --  asks goes before any of them in the workers' queue, so only a tile
+         --  already begun keeps a mesh of the view waiting: 4 to 56 ms, a fifth
+         --  of a second for the last level's)
+         Cap   : constant Natural := Natural'Min (128, 4 * Workers);
+         Now_S : Float;
+         type Cand is record
+            L, TX, TY : Integer := 0;
+            Key       : Float := 0.0;
+            Again     : Boolean := False;
+         end record;
+         Best  : array (1 .. 128) of Cand;
+         Best_N  : Natural := 0;
+         Missing : Boolean := False;
+         Stale   : Boolean := False;       --  a tile that shows is to be made again for an edit, or is being
+
+         procedure Offer (C : Cand) is
+            Room : constant Integer := Cap - Far_Out;
+            I    : Integer;
+         begin
+            if Room <= 0 then
+               return;
+            elsif Best_N < Room then
+               Best_N := Best_N + 1;
+            elsif C.Key >= Best (Best_N).Key then
+               return;
+            end if;
+            I := Best_N;
+            while I > 1 and then Best (I - 1).Key > C.Key loop
+               Best (I) := Best (I - 1);
+               I := I - 1;
+            end loop;
+            Best (I) := C;
+         end Offer;
+      begin
+         if not Far_Started then
+            Far_Began := Clock;
+            Far_Started := True;
+         end if;
+         Now_S := Float (To_Duration (Clock - Far_Began));
+         for K in 1 .. Far_Budget loop
+            Castle.Streaming.Poll_Far (Res);
+            exit when Res = null;
+            Far_Out := Far_Out - 1;
+            declare
+               T : Far_Tile renames Far_Tiles (Res.Level, Res.CX, Res.CY);
+            begin
+               if T.State = Requested or else (T.State = Loaded and then T.Again) then
+                  Castle.Render.Upload_Far (Res.Level, Res.CX, Res.CY, Res.M);
+                  T.State := Loaded;
+                  T.Again := False;
+                  T.Built_At := Now_S;
+                  Far_Made := Far_Made + 1;
+                  Far_Ms := Far_Ms + Res.Millis;
+               end if;
+            end;
+            Castle.Streaming.Free (Res);
+         end loop;
+         --  (every tile is looked at only when something can have changed: the
+         --  focus has moved, a tile is missing or in hand, or a second has gone
+         --  by, for those edited and waiting their turn)
+         Far_Scan := Far_Scan + 1;
+         if not (not Far_Whole or else Far_Scan - Far_Scanned >= 60
+                 or else abs (Cam.X - Far_At_X) + abs (Cam.Y - Far_At_Y) > 2.0)
+         then
+            return;
+         end if;
+         Far_Scanned := Far_Scan;
+         Far_At_X := Cam.X;
+         Far_At_Y := Cam.Y;
+         for L in Level loop
+            declare
+               Last  : constant Boolean := L = Level'Last;
+               Side  : constant Float := Float (Tile_Stacks (L)) * 8.0;
+               Outer : constant Float := R0 * 2.0 ** L;
+               Inner : constant Float := R0 * 2.0 ** (Float (L - 1) - Float (Castle.Render.Far_Fade));
+            begin
+               for TY in 0 .. Tiles (L) - 1 loop
+                  for TX in 0 .. Tiles (L) - 1 loop
+                     declare
+                        T   : Far_Tile renames Far_Tiles (L, TX, TY);
+                        X0  : constant Float := Float (TX) * Side;
+                        Y0  : constant Float := Float (TY) * Side;
+                        Nx  : constant Float := Float'Max (0.0, Float'Max (X0 - Cam.X, Cam.X - (X0 + Side)));
+                        Ny  : constant Float := Float'Max (0.0, Float'Max (Y0 - Cam.Y, Cam.Y - (Y0 + Side)));
+                        Fx  : constant Float := Float'Max (abs (X0 - Cam.X), abs (X0 + Side - Cam.X));
+                        Fy  : constant Float := Float'Max (abs (Y0 - Cam.Y), abs (Y0 + Side - Cam.Y));
+                        Dn2 : constant Float := Nx * Nx + Ny * Ny;
+                        Df2 : constant Float := Fx * Fx + Fy * Fy;
+                        Shows : constant Boolean := (Last or else Dn2 < Outer * Outer) and then Df2 > Inner * Inner;
+                        --  (asked for a little before it shows, kept a little after)
+                        Wanted : constant Boolean :=
+                          Last or else (Dn2 < (Outer * 1.1) ** 2 and then Df2 > (Inner * 0.9) ** 2);
+                        Keep   : constant Boolean :=
+                          Last or else (Dn2 < (Outer * 1.3) ** 2 and then Df2 > (Inner * 0.75) ** 2);
+                     begin
+                        case T.State is
+                           when None =>
+                              if Wanted then
+                                 Missing := True;
+                                 --  (the nearest first; the last level's, which stand in for
+                                 --  all the others, as if 300 m nearer)
+                                 Offer ((L, TX, TY, (if Last then 0.0 else 300.0) + Sqrt (Dn2), False));
+                              end if;
+                           when Requested =>
+                              if Keep then
+                                 Missing := True;
+                              else
+                                 T.State := None;            --  (what comes of it is thrown away)
+                              end if;
+                           when Loaded =>
+                              if not Keep then
+                                 Castle.Render.Unload_Far (L, TX, TY);
+                                 T := (others => <>);
+                              elsif (T.Dirty or else T.Again) and then Shows then
+                                 Stale := True;
+                                 if not T.Again and then Now_S - T.Built_At > Far_Again_S (L) then
+                                    Offer ((L, TX, TY, 1.0E5 + Sqrt (Dn2), True));
+                                 end if;
+                              end if;
+                        end case;
+                     end;
+                  end loop;
+               end loop;
+            end;
+         end loop;
+         for I in 1 .. Best_N loop
+            declare
+               C : Cand renames Best (I);
+               T : Far_Tile renames Far_Tiles (C.L, C.TX, C.TY);
+            begin
+               if C.Again then
+                  T.Again := True;
+               else
+                  T.State := Requested;
+               end if;
+               T.Dirty := False;
+               Castle.Streaming.Request_Far (C.L, C.TX, C.TY, 1.0E6 + C.Key);
+               Far_Out := Far_Out + 1;
+            end;
+         end loop;
+         Far_Whole := not Missing and then Far_Out = 0;
+         Far_Fresh := Far_Whole and then not Stale;
+         if Far_Whole and then Far_Done < 0.0 then
+            Far_Done := Now_S;
+         end if;
+      end Far_Stream;
 
       procedure Ask (Cx, Cy : Integer) is
       begin
@@ -1712,6 +2544,21 @@ procedure Castle_Game is
          end if;
       end Ask;
    begin
+      --  The water's surface texture is a window round the stack looked at.
+      --  A stack kept loaded outside the view (the colony's ground) that the
+      --  window has come back to has its texels written again: its slot was
+      --  another's, or hidden, while the camera was far off.
+      Castle.Render.Set_Surface_Focus (Fcx, Fcy, Window_Moved);
+      if Window_Moved then
+         for I in 1 .. Active_N loop
+            if States (Active (I).CX, Active (I).CY) = Loaded
+              and then Castle.Render.In_Surface_Window (Active (I).CX, Active (I).CY)
+              and then not Castle.Render.Owns_Surface (Active (I).CX, Active (I).CY)
+            then
+               Own_Texels (Active (I).CX, Active (I).CY);
+            end if;
+         end loop;
+      end if;
       for Dy in -R .. R loop
          for Dx in -R .. R loop
             if Dx * Dx + Dy * Dy <= R * R then
@@ -1746,7 +2593,9 @@ procedure Castle_Game is
                      Castle.Render.Hide_Surface (C.CX * 32, C.CY * 32);
                      Forget_Surface (C.CX, C.CY);
                      Air_Wanted (C.CX, C.CY) := False;
-                     Castle.World_Blocks.Drop (C.CX, C.CY);
+                     if not Whole_Map then              --  (held: its blocks stay, what was drawn of it goes)
+                        Castle.World_Blocks.Drop (C.CX, C.CY);
+                     end if;
                      Castle.Nav.Forget_Stack (C.CX, C.CY);
                   else
                      In_Flight := In_Flight - 1;
@@ -1766,15 +2615,18 @@ procedure Castle_Game is
          end loop;
       end;
 
+      --  What the view asked for, a frame's worth of meshes.
       for K in 1 .. Upload_Budget loop
-         Castle.Streaming.Poll (Res);
+         Castle.Streaming.Poll (Res, Meshed => True);
          exit when Res = null;
          Meshed := Meshed + 1;
          Worker_Ms := Worker_Ms + Res.Millis;
          if States (Res.CX, Res.CY) in Requested | Loaded then
             Show_Surface (Res.CX, Res.CY, Res.M, Res.Summary);
-            Castle.Render.Upload (Res.CX, Res.CY, Res.M);
+            Castle.Render.Upload (Res.CX, Res.CY, Res.M, Edited => Castle.Edits.Generation (Res.CX, Res.CY) > 0);
             Castle.World_Blocks.Keep (Res.CX, Res.CY, Res.Packed, Res.Gen, Res.Summary);
+            Held_Gen (Res.CX, Res.CY) := Res.Gen;
+            Hold_Stale (Res.CX, Res.CY) := False;
             if States (Res.CX, Res.CY) = Requested then
                States (Res.CX, Res.CY) := Loaded;
                In_Flight := In_Flight - 1;
@@ -1789,10 +2641,54 @@ procedure Castle_Game is
             then
                Remesh (Res.CX, Res.CY);
             end if;
+         else
+            Take_Blocks (Res);                 --  (it left the view while its mesh was made)
          end if;
          Castle.Streaming.Free (Res);
       end loop;
+      --  What is held and not drawn: until the frame has given it its share.
+      while Whole_Map and then Holds < Hold_Budget and then Hold_Frame < Hold_Frame_Ms loop
+         Castle.Streaming.Poll (Res, Meshed => False);
+         exit when Res = null;
+         Holds := Holds + 1;
+         Hold_Out (Res.CX, Res.CY) := False;
+         Holds_Out_N := Holds_Out_N - 1;
+         Take_Blocks (Res);
+         Castle.Streaming.Free (Res);
+      end loop;
+      if Far_On then
+         Far_Stream;
+      end if;
+      if Whole_Map then
+         Hold_T0 := Clock;
+         Hold_More;
+         Hold_Frame := Hold_Frame + Float (To_Duration (Clock - Hold_T0)) * 1000.0;
+         Hold_Main_Ms := Hold_Main_Ms + Hold_Frame;
+         Hold_Main_Max := Float'Max (Hold_Main_Max, Hold_Frame);
+      end if;
+      pragma Debug (Check_Surfaces);
    end Stream;
+
+   --  What the process holds, by the kernel's count (--mem).
+   procedure Put_Mem is
+      F : Ada.Text_IO.File_Type;
+   begin
+      Ada.Text_IO.Open (F, Ada.Text_IO.In_File, "/proc/self/status");
+      while not Ada.Text_IO.End_Of_File (F) loop
+         declare
+            L : constant String := Ada.Text_IO.Get_Line (F);
+         begin
+            if L'Length > 6 and then (L (L'First .. L'First + 5) = "VmRSS:" or else L (L'First .. L'First + 5) = "VmHWM:")
+            then
+               Put_Line ("mem: " & L);
+            end if;
+         end;
+      end loop;
+      Ada.Text_IO.Close (F);
+   exception
+      when others =>
+         Put_Line ("mem: /proc/self/status could not be read");
+   end Put_Mem;
 
    function Img (F : Float; Decimals : Natural := 1) return String is
       Scale : constant Integer := 10 ** Decimals;
@@ -2009,6 +2905,11 @@ procedure Castle_Game is
       end if;
       Castle.Serfs.Clear;
       Serf_Of := [others => 0];
+      Castle.Cutaway.Clear;                  --  (every roof whole: the houses are the other game's)
+      Castle.Cloth.Free_All;                 --  (the cloaks begin again with the serfs: none is where it lay in the other game)
+      Cloak_Cloth := [others => 0];
+      Cloak_State := [others => Not_Yet];
+      Cloak_Still := [others => 0];
       Castle.Animals.Clear;
       Deer_Anim := [others => 0];
       Cam.T_X := S.Cam_X;  Cam.T_Y := S.Cam_Y;
@@ -2019,6 +2920,22 @@ procedure Castle_Game is
          Cam.Held_Pitch := S.Cam_Pitch;
       end if;
       Castle.World_Blocks.Note_All_Edited;
+      --  (what is held and not drawn was made with the edits there were: all of it again)
+      for CX in Hold_Stale'Range (1) loop
+         for CY in Hold_Stale'Range (2) loop
+            Hold_Stale (CX, CY) := States (CX, CY) = None and then Held (CX, CY);
+         end loop;
+      end loop;
+      Hold_Since := 0;
+      Hold_Whole := False;
+      --  (and every tile of the far view was made with the edits there were: again, at once)
+      for T of Far_Tiles.all loop
+         if T.State /= None then
+            T.Dirty := True;
+            T.Built_At := -1.0E6;
+         end if;
+      end loop;
+      Colony_R_Most := 0;                  --  (the colony's ground begins again with the colony that was loaded)
       Castle.Falls.Reset;                  --  (the loaded water finds its flows again, and its falls with them)
       for I in 1 .. Active_N loop
          Remesh (Active (I).CX, Active (I).CY);
@@ -2044,6 +2961,8 @@ procedure Castle_Game is
    Win_Cpu_Sum, Win_Cpu_Max, Win_Gpu_Sum : Float := 0.0;
    Run_Frames   : Natural := 0;               --  after the view filled
    Run_Cpu_Sum, Run_Cpu_Max, Run_Gpu_Sum : Float := 0.0;
+   Held_Frames  : Natural := 0;               --  after the whole map was held
+   Held_Cpu_Sum, Held_Gpu_Sum, Held_Gpu_Max : Float := 0.0;
    Laps     : array (1 .. 7) of Float := [others => 0.0];   --  --hitch: milliseconds each part of the frame took
    Lap_From : Time := Clock;
    procedure Lap (K : Positive) is
@@ -2242,6 +3161,21 @@ procedure Castle_Game is
                   Castle.Zone_Marks.Show_Lot (V.Corner, V.Corner (1).Z + 0.05, Castle.Zone_Marks.Pointed.Edge, 0.12);
                end;
             end if;
+         when A_Cart =>
+            if Castle.Colony.Cart.Here then
+               declare
+                  C  : constant Castle.Colony.Cart_View := Castle.Colony.Cart;
+                  Hl : constant Float := 0.125 * Float (Castle.Colony.Cart_Long_B) + 0.35;
+                  Hw : constant Float := 0.125 * Float (Castle.Colony.Cart_Wide_B) + 0.35;
+                  Hx : constant Float := (if C.Along_X then Hl else Hw);
+                  Hy : constant Float := (if C.Along_X then Hw else Hl);
+               begin
+                  Castle.Zone_Marks.Show_Lot
+                    ([(C.At_P.X - Hx, C.At_P.Y - Hy, C.At_P.Z), (C.At_P.X + Hx, C.At_P.Y - Hy, C.At_P.Z),
+                      (C.At_P.X + Hx, C.At_P.Y + Hy, C.At_P.Z), (C.At_P.X - Hx, C.At_P.Y + Hy, C.At_P.Z)],
+                     C.At_P.Z + 0.05, Castle.Zone_Marks.Pointed.Edge, 0.12);
+               end;
+            end if;
          when A_Block | Nothing =>
             null;
       end case;
@@ -2314,6 +3248,10 @@ begin
    Put_Line ("OpenGL " & Castle.Platform.GL_Version & " on " & Castle.Platform.GL_Renderer
              & (if Castle.Render.MSAA_Samples > 0
                 then "," & Castle.Render.MSAA_Samples'Image & "x MSAA" else ", no MSAA"));
+   Castle.Render.Far_View := Far_On;
+   if Far_On then
+      Castle.Render.Far_Plane := 4_800.0;     --  (the map's far corner from an eye 450 m off its focus, and room)
+   end if;
    Castle.Streaming.Start (W, Workers);
    Castle.Camera.Reset (Cam, Start_X, Start_Y, W);
    Game_Clock := Long_Float (Start_Day) * 24.0 + Long_Float (Start_Hour);
@@ -2391,6 +3329,21 @@ begin
       if Castle.Input.Pressed (Castle.Input.Show_Nav)    then Show_Map := not Show_Map;       end if;
       if Castle.Input.Pressed (Castle.Input.Show_Wells)  then Show_Wells := not Show_Wells;   end if;
       if Castle.Input.Pressed (Castle.Input.Show_Band)   then Show.Band := not Show.Band;     end if;
+      --  (John, 2026-11-13: "the H k toggle through, dynamic transparency, full trasnparency, or no
+      --  transparency"; said in a note, since the first and the last look alike until something is pointed at)
+      if Castle.Input.Pressed (Castle.Input.Open_Roofs)  then
+         case Castle.Cutaway.Viewing is
+            when Castle.Cutaway.Dynamic =>
+               Castle.Cutaway.Set_View (Castle.Cutaway.Full);
+               Castle.HUD.Say (Tools, "Roofs and walls: every house open");
+            when Castle.Cutaway.Full =>
+               Castle.Cutaway.Set_View (Castle.Cutaway.None);
+               Castle.HUD.Say (Tools, "Roofs and walls: all whole");
+            when Castle.Cutaway.None =>
+               Castle.Cutaway.Set_View (Castle.Cutaway.Dynamic);
+               Castle.HUD.Say (Tools, "Roofs and walls: open where you look and point");
+         end case;
+      end if;
       if Castle.Input.Pressed (Castle.Input.Pause_Game) then
          if Tools.Speed = 0 then
             Tools.Speed := Last_Speed;
@@ -2406,6 +3359,7 @@ begin
       end if;
       if Castle.Input.Pressed (Castle.Input.Hide_HUD)    then Show.Visible := not Show.Visible; end if;
       Castle.Camera.Update (Cam, W, Float'Min (0.1, Float (Now - Last)));
+      Follow_Roofs;                          --  (before the pointer's ray: it goes through what is cleared)
 
       --  Editing: the block under the cursor.  A click digs out the brush
       --  box round it; with Ctrl held it fills the box in front of the face
@@ -2443,6 +3397,15 @@ begin
          Under := (if On_UI then (others => <>)
                    else Castle.Pick.Look (E, Ray, H, Slack => 12.0 * Ty / Float (Integer'Max (1, Integer (Fh))),
                                           Keep => Under));
+         --  Where the pointer's ray landed, for the roofs it clears next frame
+         --  (Follow_Roofs).  On the interface, or with a menu open, the last
+         --  place stands: a roof does not close over what its menu is about.
+         if not On_UI and then not Castle.HUD.Menu_Open then
+            Point_Has := H.Found;
+            if H.Found then
+               Point_To := E + Ray * (H.Dist + 0.3);
+            end if;
+         end if;
          Castle.HUD.Point (Under, Ptr_X, Ptr_Y, Ptr_Click, Ptr_RClick, Tools, World_Click);
          if Tools.Mode = Castle.HUD.Edit then
             Tools.Path_Started := False;    --  the colony's tools put down: nothing half drawn
@@ -2497,11 +3460,15 @@ begin
       begin
          --  one step for the sky, the colony and the serfs alike, so they keep together
          Step_Seconds := (if Record_N > 0 then 1.0 / 30.0 else Float (Dt));
-         Flame_T := Flame_T + Step_Seconds;
-         if Flame_T > 3_600.0 then
-            Flame_T := Flame_T - 3_600.0;
+         --  (--drawn-still: drawn time holds still, so that two builds' pictures
+         --  of one view can be compared pixel by pixel)
+         if not Drawn_Still then
+            Flame_T := Flame_T + Step_Seconds;
+            if Flame_T > 3_600.0 then
+               Flame_T := Flame_T - 3_600.0;
+            end if;
+            Sky_T := Sky_T + Long_Float (Step_Seconds);
          end if;
-         Sky_T := Sky_T + Long_Float (Step_Seconds);
          Game_Clock := Game_Clock + Long_Float (Step_Seconds) * Time_Scale * Long_Float (Tools.Speed);
          if Held (Time_Forward) then Game_Clock := Game_Clock + 3.0 * Dt;  end if;
          if Held (Time_Back)    then Game_Clock := Game_Clock - 3.0 * Dt;  end if;
@@ -2638,6 +3605,8 @@ begin
       end if;
       --  The colony: set up from the command line once the ground is in, a
       --  step of its clock at the game's speed, and its members shown.
+      --  (the colony's own ground, which it reads nothing beyond, whatever else is loaded)
+      Castle.Colony.Set_Ground_Stacks (Colony_R);
       if In_Flight = 0 and then Scn.Stake and then not Colony_Scripted then
          Colony_Scripted := True;
          Script_Colony;
@@ -2727,9 +3696,20 @@ begin
       if Show_Routes then
          Castle.Serfs.Submit_Routes;
       end if;
+      if Lineup_Posed and then not Castle.Colony.Has_Stake then
+         --  (a row put to sleep, to be looked at: each under its cloak)
+         for I in 1 .. Natural'Min (Lineup_N, Castle.Serfs.Count) loop
+            if Castle.Serfs."=" (Lineup_Does, Castle.Serfs.Sleep) and then Castle.Serfs.Lies (I) > 0.6 then
+               Spread_Cloak (I);
+            end if;
+         end loop;
+      end if;
       if Castle.Colony.Has_Stake then
          Show_Zones;
          Show_Stockpiles;
+         Show_Cart;
+         Show_Beds;
+         Show_Cloaks;
          if Castle.Colony.Has_Camp then
             Show_Camp;
          end if;
@@ -2770,19 +3750,28 @@ begin
       if Show_Wells then
          Show_Well_Map;
       end if;
-      if In_Flight = 0 and then not Panned and then (Pan_X /= 0.0 or else Pan_Y /= 0.0) then
+      if In_Flight = 0 and then not Panned and then (Pan_X /= 0.0 or else Pan_Y /= 0.0)
+        and then (not (Far_Wait and then Far_On) or else Far_Fresh)       --  (asked to wait for the far view: the pan too)
+      then
          Cam.T_X := Cam.T_X + Pan_X;            --  glide there, streaming on the way
          Cam.T_Y := Cam.T_Y + Pan_Y;
          Panned := True;
          Put_Line ("panning by " & Img (Pan_X, 0) & "," & Img (Pan_Y, 0) & " m after"
                    & Castle.Render.Stacks_Resident'Image & " stacks");
+      elsif In_Flight = 0 and then Panned and then Pan_Back and then not Pan_Home
+        and then abs (Cam.X - Cam.T_X) + abs (Cam.Y - Cam.T_Y) < 0.5
+      then
+         Cam.T_X := Cam.T_X - Pan_X;            --  and back, the far view having filled
+         Cam.T_Y := Cam.T_Y - Pan_Y;
+         Pan_Home := True;
+         Put_Line ("panning back with" & Castle.Render.Stacks_Resident'Image & " stacks");
       end if;
 
       Lap (6);
       Get_Framebuffer_Size (Win, Fw, Fh);
       if Fw > 0 and then Fh > 0 then
          Castle.Render.Draw (Castle.Camera.Eye (Cam), (Cam.X, Cam.Y, Cam.Z),
-                             Castle.Camera.View_Proj (Cam, Float (Fw) / Float (Fh)),
+                             Castle.Camera.View_Proj (Cam, Float (Fw) / Float (Fh), Castle.Render.Far_Plane),
                              Natural (Fw), Natural (Fh), View_M);
          Hud_Stats.Stacks    := Castle.Render.Stacks_Resident;
          Hud_Stats.Quads     := Castle.Render.Quads_Resident;
@@ -2820,6 +3809,10 @@ begin
              or else (Fill_Done >= 0.0 and then not Scn.Stake and then Lineup_N = 0 and then Walk_N = 0
                       and then Deer_N = 0 and then Deer_Walk_N = 0))
            and then Record_N > 0 and then Recorded < Record_N
+           --  (and, asked to wait for them, for the whole map and the far view: from then on without a break)
+           and then (Recorded > 0
+                     or else ((not (Far_Wait and then Far_On) or else Far_Fresh)
+                              and then (not (Hold_Wait and then Whole_Map) or else Hold_Whole)))
          then
             Recorded := Recorded + 1;
             declare
@@ -2861,6 +3854,21 @@ begin
          Run_Cpu_Sum := Run_Cpu_Sum + Cpu_Ms;
          Run_Cpu_Max := Float'Max (Run_Cpu_Max, Cpu_Ms);
          Run_Gpu_Sum := Run_Gpu_Sum + Castle.Render.GPU_Millis;
+         --  (and once nothing more is coming in: the whole map held, the far view whole)
+         if (Whole_Map or else Far_On) and then (not Whole_Map or else Hold_Done >= 0.0)
+           and then (not Far_On or else Far_Whole)
+         then
+            Held_Frames := Held_Frames + 1;
+            Held_Cpu_Sum := Held_Cpu_Sum + Cpu_Ms;
+            Held_Gpu_Sum := Held_Gpu_Sum + Castle.Render.GPU_Millis;
+            Held_Gpu_Max := Float'Max (Held_Gpu_Max, Castle.Render.GPU_Millis);
+         end if;
+         if Save_At > 0 and then Run_Frames = Save_At then
+            Do_Save (To_String (Save_At_Path));
+         end if;
+         if Load_At > 0 and then Run_Frames = Load_At then
+            Do_Load (To_String (Load_At_Path));
+         end if;
       end if;
 
       if Dig_Set and then Dig_Late and then Fill_Done >= 0.0 then
@@ -2954,9 +3962,14 @@ begin
       --  (a running colony edits its ground all the time, so the rebuilds are
       --  not waited for once it has one)
       if Frames > 0 and then Frame >= Frames and then In_Flight = 0
+        and then (not (Hold_Wait and then Whole_Map) or else Hold_Whole)
+        and then (not (Far_Wait and then Far_On) or else Far_Fresh)
+        and then Held_Frames >= Settle_Frames
+        and then (Load_At = 0 or else Run_Frames > Load_At)
         and then (Rebuilding = 0 or else Castle.Colony.Has_Stake)
         and then not (Dig_Set and then Dig_Late) and then not Fill_Set and then Sim_Ticks = 0
         and then (not Panned or else abs (Cam.X - Cam.T_X) + abs (Cam.Y - Cam.T_Y) < 0.5)
+        and then (not (Panned and then Pan_Back) or else Pan_Home)
       then
          Castle.Render.Screenshot (To_String (Shot), Natural (Fw), Natural (Fh));
          Put_Line ("view filled in " & Img (Fill_Done, 2) & " s,"
@@ -2974,6 +3987,65 @@ begin
                       & Img (Run_Gpu_Sum / Float (Run_Frames), 2) & " ms, cpu "
                       & Img (Run_Cpu_Sum / Float (Run_Frames), 2) & " ms (max "
                       & Img (Run_Cpu_Max, 2) & ")");
+         end if;
+         if Held_Frames > 0 then
+            Put_Line ("settled (the map held, the far view whole):" & Held_Frames'Image & " frames, gpu "
+                      & Img (Held_Gpu_Sum / Float (Held_Frames), 2) & " ms (the longest "
+                      & Img (Held_Gpu_Max, 2) & "), cpu "
+                      & Img (Held_Cpu_Sum / Float (Held_Frames), 2) & " ms");
+            if Castle.Render.Far_Shadow_Draws > 0 then
+               Put_Line ("the far shadows:" & Castle.Render.Far_Shadow_Draws'Image & " maps drawn in the run");
+            end if;
+         end if;
+         if Whole_Map then
+            declare
+               N : Natural := 0;
+            begin
+               for CX in 0 .. Chunks_XY - 1 loop
+                  for CY in 0 .. Chunks_XY - 1 loop
+                     if Held (CX, CY) then
+                        N := N + 1;
+                     end if;
+                  end loop;
+               end loop;
+               Put_Line ("the map held:" & N'Image & " of" & Integer'Image (Chunks_XY * Chunks_XY) & " stacks"
+                         & (if Hold_Done >= 0.0 then ", all of it " & Img (Hold_Done, 1) & " s after the first frame"
+                            else " (not all of it yet)")
+                         & ";" & Holds_Taken'Image & " came without a mesh, "
+                         & Img (Hold_Ms / Float (Integer'Max (1, Holds_Taken)), 2) & " ms of a worker each;"
+                         & " the main thread gave the holding " & Img (Hold_Main_Ms, 0) & " ms in all, "
+                         & Img (Hold_Main_Max, 2) & " in its worst frame");
+            end;
+         end if;
+         if Far_On then
+            Put_Line ("the far view:" & Castle.Render.Far_Tiles_Resident'Image & " tiles,"
+                      & Castle.Render.Far_Quads_Resident'Image & " quads ("
+                      & Img (Float (Castle.Render.Far_Quads_Resident) * 8.0 / 1_048_576.0) & " MB),"
+                      & Castle.Render.Far_Draws_Last_Frame'Image & " of them drawn in the last frame ("
+                      & Castle.Render.Far_Sent_Last_Frame'Image & " quads sent);"
+                      & Far_Made'Image & " made, " & Img (Far_Ms / Float (Integer'Max (1, Far_Made)), 1)
+                      & " ms of a worker each"
+                      & (if Far_Done >= 0.0 then "; whole " & Img (Far_Done, 1) & " s after the first frame"
+                         else "; not whole yet") & (if Far_Whole then "" else " (some wanted now)"));
+         end if;
+         if Castle.Streaming.Lost > 0 then
+            Put_Line ("STREAMING LOST" & Castle.Streaming.Lost'Image & " jobs: the queue was full");
+         end if;
+         for K in 1 .. Probe_N loop
+            declare
+               Bx : constant Integer := Integer (Float'Floor (Probes (K).X * 4.0));
+               By : constant Integer := Integer (Float'Floor (Probes (K).Y * 4.0));
+               Bz : constant Integer := Integer (Float'Floor (Probes (K).Z * 4.0));
+            begin
+               Put_Line ("block at " & Img (Probes (K).X, 2) & ", " & Img (Probes (K).Y, 2) & ", " & Img (Probes (K).Z, 2)
+                         & ": " & Castle.World_Blocks.Block_At (Bx, By, Bz).Mat'Image
+                         & (if not Held (Bx / Chunk_B, By / Chunk_B) then " (its stack is not held)"
+                            elsif States (Bx / Chunk_B, By / Chunk_B) = Loaded then " (its stack is drawn)"
+                            else " (its stack is held and not drawn)"));
+            end;
+         end loop;
+         if Show_Mem then
+            Put_Mem;
          end if;
          Put_Line ("camera: wanted " & Img (Cam.Dist, 1) & " m at tilt " & Img (Cam.Pitch, 2)
                    & ", held at " & Img (Cam.Held, 1) & " m and tilt " & Img (Cam.Held_Pitch, 2)

@@ -4,6 +4,7 @@ with Ada.Text_IO;     use Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
 with Castle.Chunks;   use Castle.Chunks;
 with Castle.Edits;
+with Castle.Lod;
 
 package body Castle.Streaming is
 
@@ -14,12 +15,15 @@ package body Castle.Streaming is
       Priority  : Float := 0.0;
       View      : Castle.Water.View_Access;
       Water_Ver : Natural := 0;
+      Mesh      : Boolean := True;
+      Level     : Natural := 0;        --  a tile of the far view (CX, CY: its place among its level's)
    end record;
 
-   Max_Jobs    : constant := 32_768;
+   Max_Jobs    : constant := 2 * Chunks_XY * Chunks_XY;   --  every stack of the world, twice
    Max_Results : constant := 8_192;
 
    type Job_Heap is array (1 .. Max_Jobs) of Job;
+   type Job_Heap_Access is access Job_Heap;
    type Result_Ring is array (0 .. Max_Results - 1) of Result_Access;
 
    The_World : World;
@@ -29,10 +33,12 @@ package body Castle.Streaming is
       procedure Put (J : Job);
       procedure Halt;
       function Count return Natural;
+      function Lost_N return Natural;
    private
-      Heap     : Job_Heap;
+      Heap     : Job_Heap_Access := new Job_Heap;
       N        : Natural := 0;
       Stopping : Boolean := False;
+      Lost     : Natural := 0;
    end Jobs;
 
    protected body Jobs is
@@ -43,7 +49,7 @@ package body Castle.Streaming is
          Child : Positive;
       begin
          if Stopping then
-            J := (0, 0, 0.0, null, 0);
+            J := (0, 0, 0.0, null, 0, True, 0);
             Ok := False;
             return;
          end if;
@@ -70,7 +76,8 @@ package body Castle.Streaming is
          I : Positive;
       begin
          if N = Max_Jobs then
-            return;                                --  cannot happen at sane view ranges
+            Lost := Lost + 1;                      --  (never: room for every stack twice; counted, and said)
+            return;
          end if;
          N := N + 1;
          I := N;
@@ -91,37 +98,50 @@ package body Castle.Streaming is
          return N;
       end Count;
 
+      function Lost_N return Natural is (Lost);
+
    end Jobs;
 
+   type Result_Kind is (Blocks_Only, With_Mesh, Far_Tile);   --  (what was asked for: each waits in a ring of its own)
+   type Rings is array (Result_Kind) of Result_Ring;
+   type Counts is array (Result_Kind) of Natural;
+
    protected Results is
-      procedure Put (R : Result_Access);
-      procedure Get (R : out Result_Access);
+      entry Put (Result_Kind) (R : Result_Access);   --  (waits while its ring is full)
+      procedure Get (R : out Result_Access; Meshed : Result_Kind);
+      procedure Halt;
    private
-      Ring       : Result_Ring := (others => null);
-      Head, Tail : Natural := 0;
-      N          : Natural := 0;
+      Ring       : Rings := (others => (others => null));
+      Head, Tail : Counts := (others => 0);
+      N          : Counts := (others => 0);
+      Stopping   : Boolean := False;
    end Results;
 
    protected body Results is
 
-      procedure Put (R : Result_Access) is
+      entry Put (for K in Result_Kind) (R : Result_Access) when N (K) < Max_Results or else Stopping is
       begin
-         if N < Max_Results then
-            Ring (Tail) := R;
-            Tail := (Tail + 1) mod Max_Results;
-            N := N + 1;
-         end if;
+         if N (K) < Max_Results then
+            Ring (K) (Tail (K)) := R;
+            Tail (K) := (Tail (K) + 1) mod Max_Results;
+            N (K) := N (K) + 1;
+         end if;                               --  (stopping, and full: the program is ending)
       end Put;
 
-      procedure Get (R : out Result_Access) is
+      procedure Halt is
       begin
-         if N = 0 then
+         Stopping := True;
+      end Halt;
+
+      procedure Get (R : out Result_Access; Meshed : Result_Kind) is
+      begin
+         if N (Meshed) = 0 then
             R := null;
          else
-            R := Ring (Head);
-            Ring (Head) := null;
-            Head := (Head + 1) mod Max_Results;
-            N := N - 1;
+            R := Ring (Meshed) (Head (Meshed));
+            Ring (Meshed) (Head (Meshed)) := null;
+            Head (Meshed) := (Head (Meshed) + 1) mod Max_Results;
+            N (Meshed) := N (Meshed) - 1;
          end if;
       end Get;
 
@@ -133,13 +153,30 @@ package body Castle.Streaming is
 
    task body Worker is
       Work : constant Stack_Work_Access := new Stack_Work;
+      Far  : Castle.Lod.Scratch_Access;        --  (made when the first far tile is asked of this worker)
       J    : Job;
       Ok   : Boolean;
    begin
       loop
          Jobs.Take (J, Ok);
          exit when not Ok;
-         if Wanted (J.CX, J.CY) then
+         if J.Level > 0 then
+            declare
+               use type Castle.Lod.Scratch_Access;
+               T0 : constant Time := Clock;
+               R  : constant Result_Access := new Result;
+            begin
+               if Far = null then
+                  Far := new Castle.Lod.Scratch;
+               end if;
+               Castle.Lod.Build_Tile (The_World, J.Level, J.CX, J.CY, Work, Far.all, R.M, R.Edited);
+               R.CX := J.CX;
+               R.CY := J.CY;
+               R.Level := J.Level;
+               R.Millis := Float (To_Duration (Clock - T0)) * 1000.0;
+               Results.Put (Far_Tile) (R);
+            end;
+         elsif not J.Mesh or else Wanted (J.CX, J.CY) then
             declare
                T0 : constant Time := Clock;
                R  : constant Result_Access := new Result;
@@ -160,7 +197,10 @@ package body Castle.Streaming is
                   R.Summary := new Castle.Water.Ground_Summary;
                   Castle.Water.Summarize (Work.all, R.Summary.all);
                   R.Water_Ver := J.Water_Ver;
-                  Build (The_World, J.CX, J.CY, Work.all, R.M, Rim, J.View);
+                  if Build_Meshes and then J.Mesh then
+                     Build (The_World, J.CX, J.CY, Work.all, R.M, Rim, J.View);
+                  end if;
+                  R.Meshed := J.Mesh;
                   Castle.Edits.Free (Rim);
                end;
                R.Packed := new Castle.Chunks.Chunk_Stack;
@@ -168,7 +208,7 @@ package body Castle.Streaming is
                R.CX := J.CX;
                R.CY := J.CY;
                R.Millis := Float (To_Duration (Clock - T0)) * 1000.0;
-               Results.Put (R);
+               Results.Put ((if J.Mesh then With_Mesh else Blocks_Only)) (R);
             end;
          end if;
          Castle.Water.Free (J.View);
@@ -187,14 +227,27 @@ package body Castle.Streaming is
    end Start;
 
    procedure Request (CX, CY : Integer; Priority : Float;
-                      View : Castle.Water.View_Access := null; Water_Ver : Natural := 0) is
+                      View : Castle.Water.View_Access := null; Water_Ver : Natural := 0;
+                      Mesh : Boolean := True) is
    begin
-      Jobs.Put ((CX, CY, Priority, View, Water_Ver));
+      Jobs.Put ((CX, CY, Priority, View, Water_Ver, Mesh, 0));
    end Request;
 
-   procedure Poll (R : out Result_Access) is
+   procedure Request_Far (Level : Positive; TX, TY : Integer; Priority : Float) is
    begin
-      Results.Get (R);
+      Jobs.Put ((TX, TY, Priority, null, 0, True, Level));
+   end Request_Far;
+
+   procedure Poll_Far (R : out Result_Access) is
+   begin
+      Results.Get (R, Far_Tile);
+   end Poll_Far;
+
+   function Lost return Natural is (Jobs.Lost_N);
+
+   procedure Poll (R : out Result_Access; Meshed : Boolean := True) is
+   begin
+      Results.Get (R, (if Meshed then With_Mesh else Blocks_Only));
    end Poll;
 
    function Queued return Natural is (Jobs.Count);
@@ -202,6 +255,7 @@ package body Castle.Streaming is
    procedure Stop is
    begin
       Jobs.Halt;
+      Results.Halt;
    end Stop;
 
    procedure Free_R is new Ada.Unchecked_Deallocation (Result, Result_Access);

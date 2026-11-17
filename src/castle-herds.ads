@@ -2,6 +2,7 @@ with Interfaces;
 with Castle.Math;    use Castle.Math;
 with Castle.Hash;
 with Castle.Deer;
+with Castle.Nav;
 
 --  The deer round the colony: a few herds, simulated on the colony's clock
 --  (Castle.Colony steps them) so the same start gives the same herds.
@@ -17,23 +18,37 @@ with Castle.Deer;
 --  at most a metre, never into water too deep to wade.
 --
 --  Fear: someone walking within Fear_M of a deer (a hunter stalking within
---  Stalked_M), or an arrow loosed at the herd (Scare), panics it.  The node
+--  Stalked_M), or an arrow loosed at the herd (Scare), panics it.  One who
+--  stands still frightens no herd, however near and for however long
+--  (John, 2026-11-13: "a person standing still doesn't frighten a herd";
+--  until then anyone within Fear_M did, walking or not, again every
+--  Settle_S for as long as they stood there): not startled, and a herd in
+--  flight not turned.  The herds as they were (Set_Scatter) are frightened
+--  by anyone near, as they were.  The node
 --  flees, 30 m or so straight away from the danger, and the herd flees
 --  with it (John, 2026-11-11: "when the herd node move away and deer panic
 --  they start to rubberband and swing around, they also don't mind
 --  submerging themselves in water"; first rules and values, his to tune):
---    1. A deer starts on a heading of its own, away from the danger, for
---       Startle_S or half as long again; then it runs with the herd: for
---       its own place round the node, as fast as it needs to keep that
---       place and no faster than it can run, never back toward the danger
---       to find it (ahead of its place, it runs on slower and is caught up).
+--    1. A deer runs with the node, locked to its own place round it: as
+--       fast as it needs to keep that place and no faster than it can run,
+--       never back toward the danger to find it (ahead of its place, it
+--       runs on slower and is caught up).  The flight goes down the herd
+--       in a chain from the deer nearest the danger: that one sets off at
+--       once with the node, each next nearest Chain_S after the one before,
+--       head up until its turn.  (John, 2026-11-13: "instead of panic
+--       running them in different directions, lock them to the node and
+--       they run with the node, from the closest to the hunter in a chain
+--       reaction".  Before that a deer started on a heading of its own for
+--       a little over half a second.)
 --    2. Its flight is over when the node has stopped and it has come to
 --       its place (or after Flight_Max_S, whatever happens).
 --    3. A herd in flight is not startled again: only someone within
 --       Close_M of one of its deer turns it, the node planning a new way
 --       and the deer following, none of them starting afresh.
 --    4. With nowhere for the node to flee to (cornered at the edge of its
---       range), each deer bolts a second or two by itself and comes back.
+--       range, or with no dry way out), the herd stays with it, heads up:
+--       none bolts by itself (they did, a second or two each, before his
+--       words above).
 --    5. A deer turns at no more than Turn_Rate (Flight_Turn in flight), and
 --       the way it turned aside round something is the way it then faces:
 --       it does not flick from heading to heading, step to step.
@@ -48,6 +63,13 @@ with Castle.Deer;
 --       deeper than it stands in, and, calm, makes for the node itself
 --       until it is out.  The node's ways are planned dry the same, its
 --       grazing and its flight, and herds are placed on dry ground.
+--    8. Water blocks a herd, and it knows (John, 2026-11-13: "let them
+--       know that water blocks them"): a place the node cannot get to
+--       that dry on the ground within Dry_Reach_M of the stake is not
+--       fled to or grazed to at all (Castle.Nav.Plan's Within and Refuse:
+--       the walking map keeps pieces of ground for dry going), and the
+--       next direction is tried.  (It was made for as far as the bank,
+--       after a search of Herd_Budget floors each time.)
 --  Set_Scatter (True) is the herds as they were before these: each deer
 --  bounding off on a heading of its own for three to six seconds, then back
 --  to the node wherever it has got to, startled again every three seconds
@@ -73,7 +95,8 @@ package Castle.Herds is
    --  the herd's flight together, and water (first values; see above)
    Flee_M        : constant := 30.0;  --  how far the node flees
    Flee_Pace     : constant := 5.0;   --  m/s, the node in flight (as they were: 4, and the deer outran it)
-   Startle_S     : constant := 0.6;   --  a deer's start on its own heading (and up to half as long again)
+   Chain_S       : constant := 0.25;  --  a flight goes down the herd from the deer nearest the danger: each next
+                                      --  nearest sets off this long after the one before
    Flight_Max_S  : constant := 30.0;
    Flight_Slow   : constant := 2.0;   --  m/s: the least a deer ahead of its place runs on at
    Keep_Gain     : constant := 1.0;   --  m/s faster for each metre it is behind its place
@@ -88,6 +111,10 @@ package Castle.Herds is
    Deer_Wade_B   : constant := 0;     --  rows of water (quarter metres)
    Flight_Wade_B : constant := 1;
    Herd_Budget   : constant := 40_000;   --  floors a herd's dry way is searched for over, at most
+   Dry_Reach_M   : constant := 76.0;     --  a herd's ways are looked for on the ground within this far of the
+                                         --  stake and nowhere else (Range_M and a little: every stack any part
+                                         --  of which is that near is ground the colony keeps loaded wherever
+                                         --  the camera is, so a herd's answer is the same looked at or not)
 
    procedure Set_Scatter (On : Boolean);
    function Scatter return Boolean;
@@ -96,8 +123,15 @@ package Castle.Herds is
    type Person is record
       P        : Vec3;
       Stalking : Boolean := False;
+      Still    : Boolean := False;   --  it has not moved over the ground in this step
    end record;
    type People is array (Positive range <>) of Person;
+
+   procedure Set_Ground (Within : Castle.Nav.Region);
+   --  The ground the herds' ways may be looked for on: the colony's own
+   --  (Castle.Colony.Set_Ground_Stacks), told at every step.  The herds as
+   --  they were plan on all of it; fleeing together they keep besides to
+   --  the ground within Dry_Reach_M of the stake, which is inside it.
 
    procedure Reset;   --  no herds at all
 
@@ -123,6 +157,10 @@ package Castle.Herds is
    function Node (H : Positive) return Vec3;
    function In_Herd (H : Positive) return Natural;
    function Panicked (H : Positive) return Boolean;   --  any of its deer still in panic
+   function Frights return Natural;
+   --  How many times a herd has been frightened since Reset, by someone
+   --  near or by an arrow, whether or not it found a way to flee (checks
+   --  and measuring: colony_run --nav-stats).  Not saved.
 
    function Deer_Slots return Natural;                --  K in 1 .. Deer_Slots for the ones below
    function Alive (K : Positive) return Boolean;
