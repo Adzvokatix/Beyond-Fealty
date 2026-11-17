@@ -1,13 +1,13 @@
 [README.md](https://github.com/user-attachments/files/34827949/README.md)
-# Castle Game engine — world generation and the 3D view
-# Engine for upcoming game for "Beyond the Pale".
+# Castle Game engine now Fief Engine — world generation and the 3D view
+# Engine for upcoming game for "Beyond Fealty".
 
 Procedural voxel world for the castle colony game, in Ada 2022.
 2048 m x 2048 m x 256 m, 0.25 m blocks.  Mountains peak around 160 m.
 
 ## The project
 
-"Beyond the Pale", is a colony game on a generated voxel world. The player says
+"Beyond Fealty", is a colony game on a generated voxel world. The player says
 where (a homestake, paths, stockpiles, a camp, reserves and protections);
 the people decide what and when, feed themselves, and say why when they
 can't. Today a band of six gathers, fells, hunts, cooks and lives through
