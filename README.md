@@ -1,3 +1,4 @@
+
 # Fief engine — world generation and the 3D view for Beyond Fealty
 
 Procedural voxel world for the castle colony game, in Ada 2022.
@@ -19,6 +20,7 @@ economy and lordship are ahead (the phases are in the framework).
 <img width="2560" height="1440" alt="swappy-20261121-220827" src="https://github.com/user-attachments/assets/396967c4-924b-4078-a44e-5f1efb5142db" />
 <img width="2560" height="1440" alt="swappy-20261121-220829" src="https://github.com/user-attachments/assets/c924f5e7-ac4f-4254-b100-02c070554c50" />
 <img width="2560" height="1440" alt="swappy-20261121-220831" src="https://github.com/user-attachments/assets/974ff76c-03e9-4a88-ade3-5a4a18c88197" />
+<img width="2560" height="1440" alt="swappy-20261121-221305" src="https://github.com/user-attachments/assets/cedb78ae-2130-458e-962a-924499d61704" />
 
 Where to read:
 
