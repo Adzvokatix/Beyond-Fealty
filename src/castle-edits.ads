@@ -26,7 +26,7 @@ package Castle.Edits is
 
    type Rim_Edit is record
       X, Y, Z : Integer := 0;           --  stack-local; X or Y is -1 or 32
-      Mat     : Material := Air;
+      Mat     : Material := Air;        --  as it is drawn (Castle.Blocks.Seen_Mat): the rim is the mesher's alone
    end record;
    type Rim_Array is array (Positive range <>) of Rim_Edit;
    type Rim_Access is access Rim_Array;

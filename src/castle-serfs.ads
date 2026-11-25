@@ -82,12 +82,49 @@ package Castle.Serfs is
    --  high at Where, facing Spot, the feet out in front.
    function Spawn_Driven (G : Genome; O : Outfit; Where : Vec3; Facing : Float) return Natural;
    --  0: no room for another.
+
+   type Solid_Reader is access function (Bx, By, Bz : Integer) return Boolean;
+   procedure Set_Ground_Source (Solid : Solid_Reader);
+   --  For the checks: what Ground_At takes for solid ground (null: the
+   --  game's blocks, Castle.World_Blocks, as ever).  The feet of serfs and
+   --  the hooves of deer are put down by it.
+
+   Rest_Arms : Boolean := True;
+   --  On the reference body, standing at rest: the upper arms Rest_Spread further out from the sides, the
+   --  forearms Rest_Fore_In back in toward the body from them, so that the elbows stand out of the line
+   --  of the arm, and bent Rest_Elbow more (John, 2026-11-24: "elbows angled away from the body at a
+   --  resting state, slight bend at the arms"); gone as it walks (by 0.6 m/s) and as it works.  First
+   --  values.  False (the game's --no-rest-arms): the arms at rest as they were.
+   Rest_Spread  : constant := 0.18;   --  rad
+   Rest_Fore_In : constant := 0.30;
+   Rest_Elbow   : constant := 0.17;
+
+   Hands_Before_Chest : Boolean := True;
+   --  Eating (Eat, Sit_Eat), the hands are placed before the chest as it
+   --  leans and bends (the food held a hand's breadth off its front, the
+   --  other hand going between it and the mouth) and the elbows go down by
+   --  the ribs.  (John, 2026-11-22, with two pictures of serfs on a seat:
+   --  "serfs arms and hands are behind there back when they sit down to
+   --  eat".  The hands had been placed 20 cm before the hips, whatever the
+   --  trunk did: with the lean and the bend of an eater that is inside the
+   --  chest, a hand's breadth from its middle, and an arm solved to there
+   --  with its elbow back had the elbow behind the back and the forearm
+   --  through the body; standing eaters the same.)  False (the game's
+   --  --no-chest-hands): as it was.  Drawing only.
    procedure Drive (I : Positive; Where : Vec3; M : Motion_Kind; Spot : Vec3; Log : Boolean := False;
                     Buckets : Boolean := False);
    --  Where: the feet; Spot: what the hands go to (picking, putting down,
    --  the axe's mark).  Log: a load on the shoulder (a log, a sheaf).
    --  Buckets: one in each hand, so the arms hang a little out from the
    --  body and hardly swing.
+   procedure Turn_About (I : Positive; Pivot : Vec3; Radians : Float);
+   --  Serf I is drawn turned Radians about the upright through Pivot, all of
+   --  it and whatever is placed from it (a building drawn turned, John,
+   --  2026-11-19: what is within its walls is drawn through its turn).
+   --  Drawing only: where it stands and how it is animated are as they
+   --  were (Where is not turned).  Asked each frame as Perch is; 0: not.
+   --  It comes on and goes off over a moment, so one walking in at a turned
+   --  doorway, or a builder coming to a turned house, does not jump.
    procedure Perch (I : Positive; Up : Float);
    --  Serf I stands Up metres over the ground under it (on a ladder's
    --  rungs): the whole of it is drawn that much higher, eased over a
@@ -126,6 +163,10 @@ package Castle.Serfs is
    function Where (I : Positive) return Vec3;   --  the ground point under serf I
    function Posed (I : Positive) return Castle.Poses.Pose;   --  as last animated
    function Frames_Of (I : Positive) return Castle.Poses.Frames;   --  its bones in the world, as last submitted
+   function Frames_Home (I : Positive) return Castle.Poses.Frames;
+   --  The same before any turn (Turn_About): where it stands on the map, for
+   --  whatever is worked out there and drawn through the turn afterwards
+   --  (its cloak: Castle.Cloth).
    function Rig_Of (I : Positive) return Rig;
 
    function Ground_At (X, Y, Near_Z : Float) return Float;

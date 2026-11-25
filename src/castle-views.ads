@@ -48,6 +48,11 @@ package Castle.Views is
    function Learns_Text (Aptitude : Float) return String;   --  "learns x1.3"
 
    function Person (I : Positive) return Sheet;   --  member I of the band
+   function Job_Label (I : Positive) return String;
+   --  What member I is called in the band's lists: its trade while it has
+   --  one ("Builder", "Stockman", "Carpenter": John, 2026-11-17, "Add
+   --  builder to the job list"), else its job ("Forester", "No job").  A
+   --  trade is still earned, not given: the menu of jobs is as it was.
    function Zone (Z : Positive) return Sheet;     --  zone Z: a stockpile, the camp, housing
    function House (H : Positive) return Sheet;    --  house H: whose it is, how far built, what it waits for
    function Deer (K : Positive) return Sheet;     --  deer K of the herds

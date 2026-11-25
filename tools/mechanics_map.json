@@ -1,0 +1,129 @@
+{
+  "about": "Which id of docs/design/detailed_mechanics.json each literal of the code's content enumerations is. Kept by hand; read by tools/mechanics_check.py, which fails when a literal here is gone, a new one is not here, or an id here is gone from the document. A target is an id of the enumeration's own section, or 'section:id'; a list where one literal is several things; null where the build has a thing the document does not (say why in notes). A leading '~' marks a thing the generator makes in the world and nothing in the colony uses yet. The mapping is Claude's reading (2026-11-22), not John's ruling: docs/design/Mechanics_crosswalk.md says where a reading could go either way.",
+  "document_version": "0.15",
+  "enumerations": [
+    {
+      "code": "Castle.Colony.Job_Kind", "file": "src/castle-colony.ads", "type": "Job_Kind", "section": "jobs",
+      "map": {"Unassigned": null, "Gatherer": "gatherer", "Forester": "woodcutter", "Hunter": "hunter", "Porter": "porter", "Cook": "cook"},
+      "notes": {
+        "Unassigned": "no job yet",
+        "Forester": "the document renamed the one who fells trees Woodcutter (its Forester is a noble who keeps the forest); the code, the logs and the interface still say forester",
+        "Cook": "a job the player gives in the build; in the document a peasant's job come to by skill (cooking 5), not an opening job"
+      }
+    },
+    {
+      "code": "Castle.Colony.Trade_Kind", "file": "src/castle-colony.ads", "type": "Trade_Kind", "section": "jobs",
+      "map": {"No_Trade": null, "Builder": "wright", "As_Stockman": "stockman", "As_Carpenter": "carpenter"},
+      "notes": {
+        "No_Trade": "no trade",
+        "Builder": "the document's Wright, plain name Builder; in the build a forester's trade, in the document it rises from the woodcutter: the same",
+        "As_Stockman": "a porter's trade; in the document it rises from the stock hand or the porter",
+        "As_Carpenter": "a forester's trade; in the document it rises from the wright"
+      }
+    },
+    {
+      "code": "Castle.Colony.Skill_Kind", "file": "src/castle-colony.ads", "type": "Skill_Kind", "section": "skills",
+      "map": {"Gathering": "gathering", "Forestry": "woodcraft", "Hunting": "hunting", "Portering": "hauling", "Cooking": "cooking",
+              "Building": "building", "Carpentry": "carpentry", "Stonework": "stonework", "Farming": "farming",
+              "Tanning": "leatherwork", "Taming": "husbandry"},
+      "notes": {"Forestry": "another name", "Portering": "another name", "Tanning": "another name", "Taming": "another name"}
+    },
+    {
+      "code": "Castle.Colony.Item_Kind", "file": "src/castle-colony.ads", "type": "Item_Kind", "section": "resources",
+      "map": {"Nothing": null, "Berries": "berry", "Wood": "wood", "Stone": "rock", "Water": "water", "Straw": "straw", "Meat": "meat",
+              "Hide": "hide", "Carcass": null, "Vegetables": "vegetable", "Apples": "fruit", "Sticks": null, "Grain": "grain",
+              "Earth": "dirt", "Salt": "salt", "Ladder": null},
+      "notes": {
+        "Nothing": "empty hands",
+        "Carcass": "a kill carried home to be butchered: never stored",
+        "Sticks": "an armful of dead wood for the fire: never stored",
+        "Ladder": "made at a stockpile for thatching a roof (John, 2026-11-12); the document has no ladder"
+      }
+    },
+    {
+      "code": "Castle.Colony.Zone_Kind", "file": "src/castle-colony.ads", "type": "Zone_Kind", "section": "zones",
+      "map": {"Stockpile_Zone": "stockpile", "Camp_Zone": "village_stake", "Habitation_Zone": "habitation"},
+      "notes": {"Camp_Zone": "the camp with its fire; since 2026-11-20 the homestake and the campfire are one square (his word), which is the document's home stake"}
+    },
+    {
+      "code": "Castle.Colony.Box_Kind", "file": "src/castle-colony.ads", "type": "Box_Kind", "section": "zones",
+      "map": {"Stockpile_Box": "stockpile", "Stockyard_Box": "stockyard"},
+      "notes": {"Stockyard_Box": "in the code the stockyard is a stockpile's zone with a flag (Zone_Rec.Yard)"}
+    },
+    {
+      "code": "Castle.Colony.Fitting", "file": "src/castle-colony.ads", "type": "Fitting", "section": "resources",
+      "map": {"Ground": null, "Floor": null, "Shelf": "shelves", "Meat_Barrel": "barrel", "Water_Barrel": "barrel", "Cover": null, "Lean": null, "Kept_Clear": null},
+      "notes": {"Ground": "an ordinary place", "Floor": "a place on the storehouse's floor", "Cover": "a place under a covering in the yard (the document's open yard, tier 2: lean-tos)", "Lean": "a ladder's place against the wall", "Kept_Clear": "no place"}
+    },
+    {
+      "code": "Castle.Colony.Tree_Kind", "file": "src/castle-colony.ads", "type": "Tree_Kind", "section": "flora",
+      "map": {"Broadleaf": "tree", "Conifer": "tree", "Apple": "fruit_tree"}
+    },
+    {
+      "code": "Castle.Buildings.Building_Kind", "file": "src/castle-buildings.ads", "type": "Building_Kind", "section": "buildings",
+      "map": {"Hovel": "serf_dwelling", "Storehouse": "stock_house"},
+      "notes": {"Hovel": "the document's tier 1 of the serf's dwelling", "Storehouse": "the document's stock-house; its fenced yard and coverings are the document's open yard, the ground before it the staging area (built_otherwise)"}
+    },
+    {
+      "code": "Castle.Maps.Deposit_Kind", "file": "src/castle-maps.ads", "type": "Deposit_Kind", "section": "deposits",
+      "map": {"Coal_Vein": "~coal_vein", "Iron_Vein": "~iron_vein", "Salt_Vein": "~salt_vein", "Bog_Iron_Patch": null},
+      "notes": {"Bog_Iron_Patch": "bog iron in wet ground: the generator's; the document has iron in veins only"}
+    },
+    {
+      "code": "Castle.Maps.Water_Kind", "file": "src/castle-maps.ads", "type": "Water_Kind", "section": "deposits",
+      "map": {"Dry": null, "Shore": null, "Stream": "stream", "River": "stream", "Lake": "lake"},
+      "notes": {"Dry": "no water", "Shore": "a bank"}
+    },
+    {
+      "code": "Castle.Blocks.Material", "file": "src/castle-blocks.ads", "type": "Material", "section": "resources",
+      "map": {
+        "Air": null, "Deep": null, "Bedrock": null, "Granite": null, "Limestone": null, "Sandstone": null,
+        "Dirt": "dirt", "Grass": null, "Sand": null, "Gravel": null,
+        "Clay": ["~clay", "deposits:~clay_bed"], "Water": "water",
+        "Coal": "~coal", "Iron_Ore": "~iron_ore", "Bog_Iron": null, "Silver_Ore": ["~silver_ore", "deposits:~silver_vein"],
+        "Gold_Ore": ["~gold_ore", "deposits:~gold_vein"], "Rock_Salt": "~salt", "Placer_Gravel": null,
+        "Boulder": "deposits:rock_outcrop",
+        "Log": "wood", "Aspen_Log": "wood", "Pine_Log": "wood",
+        "Leaves": "flora:tree", "Dark_Leaves": "flora:tree", "Aspen_Leaves": "flora:tree", "Pine_Needles": "flora:tree",
+        "Apple_Leaves": "flora:fruit_tree", "Berry_Bush": "flora:shrub", "Bare_Bush": "flora:shrub",
+        "Tall_Grass": "flora:grass", "Wild_Grain": "flora:wild_grain", "Wild_Vegetables": "flora:wild_vegetable",
+        "Plank": null, "Shingle": null, "Footpath": "zones:pathway", "Thatch": "straw", "Daub": null, "Fieldstone": "rock"
+      },
+      "notes": {
+        "Granite": "the ground's rock: nothing quarries it (stone comes off boulders)", "Limestone": "as granite", "Sandstone": "as granite",
+        "Grass": "turf", "Bog_Iron": "the generator's; no id", "Placer_Gravel": "gold in river gravel: the generator's; no id",
+        "Boulder": "where the build's stone comes from: prised off by porters; the document's rock is cut by quarrymen in a quarry",
+        "Rock_Salt": "generated; the band's salt comes from the lord's cart, as the document has it until a vein is mined",
+        "Plank": "what a floor, a door or a fence is laid as: made of logs, no item of its own",
+        "Shingle": "a roof's material, not used by the hovel",
+        "Thatch": "laid from straw",
+        "Daub": "laid from straw at one rate with thatch; the document's tier with daub names clay",
+        "Fieldstone": "stone laid: a retaining wall, a stair, a step"
+      }
+    }
+  ],
+  "built_otherwise": {
+    "about": "Ids of the document the build has a thing for that no enumeration above names.",
+    "zones": [],
+    "buildings": ["open_yard", "staging_area"],
+    "resources": ["cart", "straw_pallet", "campfire"],
+    "fauna": ["deer"],
+    "deposits": ["~aquifer"],
+    "recipes": ["fell_tree", "forage_berries", "forage_vegetables", "pick_fruit", "cut_grass", "reap_wild_grain", "hunt_deer",
+                "draw_water", "quarry_rock", "cook_pottage", "salt_meat", "make_campfire", "make_straw_pallet", "make_barrel", "make_shelves"]
+  },
+  "numbers": [
+    {"what": "days in a season", "doc": "meta.calendar.days_per_season", "file": "src/castle-climate.ads",
+     "pattern": "Days_Per_Season\\s*:\\s*constant\\s*:=\\s*(\\d+)", "code": "Castle.Climate.Days_Per_Season"},
+    {"what": "serfs who arrive", "doc": "game_start.colonists.2.count", "file": "src/castle-colony.ads",
+     "pattern": "Arrivals\\s*:\\s*constant\\s*:=\\s*(\\d+)", "code": "Castle.Colony.Arrivals"},
+    {"what": "the day of the year the game starts on, counted from 0 (the document's season and day of arrival, the first day of spring being day 0)",
+     "doc_calc": "start_day_of_year", "file": "game/castle_game.adb",
+     "pattern": "Start_Day\\s*:\\s*Float\\s*:=\\s*([0-9.]+)", "code": "Start_Day in game/castle_game.adb and tools/colony_run.adb"},
+    {"what": "salt on the lord's cart", "doc": "game_start.provisions.carts.0.contents.salt", "file": "src/castle-colony.ads",
+     "pattern": "Cart_Salt_Lb\\s*:\\s*constant\\s*:=\\s*(\\d+)", "code": "Castle.Colony.Cart_Salt_Lb",
+     "units_differ": "the code counts pounds (his 60 lb of meat a deer, 2026-11-12), the document's quantities are placeholders"},
+    {"what": "a berry bush grows back, days", "doc": "flora.3.regrow_days", "file": "src/castle-colony.ads",
+     "pattern": "Regrow_Days\\s*:\\s*constant[^:]*:=\\s*([0-9.]+)", "code": "Castle.Colony.Regrow_Days"}
+  ]
+}

@@ -16,6 +16,7 @@ begin
       M.Cell := 0;
    end if;
    if M.Carry = Carcass then
+      Note_Drop (M, Its_Carrier_Died);
       Drop_Carcass (M);
    end if;
    if M.Carry = Ladder and then M.Carried > 0 then

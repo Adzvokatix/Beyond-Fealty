@@ -13,7 +13,8 @@ package Castle.Input is
       Show_Help, Show_Survey, Show_Debug, Hide_HUD, Show_Routes, Show_Nav, Show_Wells,
       Show_Band, Open_Roofs, Pause_Game, Speed_1, Speed_2, Speed_3,
       UI_Smaller, UI_Larger,
-      Screenshot, Quit);
+      Screenshot, Quit,
+      Turn_Held_Left, Turn_Held_Right);     --  what is held to be put down, an eighth of a turn (on the end)
 
    type Keys is array (1 .. 2) of Interfaces.C.int;   --  0 = unbound
 
@@ -54,7 +55,9 @@ package Castle.Input is
       UI_Smaller  => [Castle.GLFW.Key_F10, 0],
       UI_Larger   => [Castle.GLFW.Key_F11, 0],
       Screenshot  => [Castle.GLFW.Key_F12, 0],
-      Quit        => [Castle.GLFW.Key_Escape, 0]];
+      Quit        => [Castle.GLFW.Key_Escape, 0],
+      Turn_Held_Left  => [Castle.GLFW.Key_Z, 0],
+      Turn_Held_Right => [Castle.GLFW.Key_X, 0]];
 
    procedure Attach (W : Castle.GLFW.Window);   --  installs the wheel callback
    procedure Update (W : Castle.GLFW.Window);

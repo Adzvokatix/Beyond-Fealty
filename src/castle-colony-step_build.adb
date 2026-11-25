@@ -5,8 +5,12 @@ procedure Step_Build (I : Positive) is
    --  it is at a metre of path (else at a patch of the camp's ground)
    At_Path : constant Boolean := M.Site_Seg in 1 .. N_Paths and then M.Site_M > 0;
    --  what it came for is still to do
+   --  (stone in its hands for the square's walls: whatever is left to lay at that patch, or near it)
+   At_Wall : constant Boolean := not At_Path and then M.Use_For = For_Wall and then M.Carried > 0 and then M.Carry = Stone;
    Wanted  : constant Boolean :=
-     (if At_Path then Path_Todo (M.Site_Seg, M.Site_M) else M.Patch > 0 and then not Camp_Built);
+     (if At_Path then Path_Todo (M.Site_Seg, M.Site_M)
+      elsif At_Wall then M.Patch > 0
+      else M.Patch > 0 and then not Camp_Built);
 
    --  Done with that metre: its stretch is still its own (it thinks again,
    --  and goes on to the next of it); with no stretches, it has none.
@@ -47,6 +51,20 @@ begin
             if At_Path then
                Lay_Metre (M.Site_Seg, M.Site_M);
                M.Site_Laid := Natural'Min (255, M.Site_Laid + 1);
+            elsif At_Wall then
+               --  a stone's worth of wall laid, and the earth over a ledge or a stair's steps dug off
+               declare
+                  Laid, Dug : Natural;
+               begin
+                  Wall_Bout (M.Patch, I, Wall_Per_Stone, Laid, Dug);
+                  if Laid > 0 then
+                     M.Carried := M.Carried - 1;
+                     if M.Carried = 0 then
+                        M.Carry := Nothing;
+                        M.Use_For := For_Store;
+                     end if;
+                  end if;
+               end;
             else
                Make_Ready (M.Patch, I);
                if M.Carried > 0 and then M.Carry = Earth then

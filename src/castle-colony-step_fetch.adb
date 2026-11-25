@@ -45,6 +45,17 @@ begin
             end if;
          elsif M.Work >= Fetch_S (M.Fetch) then
             M.Work := 0.0;
+            --  long grass two blocks high is cut from the top: the block cut is the top of its
+            --  stalk, so no tuft is ever left standing on air (John, 2026-11-17: "Grass in the air
+            --  ... not attached to the ground in places. Even before compacting": a porter had cut
+            --  the lower block of a tuft two high and left the upper over the gap)
+            if Top_Cut_On and then M.Fetch = Straw and then Source_At (M.Fetch, M.Tgt) then
+               while Mat (Integer (M.Tgt.X), Integer (M.Tgt.Y), Integer (M.Tgt.Z) + 1) = Tall_Grass
+                 and then Mat (Integer (M.Tgt.X), Integer (M.Tgt.Y), Integer (M.Tgt.Z)) = Tall_Grass
+               loop
+                  M.Tgt.Z := M.Tgt.Z + 1;
+               end loop;
+            end if;
             if Source_At (M.Fetch, M.Tgt) then
                --  wild grain: the stalk cut to the ground, its grain kept with the straw
                if M.Fetch = Straw and then Mat (Integer (M.Tgt.X), Integer (M.Tgt.Y), Integer (M.Tgt.Z)) = Wild_Grain

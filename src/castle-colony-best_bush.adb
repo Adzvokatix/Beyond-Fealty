@@ -8,9 +8,9 @@ begin
       declare
          Bu : Bush renames Bushes (K);
       begin
-         if Bu.Ripe > 0 and then (Bu.Reserved_By = 0 or else Bu.Reserved_By = I)
-           and then not Failed (M, K)
-           and then Flat_Dist (Bu.Centre, Stake_At) <= Work_Radius_M
+         if Bu.Ripe > 0 and then Bush_Free (K, I)
+           and then not Failed (M, K) and then not No_Way_Told (K)
+           and then Flat_Dist (Bu.Centre, Stake_At) <= Food_Reach_M
          then
             declare
                S : constant Float := Flat_Dist (M.Pos, Bu.Centre) + Stake_Weight (M) * Flat_Dist (Stake_At, Bu.Centre);

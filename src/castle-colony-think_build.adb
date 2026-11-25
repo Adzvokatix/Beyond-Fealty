@@ -101,6 +101,70 @@ function Think_Build (I : Positive) return Boolean is
       return (for some P in Wants'Range => Wants (P) and then not Failed (M, Patch_Fail + P));
    end Hollow_Free;
 
+   --  With stone in its hands for the square's walls: to the nearest patch
+   --  of them that still wants any and that nobody is at.  Any: there is
+   --  some still to lay, whether or not it could be gone to.
+   function Go_Wall (Any : out Boolean) return Boolean is
+      Plan    : Wall_Plan;
+      Stone_N, Dig_N : Natural;
+      Wants   : Patch_Flags;
+      Sum     : Patch_Sums;
+      Load    : constant Item_Kind := M.Carry;
+      Loaded  : constant Natural := M.Carried;
+   begin
+      Plan_Walls (Plan);
+      Walls_Wanting (Plan, Stone_N, Dig_N, Wants, Sum);
+      Any := Stone_N > 0;
+      Others_At := False;
+      for J in 1 .. N_Members loop
+         if J /= I and then not Band (J).Is_Dead and then Band (J).State in To_Patch | Tamping
+           and then Band (J).Use_For = For_Wall and then Band (J).Patch in Wants'Range
+         then
+            Others_At := Others_At
+              or else (Wants (Band (J).Patch) and then not Failed (M, Patch_Fail + Band (J).Patch));
+            Wants (Band (J).Patch) := False;         --  someone has that one
+         end if;
+      end loop;
+      for Attempt in 1 .. 3 loop
+         declare
+            Best   : Natural := 0;
+            Best_D : Float := Float'Last;
+            At_P   : Vec3 := (0.0, 0.0, 0.0);
+         begin
+            for P in Wants'Range loop
+               if Wants (P) and then not Failed (M, Patch_Fail + P) then
+                  declare
+                     C : constant Vec3 := (Sum (P).X / Sum (P).Z, Sum (P).Y / Sum (P).Z, 0.0);
+                     D : constant Float := Flat_Dist (C, M.Pos);
+                  begin
+                     if D < Best_D then
+                        Best_D := D;
+                        Best := P;
+                        At_P := C;
+                     end if;
+                  end;
+               end if;
+            end loop;
+            if Best = 0 then
+               return False;
+            end if;
+            At_P := On_Ground (At_P.X, At_P.Y);
+            if Route_To (M, At_P, Patch_Reach_M) then
+               Release (M, I);
+               M.Carry := Load;                      --  (the stone in its hands it keeps)
+               M.Carried := Loaded;
+               M.Use_For := For_Wall;
+               M.Patch := Best;
+               M.Spot := At_P;
+               M.State := To_Patch;
+               return True;
+            end if;
+            Remember_Failure (M, Patch_Fail + Best);
+         end;
+      end loop;
+      return False;
+   end Go_Wall;
+
    --  To a metre of planned path still to lay: of its own stretch if it has
    --  one (Mine), else of a stretch nobody has, which is its own from then
    --  on; the metre with the least way to it, weighed toward the stake (a
@@ -194,6 +258,38 @@ function Think_Build (I : Positive) return Boolean is
       M.Carried := 0;
       M.Why := Nothing_Yet;
    end if;
+   --  stone in its hands for the walls of the square the colony was founded
+   --  on: to where some is still to lay, and laid there; with every such
+   --  place someone's, it waits for one; with none it can get to, or none
+   --  left, what it has goes to a stockpile (or, with no room for it, is
+   --  left lying)
+   if M.Carried > 0 and then M.Use_For = For_Wall then
+      declare
+         Any : Boolean := False;
+      begin
+         if M.Carry = Stone and then Walls_On and then Camp_Square and then not Camp_To_Build
+           and then not Failed (M, Wall_Fail)
+         then
+            if Go_Wall (Any) then
+               return True;
+            end if;
+            if Any and then Others_At then
+               M.Wait := 1.0;
+               M.State := Idle;
+               return True;
+            end if;
+            if Any then
+               Remember_Failure (M, Wall_Fail, Seconds => 600);
+            end if;
+         end if;
+      end;
+      M.Use_For := For_Store;
+      if not Can_Store (M) then               --  (and with nowhere to keep it, it is left lying by the wall)
+         M.Carry := Nothing;
+         M.Carried := 0;
+      end if;
+      return False;
+   end if;
    --  a load for the camp's building: there with it (what is no longer
    --  wanted goes to a stockpile, and deadwood, which is not stored, is let fall)
    if M.Carried > 0 and then M.Use_For in For_Ring | For_Frame | For_Seat then
@@ -221,7 +317,7 @@ function Think_Build (I : Positive) return Boolean is
    if M.Carried > 0 then
       return False;                          --  what it has in its hands first
    end if;
-   if M.Use_For in For_Ring | For_Frame | For_Floor
+   if M.Use_For in For_Ring | For_Frame | For_Floor | For_Wall
      or else (M.Use_For not in For_Store | For_House | For_Bed and then M.Job /= Cook)
    then
       M.Use_For := For_Store;                --  an errand that came to nothing
@@ -230,6 +326,18 @@ function Think_Build (I : Positive) return Boolean is
    --  from the building of its own camp)
    Place := Has_Place;
    if Camp_To_Build and then (Place or else M.Job = Cook) then
+      --  the trees that stand on the square the colony was founded on, felled before its ground is made
+      --  under them (John, 2026-11-20: "a tree ... felled and removed anywhere else"); one that someone
+      --  else is at, or that cannot be got to, leaves this one to the ground meanwhile
+      if Camp_Square then
+         declare
+            Standing : Boolean;
+         begin
+            if Go_Fell_Square (I, Standing) then
+               return True;
+            end if;
+         end;
+      end if;
       --  the ground first, from the fire outward
       if Go_Patch then
          return True;
@@ -297,6 +405,11 @@ function Think_Build (I : Positive) return Boolean is
    if Place and then Go_Tow (I) then
       return True;
    end if;
+   --  the trees that stand in a stockpile put down whole, felled and taken out (John, 2026-11-20:
+   --  "fell the tree in the stockpile"): an extra task, as its path is
+   if Place and then Box_Trees_Standing > 0 and then Go_Fell_Box (I) then
+      return True;
+   end if;
    --  then the paths the player has planned
    if Paths_Left_M > 0 then
       if Stretches_On and then M.Site_Seg > 0 then
@@ -316,6 +429,32 @@ function Think_Build (I : Positive) return Boolean is
       elsif Place and then Go_Lay then
          return True;
       end if;
+   end if;
+   --  then the walls and stairs of the square the colony was founded on (John, 2026-11-20: "stone wall
+   --  and stair"): stone for them, a load at a time while more is wanted than is on its way: from a
+   --  stockpile, what the hearth and the houses do not want of it; else prised off a boulder within
+   --  the band's reach (it looks no further for them)
+   if Place and then Wall_Left_N > 0 and then Walls_On and then Camp_Square and then not Camp_To_Build
+     and then not Failed (M, Camp_Id) and then not Failed (M, Wall_Fail)
+   then
+      declare
+         Need   : constant Integer := (Wall_Left_N + Wall_Per_Stone - 1) / Wall_Per_Stone - Build_Coming (For_Wall);
+         Wanted : constant Natural := (if N_Houses > 0 then Houses_Short (Stone) else 0);
+         Free   : constant Natural := Free_For_Building (Stone);
+      begin
+         if Need > 0 then
+            if Free > Wanted then
+               if Go_Take (I, Stone, Positive'Min (Need, Positive'Min (Carry_Limit (Stone), Free - Wanted)), For_Wall) then
+                  return True;
+               end if;
+            elsif Go_Fetch (I, Stone, Reach_M => Search_Reach, Least_M => Stone_From) then
+               M.Use_For := For_Wall;
+               return True;
+            else
+               Remember_Failure (M, Wall_Fail, Seconds => 600);      --  (none to be had: not asked again for a while)
+            end if;
+         end if;
+      end;
    end if;
    return False;
    end Decide;

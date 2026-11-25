@@ -24,6 +24,8 @@ with Test_World;  use Test_World;
 
 procedure Path_Check is
 
+   Hold_Doors : Boolean := True;       --  (--no-door-cells: a doorway's cells are not held open, as before 2026-11-20)
+
    pragma Warnings (Off, "formal parameter * is not referenced");   --  spot tests take all three
 
    Fails : Natural := 0;
@@ -100,6 +102,11 @@ procedure Path_Check is
    end Plan_Show;
 
 begin
+   for A in 1 .. Ada.Command_Line.Argument_Count loop
+      if Ada.Command_Line.Argument (A) = "--no-door-cells" then
+         Hold_Doors := False;
+      end if;
+   end loop;
    Test_World.Attach;
 
    ------------------------------------------------------------ 1. open ground
@@ -428,6 +435,279 @@ begin
    begin
       Fill (10.0, 40.0, 20.0, 40.25, Ground_Row, Ground_Row + 11, Plank);
       Check (Changed (R) and then Still_Good (R, 1), "an edit off the route: changed ground, the route still good");
+   end;
+
+   ------------------------------------------------------------ 10b. a building walked where it is drawn
+   Put_Line ("a building walked where it is drawn:");
+   Meadow;
+   --  its blocks: 10 m by 5 m square to the grid, walls a block thick and 3 m high, no way in
+   Fill (28.0, 30.0, 38.0, 35.0, Ground_Row, Ground_Row + 11, Plank);
+   Fill (28.25, 30.25, 37.75, 34.75, Ground_Row, Ground_Row + 11, Air);
+   declare
+      Cx : constant Float := 33.0;
+      Cy : constant Float := 32.5;
+      Cs : constant Float := 0.707_106_78;
+      function At_UV (U, V : Float) return Vec3 is ((Cx + U * Cs - V * Cs, Cy + U * Cs + V * Cs, 0.0));
+      function Piece (U0, U1, V0, V1 : Float) return Kept_Corners is
+        ([At_UV (U0, V0), At_UV (U1, V0), At_UV (U1, V1), At_UV (U0, V1)]);
+      --  as drawn: turned an eighth about its middle, a doorway 2 m wide in each end (Left, Right: open)
+      function House (Left, Right : Boolean) return Drawn_House is
+         D : Drawn_House;
+         procedure Add (U0, U1, V0, V1 : Float) is
+         begin
+            D.Walls := D.Walls + 1;
+            D.Wall (D.Walls) := Piece (U0, U1, V0, V1);
+         end Add;
+      begin
+         D.Box := (28.0, 30.0, 38.0, 35.0);
+         D.Z := Ground_Row;
+         Add (-5.0, 5.0, -2.5, -2.25);
+         Add (-5.0, 5.0, 2.25, 2.5);
+         if Left then
+            Add (-5.0, -4.75, -2.5, -1.0);
+            Add (-5.0, -4.75, 1.0, 2.5);
+         else
+            Add (-5.0, -4.75, -2.5, 2.5);
+         end if;
+         if Right then
+            Add (4.75, 5.0, -2.5, -1.0);
+            Add (4.75, 5.0, 1.0, 2.5);
+         else
+            Add (4.75, 5.0, -2.5, 2.5);
+         end if;
+         return D;
+      end House;
+      A   : constant Vec3 := P (10.0, 10.0);
+      Mid : constant Vec3 := P (Cx, Cy);
+      --  (a spot's place along and across the house as drawn)
+      function U_Of (X, Y : Float) return Float is ((X - Cx) * Cs + (Y - Cy) * Cs);
+      function V_Of (X, Y : Float) return Float is (-(X - Cx) * Cs + (Y - Cy) * Cs);
+      function Off_Walls (X, Y, Zm : Float) return Boolean is
+        (abs U_Of (X, Y) > 5.05 or else abs V_Of (X, Y) > 2.55             --  outside it
+         or else (abs U_Of (X, Y) < 4.7 and then abs V_Of (X, Y) < 2.2)     --  inside it
+         or else abs V_Of (X, Y) < 1.0);                                    --  in a doorway
+      function Never_Through is new Every_Spot (Off_Walls);
+      function By_Left (X, Y, Zm : Float) return Boolean is (U_Of (X, Y) in -5.2 .. -4.6 and then abs V_Of (X, Y) < 1.0);
+      function By_Right (X, Y, Zm : Float) return Boolean is (U_Of (X, Y) in 4.6 .. 5.2 and then abs V_Of (X, Y) < 1.0);
+      function Through_Left is new Some_Spot (By_Left);
+      function Through_Right is new Some_Spot (By_Right);
+      function Level (X, Y, Zm : Float) return Boolean is (Zm = Ground_M);
+      function All_Level is new Every_Spot (Level);
+   begin
+      declare
+         R : constant Route := Plan_Show (A, Mid, "as its blocks stand");
+      begin
+         Check (R.Result = Partial, "as its blocks stand there is no way in");
+         Check (Surface_Z (28.1, 34.9) /= Ground_M, "and where its wall stands nobody is at the ground's level");
+      end;
+      Set_Drawn ([1 => House (Left => True, Right => True)]);
+      declare
+         R : constant Route := Plan_Show (A, Mid, "walked as drawn");
+         Fl : Floor_List;
+         N  : Natural;
+      begin
+         Check (R.Result = Found and then Never_Through (R) and then (Through_Left (R) or else Through_Right (R)),
+                "walked as drawn: in at a doorway as drawn, and nowhere through a wall as drawn");
+         Check (All_Level (R) and then Still_Good (R, 1), "at the floor's level all the way, every step of it walked");
+         Check (Surface_Z (28.1, 34.9) = Ground_M and then Surface_Z (33.0, 30.1) = Ground_M,
+                "where its blocks stand is walked at the floor's level");
+         Floors_At (Integer (Float'Floor (33.0 / Cell_M)), Integer (Float'Floor (30.1 / Cell_M)), N, Fl);
+         Check (N = 1, "with one floor there (nobody is put on its roof)");
+         Check (Surface_Z (At_UV (0.0, 2.4).X, At_UV (0.0, 2.4).Y) < 0.0 and then Surface_Z (At_UV (-4.9, 2.0).X, At_UV (-4.9, 2.0).Y) < 0.0,
+                "and nobody stands in a wall as drawn");
+      end;
+      Set_Drawn ([1 => House (Left => True, Right => False)]);
+      declare
+         R : constant Route := Plan_Show (At_UV (9.0, 0.0) + (0.0, 0.0, Ground_M), Mid, "one doorway shut");
+      begin
+         Check (R.Result = Found and then Through_Left (R) and then not Through_Right (R) and then Never_Through (R),
+                "one doorway shut: round by the other");
+      end;
+      Set_Drawn ([1 => House (Left => False, Right => True)]);
+      declare
+         R : constant Route := Plan_Show (At_UV (-9.0, 0.0) + (0.0, 0.0, Ground_M), Mid, "the other shut");
+      begin
+         Check (R.Result = Found and then Through_Right (R) and then not Through_Left (R) and then Never_Through (R),
+                "the other shut: round by the first");
+      end;
+      Set_Drawn ([1 => House (Left => False, Right => False)]);
+      declare
+         R : constant Route := Plan_Show (A, Mid, "both shut");
+         Leak : Natural := 0;
+      begin
+         Check (R.Result = Partial and then Last_Stats.Out_Of_Reach, "both shut: no way in (a wall at 45 degrees does not leak)");
+         --  from every side
+         for K in 0 .. 35 loop
+            declare
+               Ang : constant Float := Float (K) * Ada.Numerics.Pi / 18.0;
+               Q   : constant Route := Plan (P (Cx + 12.0 * Cos (Ang), Cy + 12.0 * Sin (Ang)), Mid);
+            begin
+               if Q.Result = Found then
+                  Leak := Leak + 1;
+               end if;
+            end;
+         end loop;
+         Check (Leak = 0, "from thirty-six sides (" & Leak'Image & " got in)");
+         --  and out: from inside, to outside
+         Check (Plan (Mid, A).Result = Partial, "nor out");
+      end;
+      Set_Drawn ([1 => House (Left => True, Right => True)]);
+      declare
+         --  somebody standing where a wall as drawn has just shut the ground
+         W : constant Vec3 := At_UV (0.0, 2.4) + (0.0, 0.0, Ground_M);
+         R : constant Route := Plan_Show (W, A, "from under a wall as drawn");
+      begin
+         Check (R.Result = Found, "whoever stands where a wall is drawn when it shuts walks off it");
+      end;
+      Set_Drawn ([]);
+      declare
+         R : constant Route := Plan_Show (A, Mid, "the list taken away");
+      begin
+         Check (R.Result = Partial and then Surface_Z (28.1, 34.9) /= Ground_M, "the list taken away: as its blocks stand again");
+      end;
+   end;
+
+   ------------------------------------------------------------ 10c. a doorway a metre wide at 45 degrees
+   --  A hovel's doorway is a metre wide, two cells: at 45 degrees a cell spans 0.71 m along the wall,
+   --  and where the doorway falls on the cells decides whether one clears both jambs.  A hovel's walls
+   --  as drawn slow the feet, they do not shut (Castle.Nav.Wall_Pace): wherever
+   --  the doorway falls the way in goes through it and not through a wall; walled up, there is a way in
+   --  all the same, through the wall (nobody is shut in or out); and walls that shut (a storehouse's),
+   --  walled up, let nobody in.
+   Put_Line ("a doorway a metre wide in a wall drawn at 45 degrees:");
+   declare
+      Cs : constant Float := 0.707_106_78;
+      Ways, No_Ways, Leaks, Tried, Through_Jamb, Through_Wall, Walled_Ways : Natural := 0;
+   begin
+      for Way in 0 .. 1 loop                       --  (turned to the left, to the right)
+         for Ox in 0 .. 4 loop
+            for Oy in 0 .. 4 loop
+               declare
+                  --  the doorway's middle (what it is turned about): moved a tenth of a metre a step
+                  Dx : constant Float := 32.0 + 0.1 * Float (Ox);
+                  Dy : constant Float := 30.0 + 0.1 * Float (Oy);
+                  Sg : constant Float := (if Way = 0 then 1.0 else -1.0);
+                  --  a place of it as drawn: U along its front from the doorway's middle, V into it
+                  function At_UV (U, V : Float) return Vec3 is
+                    ((Dx + U * Cs - Sg * V * Cs, Dy + Sg * U * Cs + V * Cs, 0.0));
+                  function Piece (U0, U1, V0, V1 : Float) return Kept_Corners is
+                    ([At_UV (U0, V0), At_UV (U1, V0), At_UV (U1, V1), At_UV (U0, V1)]);
+                  function House (Door : Boolean; Held : Boolean; Slow : Boolean) return Drawn_House is
+                     D : Drawn_House;
+                     procedure Add (U0, U1, V0, V1 : Float) is
+                     begin
+                        D.Walls := D.Walls + 1;
+                        D.Wall (D.Walls) := Piece (U0, U1, V0, V1);
+                     end Add;
+                  begin
+                     --  (6 m by 5 m, its blocks standing square to the grid from its doorway back; its walls
+                     --  a block thick, its doorway held as a hovel's is: from a metre out to 0.6 m in)
+                     D.Box := (Dx - 3.25, Dy - 0.375, Dx + 3.25, Dy + 5.125);
+                     D.Z := Ground_Row;
+                     D.Speed := 1.0;
+                     D.Whole := True;
+                     D.Slow := Slow;
+                     if Door then
+                        Add (-3.0, -0.5, -0.125, 0.125);
+                        Add (0.5, 3.0, -0.125, 0.125);
+                     else
+                        Add (-3.0, 3.0, -0.125, 0.125);
+                     end if;
+                     Add (-3.0, 3.0, 4.625, 4.875);
+                     Add (-3.0, -2.75, -0.125, 4.875);
+                     Add (2.75, 3.0, -0.125, 4.875);
+                     if Door and then Held then
+                        D.Doors := 1;
+                        D.Door (1) := Piece (-0.375, 0.375, -1.0, 0.625);
+                     end if;
+                     return D;
+                  end House;
+                  Inside  : constant Vec3 := At_UV (0.0, 2.5) + (0.0, 0.0, Ground_M);
+                  Outside : constant Vec3 := At_UV (0.0, -6.0) + (0.0, 0.0, Ground_M);
+                  function U_Of (X, Y : Float) return Float is ((X - Dx) * Cs + Sg * (Y - Dy) * Cs);
+                  function V_Of (X, Y : Float) return Float is (-Sg * (X - Dx) * Cs + (Y - Dy) * Cs);
+                  --  (in the front wall as drawn, out of the doorway: a point of a way there has gone through
+                  --  a jamb; anywhere in a wall, through a wall)
+                  function In_Jamb (X, Y, Zm : Float) return Boolean is
+                    (abs V_Of (X, Y) < 0.125 and then abs U_Of (X, Y) in 0.5 .. 3.0);
+                  function In_Wall (X, Y, Zm : Float) return Boolean is
+                    (In_Jamb (X, Y, Zm)
+                     or else (abs (V_Of (X, Y) - 4.75) < 0.125 and then abs U_Of (X, Y) <= 3.0)
+                     or else (abs (abs U_Of (X, Y) - 2.875) < 0.125 and then V_Of (X, Y) in -0.125 .. 4.875));
+                  function Jamb is new Some_Spot (In_Jamb);
+                  function Wall is new Some_Spot (In_Wall);
+               begin
+                  Tried := Tried + 1;
+                  Meadow;
+                  Set_Drawn ([1 => House (Door => True, Held => Hold_Doors, Slow => True)]);
+                  declare
+                     R : constant Route := Plan (Outside, Inside);
+                  begin
+                     if R.Result = Found then
+                        Ways := Ways + 1;
+                        if Jamb (R) then
+                           Through_Jamb := Through_Jamb + 1;
+                        end if;
+                        if Wall (R) then
+                           Through_Wall := Through_Wall + 1;
+                        end if;
+                     else
+                        No_Ways := No_Ways + 1;
+                     end if;
+                  end;
+                  Set_Drawn ([1 => House (Door => False, Held => False, Slow => True)]);
+                  declare
+                     R : constant Route := Plan (Outside, Inside);
+                  begin
+                     if R.Result = Found then
+                        Walled_Ways := Walled_Ways + 1;
+                     end if;
+                  end;
+                  Set_Drawn ([1 => House (Door => False, Held => False, Slow => False)]);
+                  if Plan (Outside, Inside).Result = Found then
+                     Leaks := Leaks + 1;
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end loop;
+      --  two buildings: where one's blocks stand lies across the other's wall as drawn.  The wall is a
+      --  wall all the same (walls are asked of every building before any box).
+      declare
+         function At_UV (U, V : Float) return Vec3 is ((32.0 + U * Cs - V * Cs, 30.0 + U * Cs + V * Cs, 0.0));
+         function Piece (U0, U1, V0, V1 : Float) return Kept_Corners is
+           ([At_UV (U0, V0), At_UV (U1, V0), At_UV (U1, V1), At_UV (U0, V1)]);
+         Shut_House, Other : Drawn_House;
+         Inside  : constant Vec3 := At_UV (0.0, 2.5) + (0.0, 0.0, Ground_M);
+         Outside : constant Vec3 := At_UV (0.0, -6.0) + (0.0, 0.0, Ground_M);
+         Mid_Wall : constant Vec3 := At_UV (0.0, 0.0);
+      begin
+         Meadow;
+         Shut_House.Box := (32.0 - 3.25, 30.0 - 0.375, 32.0 + 3.25, 30.0 + 5.125);
+         Shut_House.Z := Ground_Row;
+         Shut_House.Walls := 4;
+         Shut_House.Wall (1) := Piece (-3.0, 3.0, -0.125, 0.125);
+         Shut_House.Wall (2) := Piece (-3.0, 3.0, 4.625, 4.875);
+         Shut_House.Wall (3) := Piece (-3.0, -2.75, -0.125, 4.875);
+         Shut_House.Wall (4) := Piece (2.75, 3.0, -0.125, 4.875);
+         --  (another's blocks, standing across the middle of that front wall)
+         Other.Box := (Mid_Wall.X - 1.5, Mid_Wall.Y - 1.5, Mid_Wall.X + 1.5, Mid_Wall.Y + 1.5);
+         Other.Z := Ground_Row;
+         Set_Drawn ([Other, Shut_House]);
+         Check (Plan (Outside, Inside).Result /= Found and then Surface_Z (Mid_Wall.X, Mid_Wall.Y) < 0.0,
+                "where one building's blocks stand across another's wall as drawn, the wall is a wall: no way in");
+      end;
+      Set_Drawn ([]);
+      Put_Line ("    " & Tried'Image & " places of the doorway on the cells, either way turned:" & Ways'Image
+                & " with a way in," & No_Ways'Image & " with none;" & Through_Wall'Image & " of them through a wall,"
+                & Through_Jamb'Image & " through a jamb");
+      Check (No_Ways = 0 and then Ways = Tried and then Through_Wall = 0 and then Through_Jamb = 0,
+             "wherever a doorway a metre wide falls on the cells the way in goes through it, none through a wall ("
+             & Ways'Image & " of" & Tried'Image & ";" & Through_Wall'Image & ")");
+      Check (Walled_Ways = Tried,
+             "walled up, a way in is found all the same, through the wall: nobody is shut"
+             & " in or out (" & Walled_Ways'Image & ")");
+      Check (Leaks = 0, "and with walls that shut (a storehouse's), walled up, there is none (" & Leaks'Image & ")");
    end;
 
    ------------------------------------------------------------ 11. seed 1

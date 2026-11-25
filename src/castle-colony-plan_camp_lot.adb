@@ -120,6 +120,6 @@ begin
       Refused_For := (case Plan_Refused is
                          when Lot_Ok => Taken_None,
                          when No_Room | Too_Large => Out_Of_Room,
-                         when Off_Path | No_Ground => No_Free_Ground);
+                         when Off_Path | No_Ground | Too_Small | One_Only | Too_Steep => No_Free_Ground);
    end;
 end Plan_Camp_Lot;

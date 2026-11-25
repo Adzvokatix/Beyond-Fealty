@@ -7,7 +7,6 @@ with System;                  use System;
 with System.Storage_Elements; use System.Storage_Elements;
 with Ada.Numerics;
 with Ada.Numerics.Elementary_Functions;
-with Castle.Blocks;
 with Castle.Bodies;
 with Castle.Colors;
 with Castle.Figures;
@@ -68,6 +67,16 @@ package body Castle.Render is
      "uniform float u_blend;" & LF &
      "uniform int u_wmask;" & LF &
      "uniform float u_wstep;" & LF &
+     --  Buildings drawn turned (the spec, Set_Turns): the blocks in a box, from a height up, turned
+     --  about a point; v_turn the turn's cosine and sine (1, 0: none), v_home where it is drawn
+     --  before the turn (what clears a roof or a wall goes by the house as it stands on the grid).
+     "uniform int u_turns;" & LF &
+     "uniform vec4 u_turn_box[" & GLSL_Int (Max_Turns) & "];" & LF &
+     "uniform vec4 u_turn_how[" & GLSL_Int (Max_Turns) & "];" & LF &
+     "uniform float u_turn_z[" & GLSL_Int (Max_Turns) & "];" & LF &
+     "uniform vec4 u_turn_all;" & LF &            --  (the box every turn's box lies in)
+     "flat out vec2 v_turn;" & LF &
+     "out vec3 v_home;" & LF &
      "out vec3 v_world;" & LF &
      "out vec3 v_grid;" & LF &                 --  where it is on the block grid (foliage is drawn moved off it)
      "out vec4 v_bend;" & LF &                 --  foliage: what the light's normal turns by; how far it stands out
@@ -116,6 +125,31 @@ package body Castle.Render is
      "float stepped(float l, float fl) { return max(floor(l * u_wstep + 0.5), floor(fl * u_wstep) + 0.5) / u_wstep; }" & LF &
      "const vec2 corner[6] = vec2[6](vec2(0,0), vec2(1,0), vec2(1,1)," &
      " vec2(0,0), vec2(1,1), vec2(0,1));" & LF &
+     --  (the same quad cut along its other diagonal)
+     "const vec2 corner_b[6] = vec2[6](vec2(0,0), vec2(1,0), vec2(0,1)," &
+     " vec2(1,0), vec2(1,1), vec2(0,1));" & LF &
+     --  Where corner I (the occlusion's order) of a boulder's soft quad is
+     --  drawn, as the rock branch of main moves it (see there).
+     "vec3 rock_corner(uvec2 q, int face, int x, int y, int z, int i) {" & LF &
+     "  vec2 kk = vec2((i == 1 || i == 2) ? 1.0 : 0.0, (i >= 2) ? 1.0 : 0.0);" & LF &
+     "  vec3 pp;" & LF &
+     "  if (face < 2) pp = vec3(float(x + 1 - face), float(y) + kk.x, float(z) + kk.y);" & LF &
+     "  else if (face < 4) pp = vec3(float(x) + kk.x, float(y + 3 - face), float(z) + kk.y);" & LF &
+     "  else pp = vec3(float(x) + kk.x, float(y) + kk.y, float(z + 5 - face));" & LF &
+     "  uint bits = ((q.y >> 16u) & 0xFFFFu) | ((q.y & 0xFFu) << 16u);" & LF &
+     "  uint code = (bits >> uint(6 * i)) & 63u;" & LF &
+     "  vec3 pull = vec3(pull_of(code & 3u), pull_of((code >> 2u) & 3u), pull_of((code >> 4u) & 3u));" & LF &
+     "  if (((code >> 4u) & 3u) == 3u)" & LF &
+     "    return pp + vec3(pull.xy, 0.0) * " & GLSL (Float (Foot_Out)) & " - vec3(0.0, 0.0, " & GLSL (Float (Foot_Down)) & ");" & LF &
+     "  if (abs(pull.x) + abs(pull.y) + abs(pull.z) > 1.5) return pp + pull * " & GLSL (Float (Boulder_Cut)) & ";" & LF &
+     "  return pp;" & LF &
+     "}" & LF &
+     --  How folded a quad's two triangles are, cut along the one diagonal or
+     --  the other: the cosine between their normals (1: flat; a triangle of no
+     --  size folds nothing).
+     "float flat_of(vec3 a, vec3 b) {" & LF &
+     "  return (dot(a, a) > 1.0e-10 && dot(b, b) > 1.0e-10) ? dot(normalize(a), normalize(b)) : 1.0;" & LF &
+     "}" & LF &
      "void main() {" & LF &
      "  uvec2 q = quads[gl_VertexID / 6];" & LF &
      "  vec2 k = corner[gl_VertexID % 6];" & LF &
@@ -126,6 +160,16 @@ package body Castle.Render is
      "  bool tuft = (q.x & 0x40000000u) != 0u;" & LF &      --  a plant on the ground: one column, its top moved
      "  float w = soft ? 1.0 : float(((q.x >> 20u) & 31u) + 1u);" & LF &
      "  int face = int((q.x >> 25u) & 7u);" & LF &
+     --  (a boulder's soft quad, its corners moved: cut along the diagonal that
+     --  folds it least, so its two triangles never fold back over each other;
+     --  folded, they stood across the faces round them and flickered)
+     "  if (soft && (q.x & 0x80000000u) == 0u && ((q.y >> 8u) & 255u) == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Boulder)) & "u) {" & LF &
+     "    vec3 c0 = rock_corner(q, face, x, y, z, 0), c1 = rock_corner(q, face, x, y, z, 1);" & LF &
+     "    vec3 c2 = rock_corner(q, face, x, y, z, 2), c3 = rock_corner(q, face, x, y, z, 3);" & LF &
+     "    float fa = flat_of(cross(c1 - c0, c2 - c0), cross(c2 - c0, c3 - c0));" & LF &
+     "    float fb = flat_of(cross(c1 - c0, c3 - c0), cross(c2 - c1, c3 - c1));" & LF &
+     "    if (fb > fa + 1.0e-3) k = corner_b[gl_VertexID % 6];" & LF &
+     "  }" & LF &
      "  float h = soft ? 1.0 : float((q.y & 255u) + 1u);" & LF &
      "  v_mat = (q.y >> 8u) & 255u;" & LF &
      "  v_ao = soft ? 255u : (q.y >> 16u) & 255u;" & LF &
@@ -258,6 +302,20 @@ package body Castle.Render is
      "      uint cz = (cd >> 4u) & 3u;" & LF &
      "      cn[i] = pp + vec3(0.25 * pull_of(cd & 3u), 0.25 * pull_of((cd >> 2u) & 3u)," &
      " cz == 2u ? -1.0 : cz == 3u ? -0.5 : cz == 1u ? 1.0 : 0.0);" & LF &
+     --  (a corner of a roof's ragged edge, bit 20 + its number: it hangs a
+     --  little and is drawn in or out a little, by the place it is moved to,
+     --  so that every face that meets there agrees)
+     "      if (((q.x >> (20u + uint(i))) & 1u) != 0u) {" & LF &
+     "        uint rh = vhash(ivec3(round((vec3(a_origin.xyz) + cn[i]) * 4.0)) + ivec3(7, 29, 3));" & LF &
+     "        float r1 = float(rh & 1023u) / 1023.0, r2 = float((rh >> 10u) & 1023u) / 1023.0;" & LF &
+     --  (a top corner with no pull along the ground is of the roof's top,
+     --  not its edge: it only hangs, by the surface's own amount)
+     "        float drop = ((cd & 15u) != 0u || pp.z < float(z) + 0.5) ? " & GLSL (Float (Castle.Mesher.Thatch_Rag_Drop)) & " : "
+     & GLSL (Float (Castle.Mesher.Thatch_Surface_Drop)) & ";" & LF &
+     "        cn[i] = pp + vec3(0.25 * pull_of(cd & 3u), 0.25 * pull_of((cd >> 2u) & 3u), 0.0) * (0.2 + "
+     & GLSL (Float (Castle.Mesher.Thatch_Rag_Out)) & " * r2)" & LF &
+     "              + vec3(0.0, 0.0, (cz == 2u ? -1.0 : cz == 3u ? -0.5 : cz == 1u ? 1.0 : 0.0) - drop * r1);" & LF &
+     "      }" & LF &
      "    }" & LF &
      "    int ci = (k.y < 0.5) ? int(k.x) : 3 - int(k.x);" & LF &
      "    g = vec3(a_origin.xyz) + cn[ci];" & LF &
@@ -272,10 +330,18 @@ package body Castle.Render is
      "    uint code = (bits >> uint(6 * ci)) & 63u;" & LF &
      "    vec3 pull = vec3(pull_of(code & 3u), pull_of((code >> 2u) & 3u), pull_of((code >> 4u) & 3u));" & LF &
      "    float n = abs(pull.x) + abs(pull.y) + abs(pull.z);" & LF &
-     "    if (n > 1.5 && v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Boulder)) & "u) {" & LF &
-     "      g += pull * " & GLSL (Float (Boulder_Cut)) & ";" & LF &
-     "      vec3 fn = vec3(face == 0 ? 1.0 : face == 1 ? -1.0 : 0.0, face == 2 ? 1.0 : face == 3 ? -1.0 : 0.0," &
+     "    bool rockq = v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Boulder)) & "u;" & LF &
+     "    vec3 fn = vec3(face == 0 ? 1.0 : face == 1 ? -1.0 : 0.0, face == 2 ? 1.0 : face == 3 ? -1.0 : 0.0," &
      " face == 4 ? 1.0 : face == 5 ? -1.0 : 0.0);" & LF &
+     --  (a boulder's foot, z code 3: out from the rock and down into the
+     --  ground; lit as leaning out and up, as ground that rises to the rock)
+     "    if (rockq && ((code >> 4u) & 3u) == 3u) {" & LF &
+     "      vec3 o = vec3(pull.xy, 0.0);" & LF &
+     "      g += o * " & GLSL (Float (Foot_Out)) & " - vec3(0.0, 0.0, " & GLSL (Float (Foot_Down)) & ");" & LF &
+     "      v_bend = vec4(normalize(normalize(o) + vec3(0.0, 0.0, " & GLSL (Float (Foot_Lean)) & ")) - fn, 0.0);" & LF &
+     "    }" & LF &
+     "    else if (n > 1.5 && rockq) {" & LF &
+     "      g += pull * " & GLSL (Float (Boulder_Cut)) & ";" & LF &
      --  (a corner drawn out of a hollow, bit 20 + its number: the way out is the way it went)
      "      bool outw = ((q.x >> (20u + uint(ci))) & 1u) != 0u;" & LF &
      "      v_bend = vec4(normalize(outw ? pull : -pull) - fn, 0.0);" & LF &
@@ -299,6 +365,56 @@ package body Castle.Render is
      "    g.z -= top * (1.0 - mix(" & GLSL (Float (Tuft_Low)) & ", " & GLSL (Float (Tuft_High)) & ", r.z));" & LF &
      "    v_bend = vec4(0.0, 0.0, 0.0, top);" & LF &
      "    v_fr = (face < 4) ? uint(h) : 0u;" & LF &             --  a side: how many blocks high the plant is
+     "  }" & LF &
+     "  v_turn = vec2(1.0, 0.0);" & LF &
+     "  v_home = g * 0.25;" & LF &
+     --  (what a building is made of: its frame, its daub, its thatch, its plank; the ground in its
+     --  box, and what grows there, stays)
+     "  if (u_turns > 0 && (v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Log))
+     & "u || v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Daub))
+     & "u || v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Thatch))
+     & "u || v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Plank)) & "u)) {" & LF &
+     --  (a tile of the far view too: its cells are 2, 4 ... blocks a side, so a cell is asked by its
+     --  middle, and its height by its top, a cell's foot lying under the pad it stands on)
+     "    float cs = float(1 << a_origin.w);" & LF &
+     "    vec3 gb = vec3(a_origin.xyz) + vec3(float(x), float(y), float(z)) * cs"
+     & " + ((a_origin.w > 0) ? vec3(0.5 * cs - 0.5, 0.5 * cs - 0.5, cs - 1.0) : vec3(0.0));" & LF &
+     "    for (int i = 0; i < u_turns; i++) {" & LF &
+     "      vec4 tb = u_turn_box[i];" & LF &
+     "      if (gb.x >= tb.x && gb.x < tb.z && gb.y >= tb.y && gb.y < tb.w && gb.z >= u_turn_z[i]) {" & LF &
+     --  (a cell of a far tile that holds the ground under a wall with the wall's foot, and was made
+     --  of the wall's stuff: turned away it left a groove where the house stands, the outline of
+     --  the house that is not there again.  It stays, as turf at the pad's level.)
+     "        if (a_origin.w > 0 && float(a_origin.z) + float(z) * cs < u_turn_z[i]) {" & LF &
+     "          g.z = min(g.z, u_turn_z[i]);" & LF &
+     "          v_mat = " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Grass)) & "u;" & LF &
+     "          v_ao = 255u;" & LF &
+     "          break;" & LF &
+     "        }" & LF &
+     "        vec4 th = u_turn_how[i];" & LF &
+     "        vec2 d = g.xy - th.xy;" & LF &
+     "        g.xy = th.xy + vec2(th.z * d.x - th.w * d.y, th.w * d.x + th.z * d.y);" & LF &
+     "        v_turn = th.zw;" & LF &
+     "        break;" & LF &
+     "      }" & LF &
+     "    }" & LF &
+     "  } else if (u_turns > 0 && face == 4 && !soft) {" & LF &
+     --  (the ground a turned building stands on: the mesher darkened it along the walls that
+     --  stand there, and those are drawn elsewhere: the outline of a house that is not there;
+     --  in a tile of the far view too, a cell asked by its middle and its top)
+     "    float cs = float(1 << a_origin.w);" & LF &
+     "    vec3 gb = vec3(a_origin.xyz) + vec3(float(x), float(y), float(z)) * cs"
+     & " + ((a_origin.w > 0) ? vec3(0.5 * cs - 0.5, 0.5 * cs - 0.5, cs - 1.0) : vec3(0.0));" & LF &
+     "    if (gb.x >= u_turn_all.x && gb.x < u_turn_all.z && gb.y >= u_turn_all.y && gb.y < u_turn_all.w) {" & LF &
+     "      for (int i = 0; i < u_turns; i++) {" & LF &
+     "        vec4 tb = u_turn_box[i];" & LF &
+     "        if (gb.x >= tb.x && gb.x < tb.z && gb.y >= tb.y && gb.y < tb.w" & LF &
+     "            && gb.z >= u_turn_z[i] - 1.5 && gb.z < u_turn_z[i] - 0.5 + cs) {" & LF &
+     "          v_ao = 255u;" & LF &
+     "          break;" & LF &
+     "        }" & LF &
+     "      }" & LF &
+     "    }" & LF &
      "  }" & LF &
      "  v_world = g * 0.25;" & LF &
      "  gl_Position = u_viewproj * vec4(v_world - u_camera, 1.0);" & LF &
@@ -1361,6 +1477,112 @@ package body Castle.Render is
      "  o_color = vec4(grade(col), (v_thin > 0.5) ? 0.5 : 1.0);" & LF &
      "}" & LF;
 
+   --  Serfs of voxel parts (the voxel people's brief, step 1; Castle.Figures,
+   --  "Voxel looks").  Every quad of this frame's voxel figures in one draw,
+   --  two triangles each, pulled from the frame's list by the vertex number:
+   --  its corner from its part's corner (voxels of 2.5 cm, its bone's frame)
+   --  and its own; wound counter-clockwise seen from outside, and a hair past
+   --  its edges so that no crack shows where quads of different sizes meet.
+   --  A face's colour is read where it is drawn: the voxel under the point,
+   --  its byte in its look's slot, that entry of the look's palette.
+   Vox_Data_Source : constant String :=
+     "layout(std430, binding = 14) readonly buffer Vox_Data { uint vd[]; };" & LF &
+     "const uint VOX_SLOT =" & Natural'Image (Castle.Figures.Vox_Slot_Words) & "u;" & LF &
+     "const uint VOX_PARTS =" & Natural'Image (Castle.Figures.Vox_Pal_Words) & "u;" & LF &
+     "const uint VOX_BYTES =" & Natural'Image (Castle.Figures.Vox_Pal_Words + Castle.Figures.Vox_Parts_Words)
+     & "u;" & LF &
+     "const float VOX_BIAS =" & Natural'Image (Castle.Figures.Vox_Bias) & ".0;" & LF;
+
+   Vox_Common_Source : constant String :=
+     "struct Bone { vec4 x; vec4 y; vec4 z; };" & LF &
+     "layout(std430, binding = 8) readonly buffer Fig_Bones { Bone bones[]; };" & LF &
+     "layout(std430, binding = 13) readonly buffer Vox_List { uvec4 vq[]; };" & LF &
+     Vox_Data_Source &
+     "const vec2 vox_fwd[6] = vec2[6](vec2(0,0), vec2(1,0), vec2(1,1), vec2(0,0), vec2(1,1), vec2(0,1));" & LF &
+     "const vec2 vox_rev[6] = vec2[6](vec2(0,0), vec2(1,1), vec2(1,0), vec2(0,0), vec2(0,1), vec2(1,1));" & LF &
+     "void vox_vertex(int id, out vec3 world, out vec3 nrm, out vec2 uv, out uvec4 q) {" & LF &
+     "  q = vq[id / 6];" & LF &
+     "  uint x = q.x & 63u, y = (q.x >> 6u) & 63u, z = (q.x >> 12u) & 63u;" & LF &
+     "  vec2 wh = vec2(float(((q.x >> 18u) & 63u) + 1u), float(((q.x >> 24u) & 63u) + 1u));" & LF &
+     "  uint f = q.y & 7u, axis = f >> 1u, bone = (q.y >> 11u) & 15u;" & LF &
+     "  bool pos = (f & 1u) == 0u;" & LF &
+     "  uint pb = q.w * VOX_SLOT + VOX_PARTS + bone * 8u;" & LF &
+     "  vec3 o = vec3(float(vd[pb + 4u]), float(vd[pb + 5u]), float(vd[pb + 6u])) - VOX_BIAS;" & LF &
+     --  (u then v: across X they are Y and Z, across Y: X and Z, across Z: X and Y; u x v is +X,
+     --  -Y, +Z, so the corners go one way round on +X, -Y and +Z, the other on the rest)
+     "  vec2 c = (pos == (axis != 1u)) ? vox_fwd[id % 6] : vox_rev[id % 6];" & LF &
+     "  vec2 at = (axis == 0u) ? vec2(y, z) : (axis == 1u) ? vec2(x, z) : vec2(x, y);" & LF &
+     "  vec2 p2 = at + c * wh + (c * 2.0 - 1.0) * 0.004;" & LF &
+     "  float lay = float((axis == 0u) ? x : (axis == 1u) ? y : z) + (pos ? 1.0 : 0.0);" & LF &
+     "  vec3 g = (axis == 0u) ? vec3(lay, p2) : (axis == 1u) ? vec3(p2.x, lay, p2.y) : vec3(p2, lay);" & LF &
+     "  Bone b = bones[q.z + bone];" & LF &
+     "  vec3 l = (o + g) * 0.025;" & LF &
+     "  world = vec3(b.x.w, b.y.w, b.z.w) + b.x.xyz * l.x + b.y.xyz * l.y + b.z.xyz * l.z;" & LF &
+     "  vec3 n = vec3(0.0);" & LF &
+     "  n[int(axis)] = pos ? 1.0 : -1.0;" & LF &
+     "  nrm = b.x.xyz * n.x + b.y.xyz * n.y + b.z.xyz * n.z;" & LF &
+     "  uv = c * wh;" & LF &
+     "}" & LF;
+
+   Vox_Vertex_Source : constant String :=
+     "#version 450 core" & LF &
+     Vox_Common_Source &
+     "uniform mat4 u_viewproj;" & LF &
+     "uniform vec3 u_camera;" & LF &
+     "out vec3 v_world;" & LF &
+     "out vec3 v_n;" & LF &
+     "out vec2 v_uv;" & LF &
+     "flat out uvec4 v_q;" & LF &
+     "void main() {" & LF &
+     "  vox_vertex(gl_VertexID, v_world, v_n, v_uv, v_q);" & LF &
+     "  gl_Position = u_viewproj * vec4(v_world - u_camera, 1.0);" & LF &
+     "}" & LF;
+
+   Vox_Fragment_Source : constant String :=
+     "#version 450 core" & LF &
+     "in vec3 v_world;" & LF &
+     "in vec3 v_n;" & LF &
+     "in vec2 v_uv;" & LF &
+     "flat in uvec4 v_q;" & LF &
+     Vox_Data_Source &
+     "out vec4 o_color;" & LF &
+     Sky_Source &
+     Sunlit_Source &
+     "void main() {" & LF &
+     "  uvec4 q = v_q;" & LF &
+     "  uint x = q.x & 63u, y = (q.x >> 6u) & 63u, z = (q.x >> 12u) & 63u;" & LF &
+     "  ivec2 last = ivec2(int((q.x >> 18u) & 63u), int((q.x >> 24u) & 63u));" & LF &
+     "  uint axis = (q.y & 7u) >> 1u, bone = (q.y >> 11u) & 15u;" & LF &
+     "  uvec2 cu = uvec2(clamp(ivec2(floor(v_uv)), ivec2(0), last));" & LF &
+     "  uvec3 v = (axis == 0u) ? uvec3(x, y + cu.x, z + cu.y)" & LF &
+     "          : (axis == 1u) ? uvec3(x + cu.x, y, z + cu.y) : uvec3(x + cu.x, y + cu.y, z);" & LF &
+     "  uint slot = q.w * VOX_SLOT;" & LF &
+     "  uint pb = slot + VOX_PARTS + bone * 8u;" & LF &
+     "  uint i = vd[pb] + v.x + vd[pb + 1u] * (v.y + vd[pb + 2u] * v.z);" & LF &
+     "  uint k = (vd[slot + VOX_BYTES + (i >> 2u)] >> ((i & 3u) * 8u)) & 255u;" & LF &
+     "  vec4 c = unpackUnorm4x8(vd[slot + k]);" & LF &
+     "  vec3 n = normalize(v_n);" & LF &
+     "  vec3 amb = mix(u_gnd_amb, u_sky_amb, 0.5 + 0.5 * n.z);" & LF &
+     "  float sun = max(dot(n, u_lamp), 0.0);" & LF &
+     "  float lit = (sun > 0.0) ? sunlit(v_world, n) * cloud_shade(v_world) : 1.0;" & LF &
+     "  vec3 col = c.rgb * (amb + u_lamp_col * sun * lit + firelight(v_world, n));" & LF &
+     "  float thru;" & LF &
+     "  col = air(col, v_world, thru);" & LF &
+     "  o_color = vec4(grade(col), 1.0);" & LF &
+     "}" & LF;
+
+   --  (into a depth map: the sun's, the fire's)
+   Vox_Caster_Vertex_Source : constant String :=
+     "#version 450 core" & LF &
+     Vox_Common_Source &
+     "uniform mat4 u_viewproj;" & LF &
+     "uniform vec3 u_camera;" & LF &
+     "void main() {" & LF &
+     "  vec3 w; vec3 n; vec2 uv; uvec4 q;" & LF &
+     "  vox_vertex(gl_VertexID, w, n, uv, q);" & LF &
+     "  gl_Position = u_viewproj * vec4(w - u_camera, 1.0);" & LF &
+     "}" & LF;
+
    --  A soft dark disc on the ground under each figure.  In sunshine the
    --  figure's own shadow stands it on the ground and the disc is not
    --  drawn; under cloud and at night, where nothing casts one, the disc
@@ -1425,6 +1647,8 @@ package body Castle.Render is
    --  only used while something is wet.  Left in one shader behind a test,
    --  it cost a twentieth of the frame in dry weather too, never run.)
    World_Fragment_Body : constant String :=
+     "flat in vec2 v_turn;" & LF &
+     "in vec3 v_home;" & LF &
      "in vec3 v_world;" & LF &
      "in vec3 v_grid;" & LF &
      "in vec4 v_bend;" & LF &
@@ -1478,6 +1702,17 @@ package body Castle.Render is
      "uniform vec4 u_roof_a[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
      "uniform vec4 u_roof_b[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
      "uniform float u_roof_f[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
+     --  (buildings drawn turned, as the vertex shader has them, and their walls' outer faces as they
+     --  stand, in blocks; the stuff a turned house's floor is drawn in, -1: its blocks as they lie)
+     "uniform int u_turns;" & LF &
+     "uniform vec4 u_turn_how[" & GLSL_Int (Max_Turns) & "];" & LF &
+     "uniform float u_turn_z[" & GLSL_Int (Max_Turns) & "];" & LF &
+     "uniform vec4 u_turn_all;" & LF &
+     "uniform vec4 u_turn_walls[" & GLSL_Int (Max_Turns) & "];" & LF &
+     "uniform int u_turn_floor;" & LF &
+     "uniform float u_turn_mat[" & GLSL_Int (Max_Turns) & "];" & LF &       --  (each turned house's floor)
+     --  (the eye as each cleared house stands: one drawn turned is seen through its turn)
+     "uniform vec4 u_roof_e[" & GLSL_Int (Castle.Cutaway.Max_Roofs) & "];" & LF &
      "out vec4 o_color;" & LF &
      Sky_Source &
      Sunlit_Source &
@@ -1522,10 +1757,29 @@ package body Castle.Render is
      & " || p.z < b.z + 0.03 || p.z > b.w + 0.5) continue;" & LF &
      "    vec2 n = (inn.x < inn.y) ? ((l.x < 0.0) ? -w : w)" & LF &
      "                             : ((l.y < 0.0) ? vec2(w.y, -w.x) : vec2(-w.y, w.x));" & LF &
-     "    vec2 e = u_camera.xy - p.xy;" & LF &
+     "    vec2 e = u_roof_e[i].xy - p.xy;" & LF &
      "    float facing = dot(n, e) / max(length(e), 0.5);" & LF &
      "    k = min(k, 1.0 - u_roof_f[i] * smoothstep(" & GLSL (Float (Castle.Cutaway.Face_Lo)) & ", "
      & GLSL (Float (Castle.Cutaway.Face_Hi)) & ", facing));" & LF &
+     "  }" & LF &
+     "  return k;" & LF &
+     "}" & LF &
+     --  How much of a roof's timber is drawn here (Castle.Cutaway.Timber_Cover,
+     --  the same sum): inside a cleared house's walls and over head height,
+     --  as the thatch over it.
+     "float timber_cover(vec3 p) {" & LF &
+     "  float k = 1.0;" & LF &
+     "  for (int i = 0; i < u_roofs; i++) {" & LF &
+     "    vec2 d = p.xy - u_roof_a[i].xy;" & LF &
+     "    vec2 w = u_roof_a[i].zw;" & LF &
+     "    vec2 l = vec2(dot(d, w), d.y * w.x - d.x * w.y);" & LF &
+     "    vec4 b = u_roof_b[i];" & LF &
+     "    float inn = min(b.x - abs(l.x), b.y - abs(l.y));" & LF &
+     "    if (inn <= " & GLSL (Float (Castle.Cutaway.Wall_M)) & " || p.z < b.z + "
+     & GLSL (Float (Castle.Cutaway.Timber_Up_M)) & " || p.z > b.w + 0.5) continue;" & LF &
+     "    float r = " & GLSL (Float (Castle.Cutaway.Edge_Cover)) & " * (1.0 - smoothstep(0.0, "
+     & GLSL (Float (Castle.Cutaway.Taper_M)) & ", inn));" & LF &
+     "    k = min(k, 1.0 - u_roof_f[i] * (1.0 - r));" & LF &
      "  }" & LF &
      "  return k;" & LF &
      "}" & LF &
@@ -1654,11 +1908,12 @@ package body Castle.Render is
      --  asked only of what a wall can be made of, inside the box round the
      --  cleared houses)
      "  float roof_q = 1.0;" & LF &
-     "  if (u_roofs > 0 && u_water == 0 && all(greaterThanEqual(v_world.xy, u_roof_box.xy))" & LF &
-     "      && all(lessThanEqual(v_world.xy, u_roof_box.zw))" & LF &
+     "  if (u_roofs > 0 && u_water == 0 && all(greaterThanEqual(v_home.xy, u_roof_box.xy))" & LF &
+     "      && all(lessThanEqual(v_home.xy, u_roof_box.zw))" & LF &
      "      && (int(v_mat) == u_thatch || in_set(u_walls, v_mat))) {" & LF &
-     "    float k = (int(v_mat) == u_thatch) ? roof_cover(v_world)" & LF &
-     "            : in_set(u_walls, v_mat) ? wall_cover(v_world) : 1.0;" & LF &
+     "    float k = (int(v_mat) == u_thatch) ? roof_cover(v_home)" & LF &
+     "            : in_set(u_walls, v_mat) ? wall_cover(v_home) : 1.0;" & LF &
+     "    if (v_mat == " & GLSL_Int (Castle.Blocks.Material'Pos (Castle.Blocks.Log)) & "u) k = min(k, timber_cover(v_home));" & LF &
      "    if (k < 1.0) {" & LF &
      "      float dz = cut_dither(gl_FragCoord.xy);" & LF &
      "      if (u_a2c == 1) {" & LF &
@@ -1668,18 +1923,59 @@ package body Castle.Render is
      "    }" & LF &
      "  }" & LF &
      "  vec3 n = normals[v_face];" & LF &
+     --  (a building drawn turned, Set_Turns: the light goes by the face as it is turned; n is still
+     --  the face on the block grid, for whatever goes by the block)
+     "  vec3 nw = vec3(v_turn.x * n.x - v_turn.y * n.y, v_turn.y * n.x + v_turn.x * n.y, n.z);" & LF &
      "  vec3 pb = v_grid * 4.0 - n * 0.01;" & LF &
      "  ivec3 b = ivec3(floor(pb));" & LF &
      "  vec3 f = fract(pb);" & LF &
      "  vec2 uv = (v_face < 2) ? f.yz : (v_face < 4) ? f.xz : f.xy;" & LF &
      "  ivec2 t = clamp(ivec2(uv * 5.0), ivec2(0), ivec2(4));" & LF &
-     "  int layer = int(v_mat) * u_variants + int(hash3(b) % uint(u_variants));" & LF &
-     "  if (u_water == 0 && leaf_gone(b, v_mat)) discard;" & LF &
+     --  **The floor of a house drawn turned, stepped by the texel** (John, 2026-11-19: "The textures
+     --  are 5x5 on the face of each block right, can't we step the texture so it falls under the wall
+     --  of the house?").  The floor is laid in blocks under the house as it is drawn, and a block is
+     --  five texels across, so along a wall at 45 degrees its edge stood out from under the wall
+     --  and in from it by a block's corner.  Here each texel of the ground at a turned house's pad
+     --  is asked for by itself: taken back through the turn, within the outer faces of the walls as
+     --  they stand it is floor, whatever its block is; past them, a floor block's texel is as the
+     --  ground beside it, turf or bare earth.
+     --  f_mat is what this texel is drawn as from here on.
+     "  uint f_mat = v_mat;" & LF &
+     "  bool refloored = false;" & LF &
+     "  if (u_turn_floor >= 0 && u_turns > 0 && v_face == 4 && u_water == 0 && v_lod == 0) {" & LF &
+     "    vec2 pt = vec2(b.xy) + (vec2(t) + 0.5) / 5.0;" & LF &
+     "    if (pt.x >= u_turn_all.x && pt.x < u_turn_all.z && pt.y >= u_turn_all.y && pt.y < u_turn_all.w) {" & LF &
+     "      for (int i = 0; i < u_turns; i++) {" & LF &
+     "        if (abs(float(b.z) - (u_turn_z[i] - 1.0)) > 0.5) continue;" & LF &
+     "        vec4 th = u_turn_how[i];" & LF &
+     "        vec2 d = pt - th.xy;" & LF &
+     "        vec2 q = th.xy + vec2(th.z * d.x + th.w * d.y, th.z * d.y - th.w * d.x);" & LF &
+     "        vec4 w = u_turn_walls[i];" & LF &
+     "        vec2 in2 = min(q - w.xy, w.zw - q);" & LF &
+     "        float inn = min(in2.x, in2.y);" & LF &          --  blocks in from the walls' outer faces
+     "        int fl = int(u_turn_mat[i]);" & LF &
+     "        if (inn >= 0.0) {" & LF &
+     "          refloored = true;" & LF &                --  (and no fringe of turf worn into it: it is a floor)
+     "          f_mat = uint(fl);" & LF &
+     "          break;" & LF &
+     "        } else if (inn > -0.4 && int(f_mat) == fl) {" & LF &
+     --  (as the ground beside it is: turf where the mesher marked turf beside this block, else the
+     --  bare earth of ground that was dug; John, 2026-11-19: "If you think bare earth would match
+     --  better do it")
+     "          f_mat = uint((v_fr != 0u) ? u_turf : u_bare);" & LF &
+     "          refloored = true;" & LF &
+     "          break;" & LF &
+     "        }" & LF &
+     "      }" & LF &
+     "    }" & LF &
+     "  }" & LF &
+     "  int layer = int(f_mat) * u_variants + int(hash3(b) % uint(u_variants));" & LF &
+     "  if (u_water == 0 && leaf_gone(b, f_mat)) discard;" & LF &
      --  Snow lies where the sky reaches; grass and grain under deep snow
      --  are buried.
      "  float snow = (u_water == 0) ? snow_depth(v_world.z) : 0.0;" & LF &
      "  float open_sky = (snow > 0.0) ? sky_open(v_world) : 0.0;" & LF &
-     "  if (in_set(u_plants, v_mat) && snow * open_sky > 0.12) discard;" & LF &
+     "  if (in_set(u_plants, f_mat) && snow * open_sky > 0.12) discard;" & LF &
      --  Fade detail out as it shrinks below a pixel: texels first, then
      --  the per-block variants.  Under MSAA, cut-out coverage goes through
      --  alpha-to-coverage, so distant foliage keeps its density instead of
@@ -1689,7 +1985,7 @@ package body Castle.Render is
      "  float m2 = smoothstep(0.5, 1.0, fb);" & LF &
      --  (a plant more than a block high: below its top block its blades are
      --  stalks, whole from foot to top, with no tips or ears part way up)
-     "  if (v_face < 4 && v_fr > 1u && u_water == 0 && in_set(u_plants, v_mat)" & LF &
+     "  if (v_face < 4 && v_fr > 1u && u_water == 0 && in_set(u_plants, f_mat)" & LF &
      "      && min(floor(v_bend.w * float(v_fr)), float(v_fr) - 1.0) < float(v_fr) - 1.5) t.y = 0;" & LF &
      "  vec4 c0 = texelFetch(u_tex, ivec3(t, layer), 0);" & LF &
      "  vec4 c1 = texelFetch(u_tex, ivec3(0, 0, layer), 1);" & LF &
@@ -1697,7 +1993,7 @@ package body Castle.Render is
      "  vec4 c = mix(mix(vec4(c0.rgb, step(0.5, c0.a)), c1, m1), c2, m2);" & LF &
      --  Foliage frays where it stands out of its clump: more of its texels
      --  are open there (far off, that much less of it covers the pixel).
-     "  bool soft = in_set(u_foliage, v_mat);" & LF &
+     "  bool soft = in_set(u_foliage, f_mat);" & LF &
      "  float lift = v_bend.w;" & LF &
      "  if (soft && u_water == 0) {" & LF &
      "    float thin = " & GLSL (Float (Foliage_Ragged)) & " * lift;" & LF &
@@ -1715,9 +2011,9 @@ package body Castle.Render is
      --  A tuft (see the spec) seen from above is the tips of its blades, not
      --  a lid: that share of its top's texels, the same share of the pixel
      --  far off.  Wild vegetables keep their painted rosette.
-     "  bool plant = in_set(u_plants, v_mat);" & LF &
-     "  if (plant && v_face == 4 && u_water == 0 && in_set(u_blades, v_mat)) {" & LF &
-     "    float share = (int(v_mat) == u_grain) ? " & GLSL (Float (Grain_Tips)) & " : " & GLSL (Float (Tuft_Tips)) & ";" & LF &
+     "  bool plant = in_set(u_plants, f_mat);" & LF &
+     "  if (plant && v_face == 4 && u_water == 0 && in_set(u_blades, f_mat)) {" & LF &
+     "    float share = (int(f_mat) == u_grain) ? " & GLSL (Float (Grain_Tips)) & " : " & GLSL (Float (Tuft_Tips)) & ";" & LF &
      "    float hs = float(hash3(ivec3(b.xy * 5 + t, b.z + 53)) & 1023u) / 1023.0;" & LF &
      "    c = vec4(mix(mix(c0.rgb, c1.rgb, m1), c2.rgb, m2)," & LF &
      "             mix(step(hs, share), (u_a2c == 0) ? step(hs, share) : share, m1));" & LF &
@@ -1726,9 +2022,9 @@ package body Castle.Render is
      --  The fringe between turf and bare earth (see the spec): along the
      --  sides the mesher marked, each texel may be the other kind's, the
      --  likelier the nearer the edge, over a width that wanders along it.
-     "  float turfy = in_set(u_grassy, v_mat) ? 1.0 : 0.0;" & LF &     --  how far this texel is grass
-     "  if (u_water == 0 && v_fr != 0u && v_face == 4) {" & LF &
-     "    bool turf = int(v_mat) == u_turf;" & LF &
+     "  float turfy = in_set(u_grassy, f_mat) ? 1.0 : 0.0;" & LF &     --  how far this texel is grass
+     "  if (u_water == 0 && v_fr != 0u && v_face == 4 && !refloored) {" & LF &
+     "    bool turf = int(f_mat) == u_turf;" & LF &
      "    vec2 tc = (vec2(t) + 0.5) / 5.0;" & LF &
      "    float d = 9.0;" & LF &
      "    if ((v_fr & 1u) != 0u) d = min(d, tc.x);" & LF &
@@ -1769,15 +2065,15 @@ package body Castle.Render is
      --  grass dries to straw in late summer and stays dull through winter.
      --  Crowns vary tree by tree (a 3 m column of blocks, about one crown):
      --  a little lighter or darker, a little yellower or bluer.
-     "  if (in_set(u_crowns, v_mat)) {" & LF &
+     "  if (in_set(u_crowns, f_mat)) {" & LF &
      "    uint th = hash3(ivec3(b.x / 12, b.y / 12, 7));" & LF &
      "    float t1 = float(th & 1023u) / 1023.0 - 0.5;" & LF &
      "    float t2 = float((th >> 10u) & 1023u) / 1023.0 - 0.5;" & LF &
      "    c.rgb *= (1.0 + 0.16 * t1) * vec3(1.0 + 0.10 * t2, 1.0, 1.0 - 0.10 * t2);" & LF &
      "  }" & LF &
-     "  if (in_set(u_broadleaf, v_mat) && u_leaf.x > 0.0) {" & LF &
+     "  if (in_set(u_broadleaf, f_mat) && u_leaf.x > 0.0) {" & LF &
      "    float tree = float(hash3(b / 12) & 1023u) / 1023.0;" & LF &
-     "    if (int(v_mat) == u_aspen) tree = 0.0;" & LF &   --  aspens all turn gold
+     "    if (int(f_mat) == u_aspen) tree = 0.0;" & LF &   --  aspens all turn gold
      "    vec3 autumn = (tree < 0.3) ? " & GLSL (Castle.Colors.Aged_Gold)
      & " : (tree < 0.6) ? " & GLSL (Castle.Colors.Warm_Copper) & LF &
      "                : (tree < 0.85) ? " & GLSL (Castle.Colors.Brightened_Crimson)
@@ -1802,33 +2098,33 @@ package body Castle.Render is
      --  normal, plus sunlight.
      --  (foliage: the normal the light goes by turns over a clump's cut
      --  edges, and what stands out of the clump is a little lighter)
-     "  vec3 nl = n;" & LF &
+     "  vec3 nl = nw;" & LF &
      --  (a tuft takes the light as the turf it stands in does, darker at
      --  the root and lighter at the tip)
      "  if (plant) {" & LF &
-     "    nl = normalize(mix(n, vec3(0.0, 0.0, 1.0), " & GLSL (Float (Tuft_Up)) & "));" & LF &
+     "    nl = normalize(mix(nw, vec3(0.0, 0.0, 1.0), " & GLSL (Float (Tuft_Up)) & "));" & LF &
      "    c.rgb *= mix(" & GLSL (Float (Tuft_Root)) & ", " & GLSL (Float (Tuft_Tip)) & ", v_bend.w);" & LF &
      "  }" & LF &
      --  (the side of a block of turf is a bank of grass: see the spec)
-     "  bool bank = int(v_mat) == u_turf && v_face < 4 && u_water == 0;" & LF &
-     "  if (bank) nl = normalize(mix(n, vec3(0.0, 0.0, 1.0), " & GLSL (Float (Turf_Up)) & "));" & LF &
+     "  bool bank = int(f_mat) == u_turf && v_face < 4 && u_water == 0;" & LF &
+     "  if (bank) nl = normalize(mix(nw, vec3(0.0, 0.0, 1.0), " & GLSL (Float (Turf_Up)) & "));" & LF &
      --  (a face of a dressed roof: the light goes by the way it was turned)
-     "  if (!soft && !plant && dot(v_bend.xyz, v_bend.xyz) > 1.0e-4) nl = normalize(n + v_bend.xyz);" & LF &
+     "  if (!soft && !plant && dot(v_bend.xyz, v_bend.xyz) > 1.0e-4) nl = normalize(nw + v_bend.xyz);" & LF &
      "  if (soft) {" & LF &
      "    uint rh = hash3(b + ivec3(3, 11, 7));" & LF &
      "    vec3 ruffle = vec3(float(rh & 1023u), float((rh >> 10u) & 1023u), float((rh >> 20u) & 1023u)) / 1023.0 - 0.5;" & LF &
-     "    nl = normalize(n + v_bend.xyz + ruffle * " & GLSL (Float (2.0 * Foliage_Ruffle)) & " * (1.0 - m2));" & LF &
+     "    nl = normalize(nw + v_bend.xyz + ruffle * " & GLSL (Float (2.0 * Foliage_Ruffle)) & " * (1.0 - m2));" & LF &
      "    float mass = texture(u_noise, v_grid.xy / 6.0 + v_grid.z * vec2(0.071, 0.113)).r;" & LF &
      "    c.rgb *= (1.0 + " & GLSL (Float (Foliage_Mass)) & " * (mass - 0.5) * 2.0)"
      & " * (1.0 + " & GLSL (Float (Foliage_Lift)) & " * (lift - 0.3));" & LF &
      "  }" & LF &
      "  vec3 amb = mix(u_gnd_amb, u_sky_amb, 0.5 + 0.5 * nl.z);" & LF &
      "  float sun = max(dot(nl, u_lamp), 0.0);" & LF &
-     "  vec3 ns = n;" & LF &
+     "  vec3 ns = nw;" & LF &
      --  Once blocks are under a pixel their lit tops and shaded sides beat
      --  against the pixel grid; light distant ground from the smooth height
      --  field instead.
-     "  if (m2 > 0.0 && in_set(u_ground, v_mat)) {" & LF &
+     "  if (m2 > 0.0 && in_set(u_ground, f_mat)) {" & LF &
      "    vec2 p = v_world.xy / 2048.0;" & LF &
      "    const float e = 1.0 / 2048.0;" & LF &
      "    float hx = texture(u_height, p + vec2(e, 0.0)).r - texture(u_height, p - vec2(e, 0.0)).r;" & LF &
@@ -1846,7 +2142,7 @@ package body Castle.Render is
      --  within the snow's depth below it: small steps vanish under deep
      --  snow, a cliff only gets snow banked at its foot.
      "    if (v_face < 4) {" & LF &
-     "      vec3 front = v_world + n * 0.12;" & LF &
+     "      vec3 front = v_world + nw * 0.12;" & LF &
      "      up = max(up, sky_open(front) * (1.0 - open_at(front - vec3(0.0, 0.0, snow))));" & LF &
      "      open_sky = max(open_sky, sky_open(front));" & LF &
      "    }" & LF &
@@ -1860,15 +2156,15 @@ package body Castle.Render is
      "  float wet = 0.0, rained_on = 0.0;" & LF &
      "#ifdef WET" & LF &
      "  if (u_water == 0 && u_wet > 0.0) {" & LF &
-     "    rained_on = (snow > 0.0 && v_face == 4) ? open_sky : open_1(v_world + n * 0.06 + vec3(0.0, 0.0, 0.15));" & LF &
+     "    rained_on = (snow > 0.0 && v_face == 4) ? open_sky : open_1(v_world + nw * 0.06 + vec3(0.0, 0.0, 0.15));" & LF &
      "    wet = u_wet * (1.0 - coat) * mix(" & GLSL (Float (Wet_Sheltered)) & ", 1.0, rained_on);" & LF &
      "    float l = dot(c.rgb, vec3(0.3, 0.59, 0.11));" & LF &
      "    c.rgb = mix(vec3(l), c.rgb, 1.0 + " & GLSL (Float (Wet_Rich)) & " * wet)" & LF &
-     "            * (1.0 - (in_set(u_soaks, v_mat) ? " & GLSL (Float (Wet_Soak)) & " : " & GLSL (Float (Wet_Dark)) & ") * wet);" & LF &
+     "            * (1.0 - (in_set(u_soaks, f_mat) ? " & GLSL (Float (Wet_Soak)) & " : " & GLSL (Float (Wet_Dark)) & ") * wet);" & LF &
      "  }" & LF &
      "#endif" & LF &
-     "  vec3 lp = bank ? vec3(v_world.xy + n.xy * 0.03, (float(b.z) + 1.0) * 0.25 + 0.04) : v_world;" & LF &
-     "  float lit = (sun > 0.0) ? sunlit(lp, bank ? vec3(0.0, 0.0, 1.0) : n) * cloud_shade(v_world) : 1.0;" & LF &
+     "  vec3 lp = bank ? vec3(v_world.xy + nw.xy * 0.03, (float(b.z) + 1.0) * 0.25 + 0.04) : v_world;" & LF &
+     "  float lit = (sun > 0.0) ? sunlit(lp, bank ? vec3(0.0, 0.0, 1.0) : nw) * cloud_shade(v_world) : 1.0;" & LF &
      --  Ambient occlusion from the mesher: the face's four corners blended
      --  across each block; far off, the face's average, so it can't shimmer.
      "  if (u_water == 0) {" & LF &
@@ -1912,8 +2208,8 @@ package body Castle.Render is
      --  (most of what is looked down on can show none of it, turf and leaves
      --  seen steeply with the sun's glint elsewhere, and is passed over)
      "  vec3 wv = u_camera - v_world;" & LF &
-     "  bool may_pool = v_face == 4 && rained_on > 0.5 && in_set(u_pools, v_mat) && !plant;" & LF &
-     "  bool hard = in_set(u_shines, v_mat);" & LF &
+     "  bool may_pool = v_face == 4 && rained_on > 0.5 && in_set(u_pools, f_mat) && !plant;" & LF &
+     "  bool hard = in_set(u_shines, f_mat);" & LF &
      "  if (wet > 0.0 && (may_pool || hard || dot(nl, wv) < 0.55 * length(wv))) {" & LF &
      "    vec3 v = normalize(wv);" & LF &
      "    float pool = 0.0;" & LF &
@@ -2189,7 +2485,7 @@ package body Castle.Render is
    Last_Seconds : Float := 0.0;
 
    --  Uniforms several programs share, located once.
-   type Program_Id is (P_World, P_World_Wet, P_Sky, P_Shadow, P_Precip, P_Figure, P_Blob, P_Cloud, P_Far);
+   type Program_Id is (P_World, P_World_Wet, P_Sky, P_Shadow, P_Precip, P_Figure, P_Blob, P_Cloud, P_Far, P_Voxel);
    type Uniform_Id is
      (U_Sun, U_Sun_Glow, U_Sun_Disc, U_Moon, U_Moon_Col, U_Moon_K, U_Day, U_Lamp, U_Lamp_Col, U_Orb, U_Orb_Col,
       U_Zenith, U_Horizon, U_Sky_Amb, U_Gnd_Amb, U_Cover, U_Time, U_Drift,
@@ -2228,6 +2524,11 @@ package body Castle.Render is
    Skin_Levels : constant := 4;              --  128 x 64 down to 16 x 8
    Fig_Bone_Buf, Fig_Box_Buf, Fig_Blob_Buf : UInt := 0;
    Fig_Loc_VP, Fig_Loc_Camera, Fig_Loc_Focus, Fig_Loc_Fog, Fig_Loc_A2C : int := -1;
+   --  serfs of voxel parts: their programs (the view's, and into the depth maps), this frame's
+   --  quads and every voxel look's slot (Castle.Figures, "Voxel looks")
+   Vox_Program, Vox_Caster_Program : UInt := 0;
+   Vox_List_Buf, Vox_Data_Buf : UInt := 0;
+   Vox_Loc_VP, Vox_Loc_Camera, Vox_Loc_Focus, Vox_Loc_Fog, Vox_C_Loc_VP, Vox_C_Loc_Camera : int := -1;
    Blob_Loc_VP, Blob_Loc_Camera, Blob_Loc_Strength : int := -1;
 
    --  The far land (see the spec): its program, its corners' heights, its
@@ -2318,6 +2619,7 @@ package body Castle.Render is
    type World_Locs is record
       VP, Camera, Focus, A2C, Fog_Dist, Variants, Water, Blend, Wmask, Flowdbg, Wstep, Reflect : int := -1;
       Roofs, Roof_A, Roof_B, Roof_F, Roof_Box : int := -1;   --  houses cleared (Castle.Cutaway)
+      Roof_E : int := -1;
    end record;
    World_Prog : array (Boolean) of UInt := [others => 0];
    World_Loc  : array (Boolean) of World_Locs;
@@ -2519,6 +2821,7 @@ package body Castle.Render is
       type F_Array is array (1 .. Castle.Cutaway.Max_Roofs) of Float32;
       A, B : Vec4_Array := [others => [others => 0.0]];
       F    : F_Array := [others => 0.0];
+      E    : Vec4_Array := [others => [others => 0.0]];
       N    : constant Natural := Natural'Min (Castle.Cutaway.Count, Castle.Cutaway.Max_Roofs);
       Loc  : World_Locs renames World_Loc (Program = World_Prog (True));
       X0, Y0 : Float := Float'Last;
@@ -2536,6 +2839,8 @@ package body Castle.Render is
             B (K, 1) := Float32 (C.R.Half_A);    B (K, 2) := Float32 (C.R.Half_B);
             B (K, 3) := Float32 (C.R.Centre.Z);  B (K, 4) := Float32 (C.R.Top_Z);
             F (K) := Float32 (C.Amount);
+            E (K, 1) := Float32 (Castle.Cutaway.Home (C.R, Castle.Cutaway.Eye_Now).X);
+            E (K, 2) := Float32 (Castle.Cutaway.Home (C.R, Castle.Cutaway.Eye_Now).Y);
          end;
       end loop;
       Program_Uniform_1i (Program, Loc.Roofs, int (N));
@@ -2543,6 +2848,7 @@ package body Castle.Render is
          Program_Uniform_4fv (Program, Loc.Roof_A, Sizei (N), A'Address);
          Program_Uniform_4fv (Program, Loc.Roof_B, Sizei (N), B'Address);
          Program_Uniform_1fv (Program, Loc.Roof_F, Sizei (N), F'Address);
+         Program_Uniform_4fv (Program, Loc.Roof_E, Sizei (N), E'Address);
          declare
             Box : constant array (1 .. 4) of Float32 := [Float32 (X0), Float32 (Y0), Float32 (X1), Float32 (Y1)];
          begin
@@ -2718,6 +3024,66 @@ package body Castle.Render is
                        * (1.0 + 0.12 * Oc);
       Day.Gnd_Amb := Mix ((0.04, 0.045, 0.06), (0.24, 0.22, 0.20), Lit);
    end Daylight_For;
+
+   Turn_Floor_On : Boolean := True;
+   procedure Set_Turn_Floor (On : Boolean) is
+   begin
+      Turn_Floor_On := On;
+   end Set_Turn_Floor;
+
+   procedure Set_Turns (T : Turn_List) is
+      use Ada.Numerics.Elementary_Functions;
+      type UInt_List is array (1 .. 3) of UInt;
+      type Vec4_Array is array (1 .. Max_Turns, 1 .. 4) of Float32;
+      type F_Array is array (1 .. Max_Turns) of Float32;
+      Box, How, Walls : Vec4_Array := [others => [others => 0.0]];
+      Z   : F_Array := [others => 0.0];
+      Mat : F_Array := [others => 0.0];
+      N   : constant Natural := Natural'Min (T'Length, Max_Turns);
+      type Vec4_F is array (1 .. 4) of Float32;
+      Every : Vec4_F := [Float32'Last, Float32'Last, Float32'First, Float32'First];
+   begin
+      for K in 1 .. N loop
+         declare
+            R : Turn renames T (T'First + K - 1);
+         begin
+            Box (K, 1) := Float32 (R.X0 * 4.0);  Box (K, 2) := Float32 (R.Y0 * 4.0);
+            Box (K, 3) := Float32 (R.X1 * 4.0);  Box (K, 4) := Float32 (R.Y1 * 4.0);
+            How (K, 1) := Float32 (R.Pivot.X * 4.0);  How (K, 2) := Float32 (R.Pivot.Y * 4.0);
+            How (K, 3) := Float32 (Cos (R.Radians));  How (K, 4) := Float32 (Sin (R.Radians));
+            Z (K) := Float32 (R.Z0 * 4.0);
+            Mat (K) := Float32 (Castle.Blocks.Material'Pos (R.Floor));
+            Walls (K, 1) := Float32 ((R.X0 + R.Margin) * 4.0);  Walls (K, 2) := Float32 ((R.Y0 + R.Margin) * 4.0);
+            Walls (K, 3) := Float32 ((R.X1 - R.Margin) * 4.0);  Walls (K, 4) := Float32 ((R.Y1 - R.Margin) * 4.0);
+            --  (as far from its pivot as any corner of its box: wherever it is drawn lies within that)
+            declare
+               Far_X : constant Float := Float'Max (abs (R.X0 - R.Pivot.X), abs (R.X1 - R.Pivot.X));
+               Far_Y : constant Float := Float'Max (abs (R.Y0 - R.Pivot.Y), abs (R.Y1 - R.Pivot.Y));
+               Reach : constant Float := Sqrt (Far_X * Far_X + Far_Y * Far_Y) + 0.5;
+            begin
+               Every := [Float32'Min (Every (1), Float32 ((R.Pivot.X - Reach) * 4.0)),
+                         Float32'Min (Every (2), Float32 ((R.Pivot.Y - Reach) * 4.0)),
+                         Float32'Max (Every (3), Float32 ((R.Pivot.X + Reach) * 4.0)),
+                         Float32'Max (Every (4), Float32 ((R.Pivot.Y + Reach) * 4.0))];
+            end;
+         end;
+      end loop;
+      for P of UInt_List'(World_Prog (False), World_Prog (True), Shadow_Program) loop
+         if P /= 0 then
+            Program_Uniform_1i (P, Location ("u_turns", P), int (N));
+            Program_Uniform_1i (P, Location ("u_turn_floor", P),
+                                (if Turn_Floor_On then int (Castle.Blocks.Material'Pos (Castle.Blocks.Footpath)) else -1));
+            if N > 0 then
+               Program_Uniform_4fv (P, Location ("u_turn_box", P), Sizei (N), Box'Address);
+               Program_Uniform_4fv (P, Location ("u_turn_how", P), Sizei (N), How'Address);
+               Program_Uniform_1fv (P, Location ("u_turn_z", P), Sizei (N), Z'Address);
+               Program_Uniform_1fv (P, Location ("u_turn_mat", P), Sizei (N), Mat'Address);
+               Program_Uniform_4fv (P, Location ("u_turn_all", P), 1, Every'Address);
+               Program_Uniform_4fv (P, Location ("u_turn_walls", P), Sizei (N), Walls'Address);
+            end if;
+         end if;
+      end loop;
+   end Set_Turns;
 
    procedure Clear_Lights is
    begin
@@ -2930,7 +3296,8 @@ package body Castle.Render is
             Water => Location ("u_water"), Blend => Location ("u_blend"), Wmask => Location ("u_wmask"),
             Flowdbg => Location ("u_flowdbg"), Wstep => Location ("u_wstep"), Reflect => Location ("u_reflect"),
             Roofs => Location ("u_roofs"), Roof_A => Location ("u_roof_a"), Roof_B => Location ("u_roof_b"),
-            Roof_F => Location ("u_roof_f"), Roof_Box => Location ("u_roof_box"));
+            Roof_F => Location ("u_roof_f"), Roof_Box => Location ("u_roof_box"),
+            Roof_E => Location ("u_roof_e"));
          Far_View_Loc (Wet) := Location ("u_far_view");
          Zp_Loc (Wet) := Location ("u_zp");
       end loop;
@@ -2980,6 +3347,10 @@ package body Castle.Render is
                               Compile (Fragment_Shader, Caster_Fragment_Source));
       Loc_C_VP     := Location ("u_viewproj", Caster_Program);
       Loc_C_Camera := Location ("u_camera", Caster_Program);
+      Vox_Caster_Program := Link (Compile (Vertex_Shader, Vox_Caster_Vertex_Source),
+                                  Compile (Fragment_Shader, Caster_Fragment_Source));
+      Vox_C_Loc_VP     := Location ("u_viewproj", Vox_Caster_Program);
+      Vox_C_Loc_Camera := Location ("u_camera", Vox_Caster_Program);
       Shadows_Ready := True;
       for M of Held loop
          declare
@@ -3373,6 +3744,19 @@ package body Castle.Render is
       Create_Buffers (1, Fig_Blob_Buf);
       Named_Buffer_Storage (Fig_Blob_Buf, Sizeiptr (Castle.Figures.Blobs'Length * 16), Null_Address,
                             Dynamic_Storage_Bit);
+      Vox_Program := Link (Compile (Vertex_Shader, Vox_Vertex_Source),
+                           Compile (Fragment_Shader, Vox_Fragment_Source));
+      Vox_Loc_VP     := Location ("u_viewproj", Vox_Program);
+      Vox_Loc_Camera := Location ("u_camera", Vox_Program);
+      Vox_Loc_Focus  := Location ("u_focus", Vox_Program);
+      Vox_Loc_Fog    := Location ("u_fog_dist", Vox_Program);
+      Create_Buffers (1, Vox_List_Buf);
+      Named_Buffer_Storage (Vox_List_Buf, Sizeiptr (Castle.Figures.Max_Vox_List * 16), Null_Address,
+                            Dynamic_Storage_Bit);
+      Create_Buffers (1, Vox_Data_Buf);
+      Named_Buffer_Storage (Vox_Data_Buf,
+                            Sizeiptr (Castle.Figures.Max_Vox_Looks * Castle.Figures.Vox_Slot_Words * 4),
+                            Null_Address, Dynamic_Storage_Bit);
       Mark_Program := Link (Compile (Vertex_Shader, Mark_Vertex_Source),
                             Compile (Fragment_Shader, Mark_Fragment_Source));
       Mark_Loc_VP     := Location ("u_viewproj", Mark_Program);
@@ -3396,7 +3780,7 @@ package body Castle.Render is
       Programs := (P_World => World_Prog (False), P_World_Wet => World_Prog (True), P_Sky => Sky_Program,
                    P_Shadow => Shadow_Program, P_Precip => Precip_Program,
                    P_Figure => Fig_Program, P_Blob => Blob_Program, P_Cloud => Cloud_Program,
-                   P_Far => Far_Program);
+                   P_Far => Far_Program, P_Voxel => Vox_Program);
       for P in Program_Id loop
          for U in Uniform_Id loop
             if Programs (P) /= 0 then
@@ -3462,7 +3846,7 @@ package body Castle.Render is
          Put_Set (Program, "u_ground", Ground);
          Program_Uniform_1i (Program, Loc_A2C, (if A2C then 1 else 0));
          Program_Uniform_1i (Program, Location ("u_thatch"), int (Material'Pos (Thatch)));
-         Put_Set (Program, "u_walls", Bit (Daub) or Bit (Log));
+         Put_Set (Program, "u_walls", Bit (Daub) or Bit (Log) or Bit (Plank));   --  (plank: a window's jambs)
          Program_Uniform_1i (Program, Location ("u_samples"), int (Natural'Max (1, MSAA)));
          Program_Uniform_1i (Program, World_Loc (Wet).Roofs, 0);
       end loop;
@@ -4044,9 +4428,35 @@ package body Castle.Render is
       if Fresh then
          Generate_Texture_Mipmap (Skin_Tex);
       end if;
-      if Box_Count > 0 then
+      --  the voxel looks made since: each into its slot
+      loop
+         declare
+            U     : Vox_Upload;
+            Found : Boolean;
+         begin
+            Next_Vox_Upload (U, Found);
+            exit when not Found;
+            declare
+               Base : constant Intptr := Intptr ((U.Look - 1) * Vox_Slot_Words * 4);
+            begin
+               Named_Buffer_Sub_Data (Vox_Data_Buf, Base, Sizeiptr (Vox_Pal_Words * 4), U.Pal.all (0)'Address);
+               Named_Buffer_Sub_Data (Vox_Data_Buf, Base + Intptr (Vox_Pal_Words * 4), Sizeiptr (Vox_Parts_Words * 4),
+                                      U.Parts.all (0)'Address);
+               if U.Bytes_N > 0 then
+                  Named_Buffer_Sub_Data (Vox_Data_Buf, Base + Intptr ((Vox_Pal_Words + Vox_Parts_Words) * 4),
+                                         Sizeiptr ((U.Bytes_N + 3) / 4 * 4), U.Bytes.all (0)'Address);
+               end if;
+            end;
+         end;
+      end loop;
+      if Bone_Count > 0 then
          Named_Buffer_Sub_Data (Fig_Bone_Buf, 0, Sizeiptr (Bone_Count * 48), Bones (0)'Address);
+      end if;
+      if Box_Count > 0 then
          Named_Buffer_Sub_Data (Fig_Box_Buf, 0, Sizeiptr (Box_Count * 48), Boxes (0)'Address);
+      end if;
+      if Vox_List_Count > 0 then
+         Named_Buffer_Sub_Data (Vox_List_Buf, 0, Sizeiptr (Vox_List_Count * 16), Vox_List (0)'Address);
       end if;
    end Upload_Figures;
 
@@ -4055,7 +4465,7 @@ package body Castle.Render is
       use Castle.Figures;
       M : aliased Mat4 := VP;
    begin
-      if Box_Count = 0 then
+      if Box_Count = 0 and then Vox_List_Count = 0 then
          return;
       end if;
       Bind_Vertex_Array (Sky_VAO);
@@ -4105,8 +4515,20 @@ package body Castle.Render is
       if A2C then
          Enable (Sample_Alpha_To_Coverage);     --  (every box's alpha is 1 but a thin look's)
       end if;
-      Draw_Arrays (Triangles, 0, Sizei (Box_Vertices * Box_Count));
+      if Box_Count > 0 then
+         Draw_Arrays (Triangles, 0, Sizei (Box_Vertices * Box_Count));
+      end if;
       Disable (Sample_Alpha_To_Coverage);
+      if Vox_List_Count > 0 then
+         Use_Program (Vox_Program);
+         Program_Uniform_Matrix_4fv (Vox_Program, Vox_Loc_VP, 1, GL_False, M (0)'Address);
+         Program_Uniform_3f (Vox_Program, Vox_Loc_Camera, Float32 (Eye.X), Float32 (Eye.Y), Float32 (Eye.Z));
+         Program_Uniform_3f (Vox_Program, Vox_Loc_Focus, Float32 (Focus.X), Float32 (Focus.Y), Float32 (Focus.Z));
+         Program_Uniform_1f (Vox_Program, Vox_Loc_Fog, Float32 (Fog_Distance));
+         Bind_Buffer_Base (Shader_Storage_Buffer, 13, Vox_List_Buf);
+         Bind_Buffer_Base (Shader_Storage_Buffer, 14, Vox_Data_Buf);
+         Draw_Arrays (Triangles, 0, Sizei (6 * Vox_List_Count));
+      end if;
    end Draw_Figures;
 
    procedure Draw_Marks (Eye : Vec3; VP : Mat4) is
@@ -4298,6 +4720,17 @@ package body Castle.Render is
          Program_Uniform_3f (Caster_Program, Loc_C_Camera,
                              Float32 (Origin.X), Float32 (Origin.Y), Float32 (Origin.Z));
          Draw_Arrays (Triangles, 0, Sizei (Castle.Figures.Box_Vertices * Castle.Figures.Box_Count));
+      end if;
+      if Figures and then Castle.Figures.Vox_List_Count > 0 then
+         Use_Program (Vox_Caster_Program);
+         Bind_Vertex_Array (Sky_VAO);
+         Bind_Buffer_Base (Shader_Storage_Buffer, 8, Fig_Bone_Buf);
+         Bind_Buffer_Base (Shader_Storage_Buffer, 13, Vox_List_Buf);
+         Bind_Buffer_Base (Shader_Storage_Buffer, 14, Vox_Data_Buf);
+         Program_Uniform_Matrix_4fv (Vox_Caster_Program, Vox_C_Loc_VP, 1, GL_False, V (0)'Address);
+         Program_Uniform_3f (Vox_Caster_Program, Vox_C_Loc_Camera,
+                             Float32 (Origin.X), Float32 (Origin.Y), Float32 (Origin.Z));
+         Draw_Arrays (Triangles, 0, Sizei (6 * Castle.Figures.Vox_List_Count));
       end if;
    end Draw_Casters;
 

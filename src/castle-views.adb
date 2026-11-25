@@ -4,6 +4,7 @@ with Castle.Colony; use Castle.Colony;
 with Castle.Deer;
 with Castle.Herds;
 with Castle.Text;   use Castle.Text;
+with Castle.Buildings;  use type Castle.Buildings.Building_Kind;
 
 package body Castle.Views is
 
@@ -118,7 +119,8 @@ package body Castle.Views is
    function House_Name (H : Positive; For_Whom : Natural := 0) return String is
       Owner : constant Natural := House_At (H).Owner;
    begin
-      return (if Owner = 0 then "a hovel" elsif Owner = For_Whom then "its own hovel"
+      return (if House_At (H).Kind = Castle.Buildings.Storehouse then "the storehouse"
+              elsif Owner = 0 then "a hovel" elsif Owner = For_Whom then "its own hovel"
               else Name_Of (Owner) & "'s hovel");
    end House_Name;
 
@@ -153,6 +155,10 @@ package body Castle.Views is
       end if;
       if V.Trade = Builder and then V.Site in 1 .. House_Count then
          Add (S, "Trade", "Builder, at " & House_Name (V.Site, I));
+      elsif V.Trade = As_Stockman then
+         Add (S, "Trade", "Stockman, keeping the storehouse");
+      elsif V.Trade = As_Carpenter then
+         Add (S, "Trade", "Carpenter, making the storehouse's shelves and barrels");
       end if;
       if House_Count > 0 and then not V.Dead then
          Add (S, "Home", (if V.Housed then "a hovel of its own, drawn by lot" else "none yet: it sleeps by the fire"),
@@ -177,6 +183,18 @@ package body Castle.Views is
       end if;
       return S;
    end Person;
+
+   function Job_Label (I : Positive) return String is
+      V : constant Person_View := Castle.Colony.Person (I);
+   begin
+      return (case V.Trade is
+                 when Builder      => "Builder",
+                 when As_Stockman  => "Stockman",
+                 when As_Carpenter => "Carpenter",
+                 when No_Trade     =>
+                   (if Is_Builder (I) then "Builder"          --  (set to building, with no house to build just now)
+                    elsif V.Job = Unassigned then "No job" else Capital (Castle.Actions.Job_Name (V.Job))));
+   end Job_Label;
 
    ------------------------------------------------------------------ a zone
 
@@ -217,17 +235,37 @@ package body Castle.Views is
    begin
       case V.Kind is
          when Stockpile_Zone =>
-            S.Title := To_Line ("Stockpile");
+            S.Title := To_Line ((if V.Yard then "Stockyard" else "Stockpile"));
             S.Note := To_Line (Size);
             Add (S, "Cells", Img (V.Cells) & ", " & Img (V.In_Use) & " in use");
+            if V.Overflow > 0 then
+               Add (S, "Overflow", Img (V.Overflow) & ", " & Img (V.Over_In_Use) & " in use");
+            end if;
+            if not V.Yard and then Stores_Moved then
+               Add (S, "Closed", "the stores are in the stockyard: what lies here is carried over", Shade => Dim);
+            end if;
+            if V.Yard and then Storehouse = 0 then
+               Add (S, "Storehouse", "not begun: asked for on the second morning", Shade => Dim);
+            end if;
+            if Storehouse > 0 and then House_At (Storehouse).Zone = Z then
+               declare
+                  Hv : constant House_View := House_At (Storehouse);
+               begin
+                  Add (S, "Storehouse",
+                       (if Hv.Phase = Standing then "standing"
+                        else "being built, " & Percent (Float (Hv.Placed) / Float (Integer'Max (1, Hv.Blocks)))));
+               end;
+            end if;
+            --  what it holds: the stores' staples always, none or not (John, 2026-11-17: "Add stone,
+            --  berries, apples, and salt to the list of resources in the stockpile/storeyard tooltip":
+            --  a kind was listed only while some of it lay there); anything else while it holds some
             for K in Item_Kind loop
                if V.Holds (K) > 0 then
                   Add (S, Capital (Name (K)), Img (V.Holds (K)));
+               elsif K in Berries | Wood | Stone | Straw | Meat | Hide | Vegetables | Apples | Salt then
+                  Add (S, Capital (Name (K)), "none", Shade => Dim);
                end if;
             end loop;
-            if not Any (V.Holds) then
-               Add (S, "Holds", "nothing", Shade => Dim);
-            end if;
             if Demand_Chain then               --  demand lands on the stores: what they are short of
                Add (S, "The stores ask for", Asked_List, Shade => (if Asked_List = "nothing" then Dim else Plain));
             end if;
@@ -285,6 +323,9 @@ package body Castle.Views is
                   end if;
                end if;
                Add (S, "Seats", Img (C.Seats) & " of " & Img (Integer'(Seat_Logs)) & " laid");
+               if Camp_Is_Square and then Walls_Left > 0 then     --  (the walls and stairs of its banks)
+                  Add (S, "Walls", Img (Walls_Left) & " blocks of stone still to lay", Shade => Dim);
+               end if;
                if not C.Built then                --  what its hearth still waits for
                   declare
                      function Short (K : Item_Kind) return String is
@@ -363,11 +404,13 @@ package body Castle.Views is
                   begin
                      if Hv.Zone = Z and then Hv.Phase /= Standing then
                         Add (S, Capital (House_Name (H)),
+                             (if Hv.Marked then "being taken down: "
+                              else "") &
                              (case Hv.Phase is
                                  when Ground => "the ground", when Flooring => "the floor",
                                  when Framing => "the frame",
                                  when Walling => "the walls", when Roofing => "the roof",
-                                 when Trimming | Standing => "the roof's trimming")
+                                 when Trimming | Standing => "the roof's trimming", when Yard => "the yard")
                              & (if Hv.Blocks > 0 then ", " & Percent (Float (Hv.Placed) / Float (Hv.Blocks)) else "")
                              & (case Hv.Waits is
                                    when Not_Waiting => "", when For_A_Builder => "; no builder",
@@ -408,17 +451,28 @@ package body Castle.Views is
       S : Sheet;
    begin
       S.Title := To_Line (Capital (House_Name (H)));
-      S.Note := To_Line ((if V.Phase = Standing then "a hovel of timber, daub and thatch" else "a hovel, being built"));
-      Add (S, (if V.Phase = Standing then "Lives here" else "For"),
-           (if V.Owner in 1 .. Members then Name_Of (V.Owner)
-            elsif V.Phase = Standing then "nobody" else "whoever draws it when it stands"),
-           Shade => (if V.Owner = 0 then Dim else Plain));
+      if V.Kind = Castle.Buildings.Storehouse then
+         S.Note := To_Line ((if V.Phase = Standing then "of timber, daub and thatch, its floor of plank, its yard fenced"
+                             else "being built: the storehouse of the stockyard"));
+      else
+         S.Note := To_Line ((if V.Marked then "a hovel, being taken down"
+                             elsif V.Phase = Standing then "a hovel of timber, daub and thatch" else "a hovel, being built"));
+         Add (S, (if V.Phase = Standing then "Lives here" else "For"),
+              (if V.Marked then "nobody: it is to be razed"
+               elsif V.Owner in 1 .. Members then Name_Of (V.Owner)
+               elsif V.Phase = Standing then "nobody" else "whoever draws it when it stands"),
+              Shade => (if V.Owner = 0 then Dim else Plain));
+         if V.Marked then
+            Add (S, "Marked", "for razing", Shade => Dim);     --  (nobody's: it is being taken down)
+         end if;
+      end if;
       if V.Phase /= Standing then
-         Add (S, "Work",
+         Add (S, (if V.Marked then "Taken down to" else "Work"),
               (case V.Phase is
                   when Ground => "the ground", when Flooring => "the floor", when Framing => "the frame",
                   when Walling => "the walls", when Roofing => "the roof",
-                                 when Trimming | Standing => "the roof's trimming"),
+                                 when Trimming | Standing => "the roof's trimming",
+                                 when Yard => "the yard: its ground beaten, its fence and gateways, its coverings"),
               Bar => (if V.Blocks > 0 then Float (V.Placed) / Float (V.Blocks) else 0.0));
          Add (S, "Builder",
               (if V.Builder in 1 .. Members then Name_Of (V.Builder) else "none: builders come from the foresters"),
@@ -554,6 +608,10 @@ package body Castle.Views is
       S.Note := To_Line ("a deer");
       if H in 1 .. Herd_Count then
          Add (S, "Herd", Img (In_Herd (H)) & " deer");
+         if Has_Stake and then In_Herd (H) <= Spare_Last then   --  (why the hunters let it be)
+            Add (S, "Hunted", "not: its herd is down to" & Natural'Image (In_Herd (H)) & ", left to breed",
+                 Shade => Dim);
+         end if;
       end if;
       Add (S, "Mood", (if In_Panic (K) then "alarmed" else "calm"), Shade => (if In_Panic (K) then Bad else Plain));
       Add (S, "Doing",

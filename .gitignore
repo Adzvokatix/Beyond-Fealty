@@ -1,0 +1,6 @@
+obj/
+bin/
+saves/
+preview/
+*.castle
+screenshot.png

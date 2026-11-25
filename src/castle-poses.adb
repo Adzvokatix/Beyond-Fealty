@@ -91,22 +91,30 @@ package body Castle.Poses is
    Foot  : constant array (Side) of Bone := [Left => Foot_L, Right => Foot_R];
    Out_Sign : constant array (Side) of Float := [Left => 1.0, Right => -1.0];   --  spreading turns -Z toward -X on the left
 
-   procedure Solve (R : Rig; P : Pose; F : out Frames) is
+   --  The pelvis and the chest: the two frames everything else hangs from.
+   procedure Trunk (R : Rig; P : Pose; Pelvis_F, Chest_F : out Frame) is
       Body_F : Frame := Yaw_Frame (P.Heading, P.Pelvis);
    begin
       --  pelvis: lean forward (up toward forward), then roll
       Body_F := Turned (Body_F, Body_F.X, -P.Lean);
       Body_F := Turned (Body_F, Body_F.Y, P.Tilt);
-      F (Pelvis) := Body_F;
+      Pelvis_F := Body_F;
+      Chest_F := Body_F;
+      Chest_F.O := Offset (Body_F, R.Joint (Chest));
+      Chest_F := Turned (Chest_F, Chest_F.Z, P.Twist);
+      Chest_F := Turned (Chest_F, Chest_F.X, -P.Bend);
+   end Trunk;
 
-      declare
-         C : Frame := F (Pelvis);
-      begin
-         C.O := Offset (F (Pelvis), R.Joint (Chest));
-         C := Turned (C, C.Z, P.Twist);
-         C := Turned (C, C.X, -P.Bend);
-         F (Chest) := C;
-      end;
+   function Chest_Frame (R : Rig; P : Pose) return Frame is
+      Pelvis_F, Chest_F : Frame;
+   begin
+      Trunk (R, P, Pelvis_F, Chest_F);
+      return Chest_F;
+   end Chest_Frame;
+
+   procedure Solve (R : Rig; P : Pose; F : out Frames) is
+   begin
+      Trunk (R, P, F (Pelvis), F (Chest));
       declare
          H : Frame := F (Chest);
       begin
@@ -122,8 +130,15 @@ package body Castle.Poses is
          begin
             if P.Reach (S) then
                declare
-                  Pole : constant Vec3 := F (Chest).Y * (-1.0) + F (Chest).Z * (-0.4)
+                  Back : constant Vec3 := F (Chest).Y * (-1.0) + F (Chest).Z * (-0.4)
                     + F (Chest).X * (-0.5 * Out_Sign (S));      --  elbows back, down and out
+                  --  (a hand held before the chest: the elbow down by the ribs and out.  Back, with a
+                  --  hand near the chest's middle, puts the elbow behind the back and the forearm
+                  --  through the body: Pose.Elbows)
+                  Down : constant Vec3 := F (Chest).Y * (-0.25) + F (Chest).Z * (-1.0)
+                    + F (Chest).X * (-0.9 * Out_Sign (S));
+                  E    : constant Float := Float'Max (0.0, Float'Min (1.0, P.Elbows (S)));
+                  Pole : constant Vec3 := (if E = 0.0 then Back else Back * (1.0 - E) + Down * E);
                   Elbow, Wrist : Vec3;
                   Ok : Boolean;
                begin
@@ -145,6 +160,9 @@ package body Castle.Poses is
                      Fa : Frame := U;
                   begin
                      Fa.O := Offset (U, R.Joint (Fore (S)));
+                     if P.Fore_In (S) /= 0.0 then
+                        Fa := Turned (Fa, Fa.Y, -Out_Sign (S) * P.Fore_In (S));
+                     end if;
                      Fa := Turned (Fa, Fa.X, P.Elbow (S));
                      F (Fore (S)) := Fa;
                      F (Hand (S)) := Fa;

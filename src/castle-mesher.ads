@@ -111,6 +111,43 @@ package Castle.Mesher is
    --  it should show (the ground's own corners stay where they are).  Set
    --  before any stack is meshed (--no-round-boulders: as it was).
 
+   --  A dressed roof's thatch fuller, its edges ragged (John, 2026-11-17:
+   --  "Make the tatched roofs thicker when smoothing, fuller and add
+   --  charecter of straw to the edges of the roof").  Trimmed, the slope
+   --  lay in the hollows of the roof's steps: half a block of every step was
+   --  gone, and the eave's edge was half a block thick.  Now it lies over
+   --  the steps' noses (a block thicker, measured upright; the same blocks),
+   --  the eave's edge is a whole block and hangs out a little, and the
+   --  corners along eaves and verges hang unevenly, each by its place
+   --  (Castle.Render: Thatch_Rag_Drop, Thatch_Rag_Out).  Drawing only.
+   --  False (--no-full-thatch): as it was drawn before 2026-11-19.  Set
+   --  before anything is meshed.
+   Full_Thatch : Boolean := True;
+   Thatch_Rag_Drop : constant := 0.4;    --  a ragged corner hangs up to this far (blocks),
+   Thatch_Rag_Out  : constant := 1.6;    --  and is drawn in or out 0.2 to 0.2 + this of its quarter block
+   --  And the whole of the roof's top (John, 2026-11-19, of the edges: "can
+   --  you do that ragged look to the entire surface of the roof, you nailed
+   --  it on the ends, exactly what I wanted"): every corner of a dressed
+   --  roof's top hangs up to Thatch_Surface_Drop, each by its place, so the
+   --  slope is uneven all over; the eaves and verges are as they were, to
+   --  the pixel.  False (--no-ragged-roof): only the edges.  Set before
+   --  anything is meshed.
+   Ragged_Surface : Boolean := True;
+   Thatch_Surface_Drop : constant := 0.4;   --  (blocks: 10 cm; the edges' own amount, his to tune)
+
+   Boulder_Feet : Boolean := True;
+   --  (With Round_Boulders.)  Where a boulder meets level ground its lowest
+   --  corners are its feet (John, 2026-11-16: "make the base of the
+   --  boulders, so they don't look like balls plopped everywhere, they need
+   --  extend into the ground"): drawn out from the rock and down into the
+   --  ground (Castle.Render.Foot_Out, Foot_Down), so its lowest faces spread
+   --  and go under the ground instead of standing on it; marked with z code
+   --  3 in the corner's six bits.  Only where all four blocks under the
+   --  corner are solid (so it lands over ground at that level, never as a
+   --  lip over a step), never up (the ground's corners do not move).  The
+   --  same function of the generator's ground and rock on a stack's edge.
+   --  --no-boulder-feet: the boulder stands on the ground, as before.
+
    subtype Turf is Castle.Blocks.Material with Static_Predicate => Turf in Castle.Blocks.Grass;
    subtype Bare is Castle.Blocks.Material
      with Static_Predicate => Bare in Castle.Blocks.Dirt | Castle.Blocks.Footpath;

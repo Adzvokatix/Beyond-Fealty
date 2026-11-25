@@ -1,0 +1,744 @@
+the colony founded on a square: its middle at 1238.00, 1058.00, squarely; 1936 block columns of floor, to be level at 18.25 m (2358 blocks of earth to dig off, 1854 to fill); a path round it, 52 m to lay
+stockpile put down: 99 cells; its path from 1234.50, 1064.50 to 1244.50, 1064.50, 0.00 m of it new (at a path's end)
+stockyard put down: 400 places, closed until its storehouse stands; its path from 1248.00, 1051.50 to 1228.00, 1051.50, 7.00 m of it new (along a path)
+housing pulled with a line of its own from 1250.00, 1058.00 to 1284.00, 1058.00: 34.00 m of path new, 2 rows zoned, room for 8 hovels
+the band:
+  Walter, man, 22, 1.68 m, gatherer; gathering 0.36 (learns x1.1)
+  Cedric, man, 25, 1.59 m, gatherer; gathering 0.19 (learns x1.0)
+  Alys, woman, 16, 1.56 m, gatherer; gathering 0.19 (learns x0.9)
+  Roger, man, 49, 1.75 m, gatherer; gathering 0.30 (learns x0.9)
+  Gilbert, man, 65, 1.71 m, forester; forestry 0.53 (learns x1.5)
+  Isabel, woman, 40, 1.49 m, forester; forestry 0.25 (learns x1.5)
+  Joan, woman, 21, 1.66 m, forester; forestry 0.44 (learns x0.8)
+  Odo, man, 32, 1.67 m, porter; portering 0.37 (learns x1.1)
+  Alan, man, 59, 1.83 m, porter; portering 0.37 (learns x1.1)
+  Matilda, woman, 21, 1.67 m, hunter; hunting 0.49 (learns x1.4)
+  Mabel, woman, 57, 1.62 m, hunter; hunting 0.16 (learns x1.4)
+  Cecily, woman, 47, 1.63 m, hunter; hunting 0.44 (learns x0.7)
+  Juliana, woman, 32, 1.76 m, idle; cooking 0.32 (learns x1.0)
+box at the start: zone 1, its front from 1232.00, 1052.00 E  48 blocks; 1936 block columns in its box: 1936 its ground, 0 a path's, 0 another zone's, 0 nobody's (0 of those within a metre of its front); 0 places
+box at the start: zone 2, its front from 1234.50, 1064.50 E  40 blocks; 1600 block columns in its box: 1598 its ground, 0 a path's, 0 another zone's, 2 nobody's (0 of those within a metre of its front); 99 places
+box at the start: zone 3, its front from 1248.00, 1051.50 W  80 blocks; 6400 block columns in its box: 6400 its ground, 0 a path's, 0 another zone's, 0 nobody's (0 of those within a metre of its front); 0 places (400 closed)
+box at the start: 0 trees or stumps still to take out of stockpiles
+square at the start: its floor to be level at 18.25 m, 2358 blocks to dig, 1854 to fill, 121 square metres of it still to make ready; its hearth not built (0 stones, 0 pieces of wood brought); 94 m of path still to lay
+square at the start: its walls: 0 blocks of stone still to lay, 0 of earth to dig off; 0 block columns of wall, ledge or stair, the highest bank 0 blocks, 0 lifts, 0 stairs (0 sides too high for one); 0 edge columns with no path laid by them; 0 sleeping places by the fire given up
+world 1, ground in, 1.2 s
+colony: 13 in the band, 13 living, 13 at work, tick 0; 0 berries stored, 0 carried, 0 on 0 bushes; 0 of 0 trees felled, 0 logs stored, 0 lying; 0 straw, 0 stone, 0 grain stored; 0 deer in 0 herds; 0 killed with 0 arrows, 0 meat, 0 hides stored; 0 food eaten, 0 hungry, 0 asleep, food for 0.0 days, confidence 70 %
+camp: being built: 121 square metres of ground to make ready, stone 0 of 10, wood 0 of 3
+camp: fire out, 0 logs stacked, 0 burnt, 0 seats; stew 0 in the pot, 0 cooked from 0 meat, 0 vegetables, 0 berries, 0 apples, 0 grain; eaten raw 0 berries, 0 vegetables, 0 apples
+the cook, Juliana: looking for work
+skills: gathering 0.26 (4) forestry 0.40 (3) hunting 0.36 (3) portering 0.37 (2) cooking 0.32 (1)
+demand: food 0.0 of 12.0 days, asked; wood 0 of 31, asked; stone 0 of 30, asked; straw 0 of 20, asked; meat 0 of 60, asked; vegetables 0 of 40, asked; 0 at rest
+housing: 0 standing, 0 being built, 13 without a home, 0 at home, room for 8 more
+beds: 0 of 13 have one, 0 sheaves in them
+salt: no cart, 0 stored; 0 deer salted, 0 not, 0 lb of meat lost
+food: day 20 7.0 h:  13 living, confidence 70 %, fed 100/100 %, hungry 0, cold 0, eaten 0, cooked 0, stew 0, days 0.00 (held 0.0), deer 10, burnt 0; stored meat 0, veg 0, berries 0, apples 0, grain 0, logs 0; in the pot meat 0, veg 0, berries 0, apples 0, grain 0; raw 0; kills 0, pulled 0, berries left 2242, apples left 0; asked: food meat vegetables wood straw stone, at rest 0; camp to build: ground 121, stone 0, wood 0, to dig 2358, to fill 1854; path to lay: 94 m; housing: 0 standing, 3 being built, 13 without a home, 0 at home, room for 5 more; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 27, stone 0 of 16, built by Joan; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 28, no builder; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 25, no builder; beds: 0 of 13 have one, 0 sheaves in them; salt: 240 lb in the cart, 0 stored; 0 deer salted, 0 not, 0 lb of meat lost; the cart where it stood; at extra tasks 4 (of 4 at most)
+  who: Walter, 100 % fed: going to make the camp's ground ready
+  who: Cedric, 100 % fed: going to make the camp's ground ready
+  who: Alys, 100 % fed: going to make the camp's ground ready
+  who: Roger, 100 % fed: going to make the camp's ground ready
+  who: Gilbert, 100 % fed: no trees to fell in reach
+  who: Isabel, 100 % fed: no trees to fell in reach
+  who: Joan, 100 % fed: going to make the ground ready for a hovel
+  who: Odo, 100 % fed: cutting straw (0)
+  who: Alan, 100 % fed: cutting straw (0)
+  who: Matilda, 100 % fed: going to the lord's cart for salt
+  who: Mabel, 100 % fed: no deer to hunt in reach
+  who: Cecily, 100 % fed: no deer to hunt in reach
+  who: Juliana, 100 % fed: making the camp's ground ready
+    herd 1: 5 deer, its node at 1267.3 1042.5; nearest of the band Cecily, 30.3 m off at 1240.9 1057.5, HUNTER: no deer to hunt in reach
+    herd 2: 5 deer, its node at 1213.9 1079.8; nearest of the band Gilbert, 29.9 m off at 1235.5 1059.1, FORESTER: no trees to fell in reach
+food: day 21 0.0 h:  13 living, confidence 56 %, fed 5/43 %, hungry 6, cold 0, eaten 1278, cooked 0, stew 0, days 3.90 (held 2.9), deer 8, burnt 0; stored meat 240, veg 57, berries 0, apples 0, grain 0, logs 0; in the pot meat 0, veg 0, berries 0, apples 0, grain 0; raw 926; kills 4, pulled 233, berries left 19228, apples left 0; asked: food wood stone, at rest 0; path to lay: 15 m; housing: 0 standing, 3 being built, 13 without a home, 0 at home, room for 5 more; a hovel: the ground 1 %, wood 0 of 5, straw 0 of 27, stone 8 of 17, built by Joan; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 28, stone 0 of 15, built by Isabel; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 25, stone 0 of 13, built by Gilbert; beds: 13 of 13 have one, 26 sheaves in them; salt: 200 lb in the cart, 16 stored; 4 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 48 % fed: asleep
+  who: Cedric, 14 % fed: asleep
+  who: Alys, 25 % fed: asleep
+  who: Roger, 77 % fed: asleep
+  who: Gilbert, 13 % fed: asleep
+  who: Isabel, 65 % fed: asleep
+  who: Joan, 68 % fed: asleep
+  who: Odo, 54 % fed: asleep
+  who: Alan, 72 % fed: asleep
+  who: Matilda, 69 % fed: asleep
+  who: Mabel, 31 % fed: asleep
+  who: Cecily, 24 % fed: asleep
+  who: Juliana, 5 % fed: asleep
+    herd 1: 5 deer, its node at 1258.3 1115.3; nearest of the band Gilbert, 56.6 m off at 1239.1 1062.0, FORESTER: asleep
+    herd 2: 3 deer, its node at 1193.3 1032.9; nearest of the band Roger, 47.2 m off at 1234.5 1055.8, GATHERER: asleep
+advisor, day 21 at 7.0 h: The storehouse goes on the stockyard: the builders will raise it, fence its yard and roof its coverings
+food: day 22 0.0 h:  13 living, confidence 58 %, fed 70/80 %, hungry 0, cold 0, eaten 4169, cooked 2077, stew 239, days 6.00 (held 5.0), deer 6, burnt 1; stored meat 322, veg 81, berries 581, apples 0, grain 0, logs 3; in the pot meat 23, veg 112, berries 0, apples 0, grain 0; raw 1681; kills 6, pulled 518, berries left 18041, apples left 0; asked: food wood, at rest 0; housing: 0 standing, 3 being built, 13 without a home, 0 at home, room for 5 more; a hovel: the frame 13 %, wood 0 of 5, straw 0 of 27, stone 17 of 17, built by Joan; a hovel: the frame 13 %, wood 1 of 5, straw 0 of 28, stone 15 of 15, built by Isabel; a hovel: the frame 13 %, wood 0 of 5, straw 0 of 25, stone 9 of 9, built by Gilbert; storehouse: on the stockyard, its ground 0 %, wood 0 of 34, straw 0 of 78, no builder; beds: 13 of 13 have one, 26 sheaves in them; salt: 180 lb in the cart, 25 stored; 6 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 84 % fed: asleep
+  who: Cedric, 78 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 76 % fed: asleep
+  who: Gilbert, 70 % fed: asleep
+  who: Isabel, 86 % fed: asleep
+  who: Joan, 84 % fed: asleep
+  who: Odo, 75 % fed: asleep
+  who: Alan, 75 % fed: asleep
+  who: Matilda, 82 % fed: asleep
+  who: Mabel, 85 % fed: asleep
+  who: Cecily, 71 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 3 deer, its node at 1178.1 1080.4; nearest of the band Alan, 60.2 m off at 1233.9 1057.8, PORTER: asleep
+    herd 2: 3 deer, its node at 1190.6 1044.6; nearest of the band Alan, 45.3 m off at 1233.9 1057.8, PORTER: asleep
+food: day 23 0.0 h:  13 living, confidence 72 %, fed 74/82 %, hungry 0, cold 0, eaten 6748, cooked 3793, stew 0, days 6.07 (held 5.1), deer 6, burnt 4; stored meat 317, veg 161, berries 570, apples 0, grain 0, logs 2; in the pot meat 28, veg 281, berries 0, apples 0, grain 0; raw 2277; kills 6, pulled 781, berries left 17470, apples left 0; asked: food wood, at rest 0; housing: 0 standing, 3 being built, 13 without a home, 0 at home, room for 5 more; a hovel: the walls 44 %, wood 5 of 5, straw 15 of 27, stone 17 of 17, built by Joan; a hovel: the roof 47 %, wood 5 of 5, straw 15 of 28, stone 15 of 15, built by Isabel; a hovel: the frame 23 %, wood 3 of 5, straw 0 of 25, stone 9 of 9, built by Gilbert, waits for wood; storehouse: on the stockyard, its ground 0 %, wood 0 of 34, straw 0 of 78, no builder; beds: 13 of 13 have one, 26 sheaves in them; salt: 180 lb in the cart, 25 stored; 6 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 87 % fed: asleep
+  who: Cedric, 76 % fed: asleep
+  who: Alys, 86 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 77 % fed: asleep
+  who: Isabel, 85 % fed: asleep
+  who: Joan, 82 % fed: asleep
+  who: Odo, 83 % fed: asleep
+  who: Alan, 84 % fed: asleep
+  who: Matilda, 83 % fed: asleep
+  who: Mabel, 85 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 74 % fed: asleep
+  ladder: at house 2 (1256, 1056), side 1, its foot 2.50 m under the eave and 0.91 m out from it
+    herd 1: 3 deer, its node at 1236.8 1119.3; nearest of the band Gilbert, 57.3 m off at 1239.1 1062.0, FORESTER: asleep
+    herd 2: 3 deer, its node at 1258.3 1087.8; nearest of the band Gilbert, 32.1 m off at 1239.1 1062.0, FORESTER: asleep
+food: day 24 0.0 h:  13 living, confidence 74 %, fed 71/80 %, hungry 0, cold 0, eaten 9280, cooked 5891, stew 167, days 6.13 (held 5.1), deer 8, burnt 7; stored meat 313, veg 117, berries 885, apples 0, grain 0, logs 10; in the pot meat 32, veg 416, berries 0, apples 0, grain 0; raw 2872; kills 6, pulled 875, berries left 16563, apples left 0; asked: food wood straw stone, at rest 0; housing: 2 standing, 3 being built, 11 without a home, 2 at home, room for 3 more; a hovel: the roof 49 %, wood 5 of 5, straw 15 of 25, stone 9 of 9, built by Gilbert; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 26, stone 0 of 15, built by Joan; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 27, no builder; storehouse: on the stockyard, its ground 0 %, wood 0 of 34, straw 0 of 78, built by Isabel; beds: 13 of 13 have one, 30 sheaves in them; salt: 180 lb in the cart, 25 stored; 6 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 86 % fed: asleep
+  who: Cedric, 85 % fed: asleep
+  who: Alys, 83 % fed: asleep
+  who: Roger, 81 % fed: asleep
+  who: Gilbert, 73 % fed: asleep
+  who: Isabel, 79 % fed: asleep
+  who: Joan, 81 % fed: asleep
+  who: Odo, 71 % fed: asleep
+  who: Alan, 72 % fed: asleep
+  who: Matilda, 83 % fed: asleep
+  who: Mabel, 86 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+  ladder: at house 3 (1263, 1059), side 1, its foot 2.75 m under the eave and 1.02 m out from it
+    herd 1: 5 deer, its node at 1238.8 1119.8; nearest of the band Walter, 57.6 m off at 1251.9 1063.6, GATHERER: asleep
+    herd 2: 3 deer, its node at 1283.8 1096.8; nearest of the band Walter, 46.0 m off at 1251.9 1063.6, GATHERER: asleep
+food: day 25 0.0 h:  13 living, confidence 74 %, fed 74/81 %, hungry 0, cold 0, eaten 11845, cooked 7919, stew 267, days 8.22 (held 7.2), deer 6, burnt 10; stored meat 443, veg 94, berries 926, apples 0, grain 0, logs 6; in the pot meat 37, veg 503, berries 329, apples 0, grain 0; raw 3479; kills 8, pulled 954, berries left 15601, apples left 250; asked: food wood, at rest 0; housing: 3 standing, 3 being built, 10 without a home, 3 at home, room for 2 more; a hovel: the frame 16 %, wood 2 of 5, straw 0 of 26, stone 19 of 19, built by Joan; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 27, stone 0 of 18, built by Gilbert; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 26, no builder; storehouse: on the stockyard, its ground 0 %, wood 0 of 34, straw 0 of 78, stone 0 of 53, built by Isabel; beds: 13 of 13 have one, 32 sheaves in them; salt: 160 lb in the cart, 31 stored; 8 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 86 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 81 % fed: asleep
+  who: Roger, 86 % fed: asleep
+  who: Gilbert, 78 % fed: asleep
+  who: Isabel, 85 % fed: asleep
+  who: Joan, 82 % fed: asleep
+  who: Odo, 83 % fed: asleep
+  who: Alan, 82 % fed: asleep
+  who: Matilda, 82 % fed: asleep
+  who: Mabel, 74 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 75 % fed: asleep
+    herd 1: 3 deer, its node at 1221.3 1116.3; nearest of the band Alys, 56.7 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1261.8 1112.3; nearest of the band Gilbert, 49.2 m off at 1258.4 1063.1, FORESTER: asleep
+food: day 26 0.0 h:  13 living, confidence 73 %, fed 68/81 %, hungry 0, cold 0, eaten 14402, cooked 9632, stew 0, days 8.32 (held 7.3), deer 6, burnt 13; stored meat 442, veg 52, berries 801, apples 140, grain 0, logs 3; in the pot meat 38, veg 545, berries 902, apples 0, grain 0; raw 3996; kills 8, pulled 954, berries left 14696, apples left 50; asked: food wood, at rest 0; housing: 3 standing, 3 being built, 10 without a home, 3 at home, room for 2 more; a hovel: the roof 51 %, wood 5 of 5, straw 12 of 26, stone 19 of 19, built by Joan; a hovel: the frame 14 %, wood 1 of 5, straw 0 of 27, stone 18 of 18, built by Gilbert; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 26, no builder; storehouse: on the stockyard, its ground 0 %, wood 0 of 34, straw 0 of 78, stone 0 of 53, built by Isabel; beds: 13 of 13 have one, 32 sheaves in them; salt: 160 lb in the cart, 31 stored; 8 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 83 % fed: asleep
+  who: Cedric, 84 % fed: asleep
+  who: Alys, 87 % fed: asleep
+  who: Roger, 86 % fed: asleep
+  who: Gilbert, 71 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 82 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 82 % fed: asleep
+  who: Matilda, 83 % fed: asleep
+  who: Mabel, 77 % fed: asleep
+  who: Cecily, 68 % fed: asleep
+  who: Juliana, 84 % fed: asleep
+  ladder: at house 5 (1259, 1057), side 1, its foot 1.75 m under the eave and 1.00 m out from it
+    herd 1: 3 deer, its node at 1291.8 1075.3; nearest of the band Gilbert, 35.5 m off at 1258.4 1063.1, FORESTER: asleep
+    herd 2: 3 deer, its node at 1290.5 1040.1; nearest of the band Gilbert, 39.5 m off at 1258.4 1063.1, FORESTER: asleep
+food: day 27 0.0 h:  13 living, confidence 74 %, fed 70/78 %, hungry 0, cold 0, eaten 16918, cooked 11894, stew 48, days 8.81 (held 7.8), deer 8, burnt 16; stored meat 436, veg 39, berries 1540, apples 160, grain 0, logs 2; in the pot meat 44, veg 579, berries 1269, apples 0, grain 0; raw 4298; kills 8, pulled 975, berries left 14294, apples left 30; asked: food vegetables wood, at rest 0; housing: 4 standing, 3 being built, 9 without a home, 4 at home, room for 1 more; a hovel: the frame 25 %, wood 5 of 5, straw 0 of 27, stone 18 of 18, built by Gilbert; a hovel: the ground 1 %, wood 0 of 5, straw 0 of 26, stone 2 of 13, built by Joan; a hovel: the ground 0 %, wood 0 of 6, straw 0 of 29, no builder; storehouse: on the stockyard, its ground 0 %, wood 0 of 34, straw 0 of 78, stone 28 of 53, built by Isabel; beds: 13 of 13 have one, 34 sheaves in them; salt: 160 lb in the cart, 31 stored; 8 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 86 % fed: asleep
+  who: Cedric, 83 % fed: asleep
+  who: Alys, 86 % fed: asleep
+  who: Roger, 86 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 70 % fed: asleep
+  who: Joan, 70 % fed: asleep
+  who: Odo, 71 % fed: asleep
+  who: Alan, 72 % fed: asleep
+  who: Matilda, 83 % fed: asleep
+  who: Mabel, 72 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 73 % fed: asleep
+    herd 1: 5 deer, its node at 1268.8 1082.8; nearest of the band Gilbert, 22.2 m off at 1258.4 1063.1, FORESTER: asleep
+    herd 2: 3 deer, its node at 1264.3 1093.3; nearest of the band Gilbert, 30.7 m off at 1258.4 1063.1, FORESTER: asleep
+food: day 28 0.0 h:  13 living, confidence 72 %, fed 68/79 %, hungry 0, cold 0, eaten 19494, cooked 13606, stew 0, days 10.30 (held 9.3), deer 6, burnt 18; stored meat 541, veg 39, berries 1245, apples 180, grain 0, logs 2; in the pot meat 44, veg 579, berries 1959, apples 0, grain 0; raw 5114; kills 10, pulled 975, berries left 14250, apples left 10; asked: food vegetables wood, at rest 0; housing: 4 standing, 3 being built, 9 without a home, 4 at home, room for 1 more; a hovel: the roof 64 %, wood 5 of 5, straw 24 of 27, stone 18 of 18, built by Gilbert; a hovel: the frame 17 %, wood 2 of 5, straw 0 of 26, stone 13 of 13, built by Joan; a hovel: the ground 0 %, wood 0 of 6, straw 0 of 29, no builder; storehouse: on the stockyard, its floor 1 %, wood 2 of 34, straw 0 of 78, stone 53 of 53, built by Isabel; beds: 13 of 13 have one, 34 sheaves in them; salt: 160 lb in the cart, 20 stored; 10 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 83 % fed: asleep
+  who: Cedric, 84 % fed: asleep
+  who: Alys, 80 % fed: asleep
+  who: Roger, 83 % fed: asleep
+  who: Gilbert, 68 % fed: asleep
+  who: Isabel, 83 % fed: asleep
+  who: Joan, 82 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 72 % fed: asleep
+  who: Matilda, 70 % fed: asleep
+  who: Mabel, 86 % fed: asleep
+  who: Cecily, 71 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+  ladder: at house 6 (1268, 1059), side 4, its foot 1.50 m under the eave and 0.52 m out from it
+    herd 1: 3 deer, its node at 1234.1 1024.0; nearest of the band Roger, 31.7 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1168.6 1065.3; nearest of the band Alan, 65.7 m off at 1233.9 1057.8, PORTER: asleep
+food: day 29 0.0 h:  13 living, confidence 74 %, fed 70/81 %, hungry 0, cold 0, eaten 22084, cooked 15999, stew 133, days 10.41 (held 9.4), deer 6, burnt 21; stored meat 541, veg 39, berries 1528, apples 180, grain 0, logs 3; in the pot meat 44, veg 579, berries 2527, apples 0, grain 0; raw 5444; kills 10, pulled 975, berries left 13672, apples left 10; asked: food vegetables wood, at rest 0; housing: 5 standing, 3 being built, 8 without a home, 5 at home, room for 0 more (no room for the next); a hovel: the walls 42 %, wood 5 of 5, straw 13 of 26, stone 13 of 13, built by Joan; a hovel: the ground 0 %, wood 0 of 6, straw 0 of 29, stone 8 of 19, built by Gilbert; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 26, no builder; storehouse: on the stockyard, its floor 5 %, wood 8 of 34, straw 0 of 78, stone 53 of 53, built by Isabel; beds: 13 of 13 have one, 36 sheaves in them; salt: 160 lb in the cart, 20 stored; 10 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 84 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 82 % fed: asleep
+  who: Gilbert, 78 % fed: asleep
+  who: Isabel, 86 % fed: asleep
+  who: Joan, 81 % fed: asleep
+  who: Odo, 70 % fed: asleep
+  who: Alan, 81 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 86 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 75 % fed: asleep
+    herd 1: 3 deer, its node at 1205.4 1032.4; nearest of the band Roger, 37.4 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1181.2 1070.8; nearest of the band Alys, 55.2 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 30 0.0 h:  13 living, confidence 72 %, fed 71/81 %, hungry 0, cold 0, eaten 24655, cooked 17732, stew 0, days 10.21 (held 9.2), deer 8, burnt 24; stored meat 541, veg 39, berries 1130, apples 180, grain 0, logs 2; in the pot meat 44, veg 579, berries 3334, apples 0, grain 0; raw 6149; kills 10, pulled 975, berries left 13352, apples left 10; asked: food vegetables wood, at rest 0; housing: 6 standing, 2 being built, 7 without a home, 6 at home, room for 0 more (no room for the next); a hovel: the frame 16 %, wood 1 of 6, straw 0 of 29, stone 19 of 19, built by Gilbert, waits for wood; a hovel: the ground 0 %, wood 0 of 5, straw 0 of 26, stone 0 of 17, built by Joan; storehouse: on the stockyard, its frame 10 %, wood 16 of 34, straw 0 of 78, stone 53 of 53, built by Isabel, waits for wood; beds: 13 of 13 have one, 38 sheaves in them; salt: 160 lb in the cart, 20 stored; 10 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 76 % fed: asleep
+  who: Cedric, 86 % fed: asleep
+  who: Alys, 73 % fed: asleep
+  who: Roger, 88 % fed: asleep
+  who: Gilbert, 71 % fed: asleep
+  who: Isabel, 83 % fed: asleep
+  who: Joan, 81 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 78 % fed: asleep
+  who: Matilda, 82 % fed: asleep
+  who: Mabel, 85 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 84 % fed: asleep
+    herd 1: 5 deer, its node at 1190.5 1015.0; nearest of the band Roger, 60.0 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1186.7 1090.1; nearest of the band Alys, 56.7 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 31 0.0 h:  13 living, confidence 75 %, fed 72/80 %, hungry 0, cold 0, eaten 27190, cooked 20377, stew 226, days 11.76 (held 10.0), deer 6, burnt 27; stored meat 641, veg 45, berries 1207, apples 180, grain 0, logs 3; in the pot meat 64, veg 658, berries 3364, apples 0, grain 0; raw 6265; kills 12, pulled 1060, berries left 13837, apples left 10; asked: wood, at rest 0; housing: 6 standing, 2 being built, 7 without a home, 6 at home, room for 0 more (no room for the next); a hovel: the frame 24 %, wood 4 of 6, straw 0 of 29, stone 19 of 19, built by Gilbert; a hovel: the frame 13 %, wood 0 of 5, straw 0 of 26, stone 17 of 17, built by Joan; storehouse: on the stockyard, its frame 14 %, wood 22 of 34, straw 0 of 78, stone 53 of 53, built by Isabel; beds: 13 of 13 have one, 38 sheaves in them; salt: 140 lb in the cart, 28 stored; 12 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 84 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 81 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 74 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 74 % fed: asleep
+  who: Matilda, 72 % fed: asleep
+  who: Mabel, 76 % fed: asleep
+  who: Cecily, 80 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 3 deer, its node at 1179.6 1039.3; nearest of the band Roger, 57.4 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1188.6 1030.9; nearest of the band Roger, 52.2 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 32 0.0 h:  13 living, confidence 75 %, fed 72/80 %, hungry 0, cold 0, eaten 29751, cooked 22169, stew 10, days 10.96 (held 10.0), deer 6, burnt 30; stored meat 622, veg 36, berries 711, apples 180, grain 0, logs 0; in the pot meat 83, veg 749, berries 3364, apples 0, grain 0; raw 6780; kills 12, pulled 1161, berries left 15007, apples left 10; asked: food vegetables wood, at rest 0; housing: 6 standing, 2 being built, 7 without a home, 6 at home, room for 0 more (no room for the next); a hovel: the walls 38 %, wood 6 of 6, straw 9 of 29, stone 19 of 19, built by Gilbert; a hovel: the walls 34 %, wood 5 of 5, straw 6 of 26, stone 17 of 17, built by Joan; storehouse: on the stockyard, its walls 19 %, wood 27 of 34, straw 6 of 78, stone 53 of 53, built by Isabel; beds: 13 of 13 have one, 38 sheaves in them; salt: 140 lb in the cart, 28 stored; 12 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 86 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 74 % fed: asleep
+  who: Roger, 82 % fed: asleep
+  who: Gilbert, 77 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 74 % fed: asleep
+  who: Odo, 72 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 83 % fed: asleep
+  who: Mabel, 85 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+    herd 1: 3 deer, its node at 1199.8 1099.8; nearest of the band Alys, 52.5 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1209.9 1018.5; nearest of the band Roger, 44.7 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 33 0.0 h:  13 living, confidence 74 %, fed 70/80 %, hungry 0, cold 0, eaten 32304, cooked 24256, stew 121, days 11.58 (held 10.0), deer 8, burnt 32; stored meat 620, veg 94, berries 1281, apples 180, grain 0, logs 1; in the pot meat 85, veg 927, berries 3364, apples 0, grain 0; raw 7295; kills 12, pulled 1428, berries left 15206, apples left 10; asked: food wood, at rest 0; housing: 6 standing, 2 being built, 7 without a home, 6 at home, room for 0 more (no room for the next); a hovel: the roof 75 %, wood 6 of 6, straw 29 of 29, stone 19 of 19, built by Gilbert; a hovel: the roof 77 %, wood 5 of 5, straw 26 of 26, stone 17 of 17, built by Joan; storehouse: on the stockyard, its roof 25 %, wood 27 of 34, straw 24 of 78, stone 53 of 53, built by Isabel; beds: 13 of 13 have one, 38 sheaves in them; salt: 140 lb in the cart, 28 stored; 12 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 74 % fed: asleep
+  who: Cedric, 83 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 72 % fed: asleep
+  who: Joan, 81 % fed: asleep
+  who: Odo, 80 % fed: asleep
+  who: Alan, 70 % fed: asleep
+  who: Matilda, 83 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 77 % fed: asleep
+  ladder: at house 4 (1238, 1050), side 1, its foot 2.50 m under the eave and 0.95 m out from it
+  ladder: at house 8 (1275, 1059), side 2, its foot 1.50 m under the eave and 0.66 m out from it
+  ladder: at house 9 (1275, 1057), side 2, its foot 2.00 m under the eave and 0.72 m out from it
+    herd 1: 5 deer, its node at 1220.3 1113.8; nearest of the band Alys, 54.6 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1194.0 1108.0; nearest of the band Alys, 62.5 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 34 0.0 h:  13 living, confidence 75 %, fed 69/80 %, hungry 0, cold 0, eaten 34864, cooked 26224, stew 56, days 12.31 (held 10.0), deer 7, burnt 35; stored meat 671, veg 53, berries 1231, apples 180, grain 0, logs 18; in the pot meat 94, veg 1129, berries 3364, apples 0, grain 0; raw 7764; kills 13, pulled 1618, berries left 16115, apples left 10; asked: wood, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, its roof 42 %, wood 27 of 34, straw 61 of 78, stone 53 of 53, built by Isabel; beds: 13 of 13 have one, 42 sheaves in them; salt: 140 lb in the cart, 22 stored; 13 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 73 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 86 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 74 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 81 % fed: asleep
+  who: Odo, 71 % fed: asleep
+  who: Alan, 82 % fed: asleep
+  who: Matilda, 80 % fed: asleep
+  who: Mabel, 82 % fed: asleep
+  who: Cecily, 69 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+  ladder: at house 4 (1238, 1050), side 2, its foot 2.50 m under the eave and 0.71 m out from it
+    herd 1: 4 deer, its node at 1280.8 1097.3; nearest of the band Mabel, 34.3 m off at 1272.6 1063.9, HUNTER: asleep
+    herd 2: 3 deer, its node at 1226.3 1022.7; nearest of the band Roger, 34.0 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 35 0.0 h:  13 living, confidence 75 %, fed 67/80 %, hungry 0, cold 0, eaten 37423, cooked 28347, stew 158, days 11.44 (held 10.0), deer 7, burnt 38; stored meat 652, veg 40, berries 696, apples 180, grain 0, logs 31; in the pot meat 113, veg 1203, berries 3364, apples 0, grain 0; raw 8300; kills 13, pulled 1680, berries left 16956, apples left 10; asked:, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, its yard 65 %, wood 27 of 34, straw 71 of 78, stone 53 of 53, built by Gilbert; beds: 13 of 13 have one, 42 sheaves in them; salt: 140 lb in the cart, 22 stored; 13 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 73 % fed: asleep
+  who: Roger, 81 % fed: asleep
+  who: Gilbert, 67 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 78 % fed: asleep
+  who: Odo, 83 % fed: asleep
+  who: Alan, 81 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 76 % fed: asleep
+  ladder: at house 4 (1238, 1050), side 2, its foot 2.50 m under the eave and 0.73 m out from it
+    herd 1: 4 deer, its node at 1271.3 1094.8; nearest of the band Alan, 30.8 m off at 1266.1 1064.4, PORTER: asleep
+    herd 2: 3 deer, its node at 1174.8 1071.6; nearest of the band Alys, 61.6 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 36 0.0 h:  13 living, confidence 75 %, fed 68/80 %, hungry 0, cold 0, eaten 39984, cooked 30213, stew 0, days 11.74 (held 10.0), deer 8, burnt 41; stored meat 696, veg 14, berries 348, apples 180, grain 0, logs 20; in the pot meat 129, veg 1307, berries 3382, apples 0, grain 0; raw 8819; kills 14, pulled 1767, berries left 17824, apples left 10; asked: vegetables wood, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, its yard 93 %, wood 35 of 34, straw 71 of 78, stone 53 of 53, built by Gilbert; beds: 13 of 13 have one, 42 sheaves in them; salt: 140 lb in the cart, 16 stored; 14 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 83 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 82 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 68 % fed: asleep
+  who: Alan, 68 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 74 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+  ladder: at house 4 (1238, 1050), side 2, its foot 2.50 m under the eave and 0.73 m out from it
+    herd 1: 5 deer, its node at 1283.9 1095.9; nearest of the band Mabel, 34.0 m off at 1272.6 1063.9, HUNTER: asleep
+    herd 2: 3 deer, its node at 1188.7 1052.9; nearest of the band Roger, 45.9 m off at 1234.5 1055.8, GATHERER: asleep
+stockman, day 36 at 7.9 h: Alan
+carpenter, day 36 at 7.9 h: Gilbert
+stockman, day 36 at 8.7 h: the lord's cart at the storehouse's front
+food: day 37 0.0 h:  13 living, confidence 74 %, fed 76/81 %, hungry 0, cold 0, eaten 42562, cooked 32551, stew 77, days 11.19 (held 10.0), deer 8, burnt 44; stored meat 676, veg 43, berries 70, apples 180, grain 0, logs 29; in the pot meat 149, veg 1387, berries 3382, apples 0, grain 0; raw 9110; kills 14, pulled 1889, berries left 17944, apples left 10; asked:, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 22 vegetables, 60 apples, 140 salt; shelves 6 (6 made): 5 hides; meat barrels 6 (0 made); water barrels 2 (1 made); under the coverings 36: 13 wood, 12 straw; against the wall 11: 1 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 156 stored; 14 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 86 % fed: asleep
+  who: Cedric, 83 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 76 % fed: asleep
+  who: Gilbert, 81 % fed: asleep
+  who: Isabel, 79 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 80 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 82 % fed: asleep
+  who: Mabel, 80 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 76 % fed: asleep
+    herd 1: 5 deer, its node at 1260.8 1108.8; nearest of the band Alan, 44.7 m off at 1266.1 1064.4, PORTER: asleep
+    herd 2: 3 deer, its node at 1200.0 1021.2; nearest of the band Roger, 48.8 m off at 1234.5 1055.8, GATHERER: asleep
+carpenter, day 37 at 20.5 h: all 14 shelves and barrels made
+food: day 38 0.0 h:  13 living, confidence 75 %, fed 79/82 %, hungry 0, cold 0, eaten 45146, cooked 35395, stew 406, days 12.64 (held 10.0), deer 7, burnt 47; stored meat 719, veg 5, berries 995, apples 180, grain 0, logs 23; in the pot meat 166, veg 1477, berries 3473, apples 0, grain 0; raw 9153; kills 15, pulled 1954, berries left 19554, apples left 10; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57 (2 stacked): 861 berries, 80 apples, 140 salt; shelves 6 (6 made): 6 hides; meat barrels 6 (6 made): 70 meat; water barrels 2 (2 made): 16 water; under the coverings 36: 16 wood, 12 straw; against the wall 11: 1 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 150 stored; 15 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 82 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 81 % fed: asleep
+  who: Roger, 83 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 82 % fed: asleep
+  who: Cecily, 81 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 4 deer, its node at 1187.2 1063.8; nearest of the band Roger, 48.0 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1201.9 1036.2; nearest of the band Roger, 38.1 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 39 0.0 h:  13 living, confidence 74 %, fed 70/77 %, hungry 0, cold 0, eaten 47654, cooked 37270, stew 238, days 11.92 (held 10.0), deer 9, burnt 50; stored meat 703, veg 30, berries 503, apples 180, grain 0, logs 22; in the pot meat 182, veg 1550, berries 3503, apples 0, grain 0; raw 9616; kills 15, pulled 2053, berries left 26712, apples left 10; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57 (1 stacked): 459 berries, 10 vegetables, 120 apples, 150 salt; shelves 6 (6 made): 6 hides; meat barrels 6 (6 made): 178 meat; water barrels 2 (2 made, 2 two high): 43 water; under the coverings 36: 22 wood, 18 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 150 stored; 15 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 75 % fed: asleep
+  who: Cedric, 80 % fed: asleep
+  who: Alys, 79 % fed: asleep
+  who: Roger, 78 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 72 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 70 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 72 % fed: asleep
+  who: Cecily, 85 % fed: asleep
+  who: Juliana, 72 % fed: asleep
+    herd 1: 4 deer, its node at 1204.3 1105.8; nearest of the band Alys, 54.4 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 5 deer, its node at 1192.2 1071.0; nearest of the band Alys, 44.4 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 40 0.0 h:  13 living, confidence 74 %, fed 63/77 %, hungry 0, cold 0, eaten 50214, cooked 39180, stew 0, days 11.22 (held 10.0), deer 9, burnt 52; stored meat 679, veg 16, berries 91, apples 180, grain 0, logs 30; in the pot meat 206, veg 1650, berries 3533, apples 0, grain 0; raw 10028; kills 15, pulled 2139, berries left 27117, apples left 10; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 91 berries, 16 vegetables, 140 apples, 150 salt; shelves 6 (6 made): 10 hides; meat barrels 6 (6 made, 1 two high): 294 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 30 wood, 4 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 150 stored; 15 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 82 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 71 % fed: asleep
+  who: Roger, 77 % fed: asleep
+  who: Gilbert, 66 % fed: asleep
+  who: Isabel, 63 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 70 % fed: asleep
+  who: Mabel, 82 % fed: asleep
+  who: Cecily, 84 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+    herd 1: 4 deer, its node at 1214.8 1095.8; nearest of the band Alys, 40.2 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 5 deer, its node at 1174.3 1034.1; nearest of the band Roger, 64.1 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 41 0.0 h:  13 living, confidence 74 %, fed 74/82 %, hungry 0, cold 0, eaten 52856, cooked 42046, stew 466, days 13.02 (held 10.0), deer 7, burnt 55; stored meat 782, veg 36, berries 271, apples 180, grain 0, logs 27; in the pot meat 223, veg 1739, berries 3563, apples 0, grain 0; raw 10192; kills 17, pulled 2287, berries left 26782, apples left 10; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 151 berries, 12 vegetables, 160 apples, 138 salt; shelves 6 (6 made): 16 hides; meat barrels 6 (6 made, 1 two high): 362 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 27 wood, 16 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 138 stored; 17 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 84 % fed: asleep
+  who: Cedric, 74 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 80 % fed: asleep
+  who: Isabel, 86 % fed: asleep
+  who: Joan, 86 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 80 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+    herd 1: 3 deer, its node at 1212.3 1106.3; nearest of the band Alys, 50.6 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 4 deer, its node at 1232.8 1091.3; nearest of the band Alys, 30.0 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 42 0.0 h:  13 living, confidence 76 %, fed 67/77 %, hungry 0, cold 0, eaten 55331, cooked 43943, stew 121, days 12.44 (held 10.0), deer 9, burnt 58; stored meat 758, veg 31, berries 38, apples 180, grain 0, logs 22; in the pot meat 247, veg 1833, berries 3563, apples 0, grain 0; raw 10425; kills 17, pulled 2376, berries left 27082, apples left 10; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 38 berries, 24 vegetables, 160 apples, 138 salt; shelves 6 (6 made): 16 hides; meat barrels 6 (6 made, 2 two high): 453 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 22 wood, 16 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 138 stored; 17 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 73 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 71 % fed: asleep
+  who: Roger, 72 % fed: asleep
+  who: Gilbert, 80 % fed: asleep
+  who: Isabel, 73 % fed: asleep
+  who: Joan, 76 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 67 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 70 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1232.3 1112.8; nearest of the band Alys, 51.5 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 4 deer, its node at 1293.6 1052.5; nearest of the band Matilda, 20.9 m off at 1272.6 1052.9, HUNTER: asleep
+food: day 43 0.0 h:  13 living, confidence 74 %, fed 80/82 %, hungry 0, cold 0, eaten 57976, cooked 46830, stew 535, days 12.28 (held 10.0), deer 9, burnt 61; stored meat 741, veg 33, berries 151, apples 180, grain 0, logs 35; in the pot meat 264, veg 1946, berries 3570, apples 0, grain 0; raw 10507; kills 17, pulled 2536, berries left 26925, apples left 10; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 151 berries, 14 vegetables, 160 apples, 138 salt; shelves 6 (6 made): 16 hides; meat barrels 6 (6 made, 2 two high): 441 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 34 wood, 20 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 138 stored; 17 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 84 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 82 % fed: asleep
+  who: Roger, 83 % fed: asleep
+  who: Gilbert, 81 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1266.8 1109.3; nearest of the band Alan, 44.9 m off at 1266.1 1064.4, PORTER: asleep
+    herd 2: 4 deer, its node at 1237.3 1104.8; nearest of the band Alys, 43.4 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 44 0.0 h:  13 living, confidence 76 %, fed 68/77 %, hungry 0, cold 0, eaten 60459, cooked 48737, stew 128, days 11.82 (held 10.0), deer 9, burnt 64; stored meat 718, veg 41, berries 44, apples 180, grain 0, logs 31; in the pot meat 287, veg 2033, berries 3570, apples 0, grain 0; raw 10658; kills 17, pulled 2640, berries left 27703, apples left 10; asked:, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57 (1 stacked): 44 berries, 41 vegetables, 180 apples, 138 salt; shelves 6 (6 made): 17 hides; meat barrels 6 (6 made, 3 two high): 459 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 31 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 138 stored; 17 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 71 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 74 % fed: asleep
+  who: Gilbert, 69 % fed: asleep
+  who: Isabel, 85 % fed: asleep
+  who: Joan, 73 % fed: asleep
+  who: Odo, 70 % fed: asleep
+  who: Alan, 69 % fed: asleep
+  who: Matilda, 68 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1288.6 1092.9; nearest of the band Mabel, 33.1 m off at 1272.6 1063.9, HUNTER: asleep
+    herd 2: 4 deer, its node at 1208.3 1088.3; nearest of the band Alys, 38.4 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 45 0.0 h:  13 living, confidence 75 %, fed 79/82 %, hungry 0, cold 0, eaten 63097, cooked 51575, stew 502, days 11.55 (held 0.0), deer 11, burnt 67; stored meat 701, veg 37, berries 45, apples 180, grain 0, logs 29; in the pot meat 304, veg 2146, berries 3596, apples 0, grain 0; raw 10758; kills 17, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57 (1 stacked): 45 berries, 10 vegetables, 180 apples, 138 salt; shelves 6 (6 made): 17 hides; meat barrels 6 (6 made, 3 two high): 530 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 29 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 138 stored; 17 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 83 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 80 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 84 % fed: asleep
+  who: Odo, 80 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 80 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+    herd 1: 5 deer, its node at 1270.3 1097.3; nearest of the band Alan, 33.1 m off at 1266.1 1064.4, PORTER: asleep
+    herd 2: 6 deer, its node at 1215.3 1089.4; nearest of the band Alys, 34.6 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 46 0.0 h:  13 living, confidence 76 %, fed 71/78 %, hungry 0, cold 0, eaten 65593, cooked 53465, stew 160, days 11.70 (held 0.0), deer 10, burnt 69; stored meat 737, veg 0, berries 0, apples 2, grain 0, logs 26; in the pot meat 328, veg 2183, berries 3641, apples 46, grain 0; raw 10890; kills 18, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 2 apples, 132 salt; shelves 6 (6 made): 18 hides; meat barrels 6 (6 made, 3 two high): 521 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 26 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 132 stored; 18 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 75 % fed: asleep
+  who: Isabel, 86 % fed: asleep
+  who: Joan, 77 % fed: asleep
+  who: Odo, 71 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 73 % fed: asleep
+  who: Mabel, 71 % fed: asleep
+  who: Cecily, 73 % fed: asleep
+  who: Juliana, 76 % fed: asleep
+    herd 1: 5 deer, its node at 1241.3 1124.3; nearest of the band Walter, 61.5 m off at 1251.9 1063.6, GATHERER: asleep
+    herd 2: 5 deer, its node at 1216.4 1015.6; nearest of the band Roger, 44.0 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 47 0.0 h:  13 living, confidence 78 %, fed 59/72 %, hungry 0, cold 0, eaten 68061, cooked 56722, stew 949, days 11.97 (held 0.0), deer 9, burnt 72; stored meat 746, veg 0, berries 0, apples 0, grain 0, logs 23; in the pot meat 379, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 19, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 126 salt; shelves 6 (6 made): 19 hides; meat barrels 6 (6 made, 3 two high): 510 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 23 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 126 stored; 19 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 69 % fed: asleep
+  who: Cedric, 70 % fed: asleep
+  who: Alys, 69 % fed: asleep
+  who: Roger, 70 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 72 % fed: asleep
+  who: Joan, 71 % fed: asleep
+  who: Odo, 59 % fed: asleep
+  who: Alan, 69 % fed: asleep
+  who: Matilda, 60 % fed: asleep
+  who: Mabel, 79 % fed: asleep
+  who: Cecily, 81 % fed: asleep
+  who: Juliana, 89 % fed: asleep
+    herd 1: 4 deer, its node at 1290.3 1071.3; nearest of the band Mabel, 19.1 m off at 1272.6 1063.9, HUNTER: asleep
+    herd 2: 5 deer, its node at 1208.0 1027.2; nearest of the band Roger, 38.9 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 48 0.0 h:  13 living, confidence 79 %, fed 53/74 %, hungry 0, cold 0, eaten 70640, cooked 58352, stew 0, days 12.09 (held 0.0), deer 10, burnt 75; stored meat 756, veg 0, berries 0, apples 0, grain 0, logs 29; in the pot meat 429, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 20, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 120 salt; shelves 6 (6 made): 19 hides; meat barrels 6 (6 made, 4 two high): 560 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 29 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 120 stored; 20 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 53 % fed: asleep
+  who: Cedric, 81 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 72 % fed: asleep
+  who: Gilbert, 73 % fed: asleep
+  who: Isabel, 61 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 78 % fed: asleep
+  who: Mabel, 70 % fed: asleep
+  who: Cecily, 66 % fed: asleep
+  who: Juliana, 78 % fed: asleep
+    herd 1: 5 deer, its node at 1293.5 1059.3; nearest of the band Mabel, 21.4 m off at 1272.6 1063.9, HUNTER: asleep
+    herd 2: 5 deer, its node at 1285.5 1036.1; nearest of the band Matilda, 21.2 m off at 1272.6 1052.9, HUNTER: asleep
+food: day 49 0.0 h:  13 living, confidence 78 %, fed 69/79 %, hungry 0, cold 0, eaten 73255, cooked 61720, stew 753, days 11.31 (held 0.0), deer 10, burnt 78; stored meat 708, veg 0, berries 0, apples 0, grain 0, logs 25; in the pot meat 477, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 20, pulled 2786, berries left 27613, apples left 0; asked: food vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 120 salt; shelves 6 (6 made): 20 hides; meat barrels 6 (6 made, 4 two high): 567 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 25 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 120 stored; 20 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 70 % fed: asleep
+  who: Isabel, 86 % fed: asleep
+  who: Joan, 85 % fed: asleep
+  who: Odo, 70 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 69 % fed: asleep
+  who: Mabel, 73 % fed: asleep
+  who: Cecily, 70 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1174.3 1083.9; nearest of the band Alys, 65.3 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 5 deer, its node at 1281.8 1066.8; nearest of the band Mabel, 9.6 m off at 1272.6 1063.9, HUNTER: asleep
+food: day 50 0.0 h:  13 living, confidence 79 %, fed 70/79 %, hungry 0, cold 0, eaten 75815, cooked 64276, stew 749, days 11.46 (held 0.0), deer 9, burnt 81; stored meat 718, veg 0, berries 0, apples 0, grain 0, logs 24; in the pot meat 527, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 21, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 114 salt; shelves 6 (6 made): 20 hides; meat barrels 6 (6 made, 4 two high): 577 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 22 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 114 stored; 21 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 70 % fed: asleep
+  who: Roger, 70 % fed: asleep
+  who: Gilbert, 77 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 75 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 74 % fed: asleep
+    herd 1: 4 deer, its node at 1169.5 1060.2; nearest of the band Roger, 65.2 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 5 deer, its node at 1257.3 1115.3; nearest of the band Alan, 51.6 m off at 1266.1 1064.4, PORTER: asleep
+food: day 51 0.0 h:  13 living, confidence 79 %, fed 67/78 %, hungry 0, cold 0, eaten 78361, cooked 66834, stew 761, days 13.26 (held 0.0), deer 8, burnt 84; stored meat 833, veg 0, berries 0, apples 0, grain 0, logs 26; in the pot meat 577, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 24, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 97 salt; shelves 6 (6 made): 21 hides; meat barrels 6 (6 made, 4 two high): 567 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 26 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 97 stored; 24 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 67 % fed: asleep
+  who: Isabel, 72 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 69 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 67 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 73 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1281.8 1007.5; nearest of the band Matilda, 46.2 m off at 1272.6 1052.9, HUNTER: asleep
+    herd 2: 3 deer, its node at 1208.4 1100.9; nearest of the band Alys, 48.0 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 52 0.0 h:  13 living, confidence 79 %, fed 77/82 %, hungry 0, cold 0, eaten 80966, cooked 69395, stew 717, days 12.47 (held 0.0), deer 8, burnt 87; stored meat 783, veg 0, berries 0, apples 0, grain 0, logs 23; in the pot meat 627, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 24, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 97 salt; shelves 6 (6 made): 22 hides; meat barrels 6 (6 made, 4 two high): 557 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 23 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 97 stored; 24 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 79 % fed: asleep
+  who: Gilbert, 80 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 77 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+    herd 1: 5 deer, its node at 1294.3 1077.8; nearest of the band Mabel, 25.7 m off at 1272.6 1063.9, HUNTER: asleep
+    herd 2: 3 deer, its node at 1191.9 1054.7; nearest of the band Roger, 42.6 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 53 0.0 h:  13 living, confidence 79 %, fed 70/78 %, hungry 0, cold 0, eaten 83477, cooked 71189, stew 0, days 11.69 (held 0.0), deer 8, burnt 90; stored meat 732, veg 0, berries 0, apples 0, grain 0, logs 25; in the pot meat 678, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 24, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 97 salt; shelves 6 (6 made): 24 hides; meat barrels 6 (6 made, 4 two high): 566 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 21 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 97 stored; 24 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 70 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 73 % fed: asleep
+  who: Isabel, 73 % fed: asleep
+  who: Joan, 84 % fed: asleep
+  who: Odo, 74 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 75 % fed: asleep
+  who: Juliana, 75 % fed: asleep
+    herd 1: 5 deer, its node at 1236.8 1099.8; nearest of the band Alys, 38.4 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1198.1 1018.3; nearest of the band Roger, 52.3 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 54 0.0 h:  13 living, confidence 79 %, fed 69/80 %, hungry 0, cold 0, eaten 86052, cooked 74423, stew 659, days 12.79 (held 0.0), deer 8, burnt 93; stored meat 805, veg 0, berries 0, apples 0, grain 0, logs 22; in the pot meat 725, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 26, pulled 2786, berries left 27613, apples left 0; asked: vegetables wood, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 85 salt; shelves 6 (6 made): 24 hides; meat barrels 6 (6 made, 4 two high): 565 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 18 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 85 stored; 26 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 69 % fed: asleep
+  who: Isabel, 85 % fed: asleep
+  who: Joan, 78 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 69 % fed: asleep
+  who: Mabel, 72 % fed: asleep
+  who: Cecily, 82 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1279.8 1044.3; nearest of the band Matilda, 11.2 m off at 1272.6 1052.9, HUNTER: asleep
+    herd 2: 3 deer, its node at 1173.4 1064.8; nearest of the band Roger, 61.8 m off at 1234.5 1055.8, GATHERER: asleep
+food: day 55 0.0 h:  13 living, confidence 78 %, fed 70/79 %, hungry 0, cold 0, eaten 88592, cooked 76992, stew 688, days 12.02 (held 0.0), deer 8, burnt 96; stored meat 755, veg 0, berries 0, apples 0, grain 0, logs 31; in the pot meat 775, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 26, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 85 salt; shelves 6 (6 made): 24 hides; meat barrels 6 (6 made, 4 two high): 555 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 15 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 85 stored; 26 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 84 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 70 % fed: asleep
+  who: Gilbert, 81 % fed: asleep
+  who: Isabel, 83 % fed: asleep
+  who: Joan, 70 % fed: asleep
+  who: Odo, 72 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 80 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 73 % fed: asleep
+  who: Juliana, 85 % fed: asleep
+    herd 1: 5 deer, its node at 1197.3 1102.8; nearest of the band Alys, 56.4 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1220.0 1107.8; nearest of the band Alys, 49.1 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 56 0.0 h:  13 living, confidence 79 %, fed 67/77 %, hungry 0, cold 0, eaten 91121, cooked 78844, stew 11, days 13.11 (held 0.0), deer 6, burnt 99; stored meat 822, veg 0, berries 0, apples 0, grain 0, logs 28; in the pot meat 828, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 28, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 73 salt; shelves 6 (6 made): 26 hides; meat barrels 6 (6 made, 4 two high): 582 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 12 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 73 stored; 28 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 70 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 74 % fed: asleep
+  who: Isabel, 72 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 81 % fed: asleep
+  who: Matilda, 67 % fed: asleep
+  who: Mabel, 69 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 74 % fed: asleep
+    herd 1: 3 deer, its node at 1212.3 1036.7; nearest of the band Roger, 29.3 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1210.8 1116.8; nearest of the band Alys, 60.7 m off at 1235.6 1061.4, GATHERER: asleep
+food: day 57 0.0 h:  13 living, confidence 79 %, fed 66/78 %, hungry 0, cold 0, eaten 93687, cooked 82244, stew 845, days 12.35 (held 0.0), deer 8, burnt 102; stored meat 773, veg 0, berries 0, apples 0, grain 0, logs 25; in the pot meat 877, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 28, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 73 salt; shelves 6 (6 made): 26 hides; meat barrels 6 (6 made, 4 two high): 573 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 9 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 73 stored; 28 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 83 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 69 % fed: asleep
+  who: Isabel, 84 % fed: asleep
+  who: Joan, 72 % fed: asleep
+  who: Odo, 69 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 66 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 74 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 5 deer, its node at 1179.9 1052.9; nearest of the band Roger, 54.7 m off at 1234.5 1055.8, GATHERER: asleep
+    herd 2: 3 deer, its node at 1256.8 1096.3; nearest of the band Walter, 33.0 m off at 1251.9 1063.6, GATHERER: asleep
+food: day 58 0.0 h:  13 living, confidence 79 %, fed 69/78 %, hungry 0, cold 0, eaten 96234, cooked 83946, stew 0, days 11.56 (held 0.0), deer 8, burnt 105; stored meat 722, veg 0, berries 0, apples 0, grain 0, logs 23; in the pot meat 928, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 28, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 73 salt; shelves 6 (6 made): 28 hides; meat barrels 6 (6 made, 4 two high): 562 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 6 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 73 stored; 28 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 69 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 70 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 78 % fed: asleep
+  who: Isabel, 77 % fed: asleep
+  who: Joan, 83 % fed: asleep
+  who: Odo, 82 % fed: asleep
+  who: Alan, 80 % fed: asleep
+  who: Matilda, 80 % fed: asleep
+  who: Mabel, 74 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 75 % fed: asleep
+    herd 1: 5 deer, its node at 1219.8 1115.3; nearest of the band Alys, 56.2 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1278.9 1092.3; nearest of the band Mabel, 29.1 m off at 1272.6 1063.9, HUNTER: asleep
+food: day 59 0.0 h:  13 living, confidence 79 %, fed 69/79 %, hungry 0, cold 0, eaten 98807, cooked 87303, stew 784, days 12.68 (held 0.0), deer 6, burnt 108; stored meat 795, veg 0, berries 0, apples 0, grain 0, logs 25; in the pot meat 975, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 30, pulled 2786, berries left 27613, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 61 salt; shelves 6 (6 made): 30 hides; meat barrels 6 (6 made, 4 two high): 585 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 3 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 61 stored; 30 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 84 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 84 % fed: asleep
+  who: Roger, 85 % fed: asleep
+  who: Gilbert, 70 % fed: asleep
+  who: Isabel, 85 % fed: asleep
+  who: Joan, 73 % fed: asleep
+  who: Odo, 69 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 81 % fed: asleep
+  who: Mabel, 83 % fed: asleep
+  who: Cecily, 69 % fed: asleep
+  who: Juliana, 86 % fed: asleep
+    herd 1: 3 deer, its node at 1215.8 1106.3; nearest of the band Alys, 49.1 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1245.6 1116.2; nearest of the band Walter, 53.0 m off at 1251.9 1063.6, GATHERER: asleep
+food: day 0 0.0 h:  13 living, confidence 79 %, fed 70/79 %, hungry 0, cold 0, eaten 101356, cooked 89889, stew 821, days 11.91 (held 10.0), deer 9, burnt 111; stored meat 745, veg 0, berries 0, apples 0, grain 0, logs 23; in the pot meat 1025, veg 2183, berries 3641, apples 48, grain 0; raw 10890; kills 30, pulled 2786, berries left 28260, apples left 0; asked: vegetables, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 61 salt; shelves 6 (6 made): 30 hides; meat barrels 6 (6 made, 4 two high): 570 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 61 stored; 30 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 85 % fed: asleep
+  who: Cedric, 82 % fed: asleep
+  who: Alys, 85 % fed: asleep
+  who: Roger, 70 % fed: asleep
+  who: Gilbert, 79 % fed: asleep
+  who: Isabel, 70 % fed: asleep
+  who: Joan, 82 % fed: asleep
+  who: Odo, 81 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 70 % fed: asleep
+  who: Mabel, 71 % fed: asleep
+  who: Cecily, 83 % fed: asleep
+  who: Juliana, 87 % fed: asleep
+    herd 1: 6 deer, its node at 1227.8 1115.3; nearest of the band Alys, 54.5 m off at 1235.6 1061.4, GATHERER: asleep
+    herd 2: 3 deer, its node at 1298.9 1079.1; nearest of the band Mabel, 30.4 m off at 1272.6 1063.9, HUNTER: asleep
+food: day 1 0.0 h:  13 living, confidence 78 %, fed 67/77 %, hungry 0, cold 0, eaten 103885, cooked 91744, stew 147, days 11.56 (held 10.0), deer 9, burnt 114; stored meat 722, veg 42, berries 0, apples 0, grain 0, logs 28; in the pot meat 1048, veg 2265, berries 3641, apples 48, grain 0; raw 10890; kills 30, pulled 2910, berries left 28260, apples left 0; asked:, at rest 0; housing: 8 standing, 0 being built, 5 without a home, 8 at home, room for 0 more (no room for the next); storehouse: on the stockyard, standing; floor 57: 40 vegetables, 61 salt; shelves 6 (6 made): 30 hides; meat barrels 6 (6 made, 4 two high): 567 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 16 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it; beds: 13 of 13 have one, 42 sheaves in them; salt: 0 lb in the cart, 61 stored; 30 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+  who: Walter, 71 % fed: asleep
+  who: Cedric, 70 % fed: asleep
+  who: Alys, 77 % fed: asleep
+  who: Roger, 84 % fed: asleep
+  who: Gilbert, 67 % fed: asleep
+  who: Isabel, 85 % fed: asleep
+  who: Joan, 84 % fed: asleep
+  who: Odo, 67 % fed: asleep
+  who: Alan, 79 % fed: asleep
+  who: Matilda, 80 % fed: asleep
+  who: Mabel, 84 % fed: asleep
+  who: Cecily, 76 % fed: asleep
+  who: Juliana, 75 % fed: asleep
+    herd 1: 6 deer, its node at 1250.8 1121.8; nearest of the band Walter, 58.1 m off at 1251.9 1063.6, GATHERER: asleep
+    herd 2: 3 deer, its node at 1217.8 1118.8; nearest of the band Alys, 60.1 m off at 1235.6 1061.4, GATHERER: asleep
+colony: 13 in the band, 13 living, 13 at work, tick 1180799; 0 berries stored, 0 carried, 28260 on 328 bushes; 84 of 814 trees felled, 28 logs stored, 0 lying; 24 straw, 25 stone, 0 grain stored; 9 deer in 2 herds; 30 killed with 64 arrows, 720 meat, 30 hides stored; 104050 food eaten, 5 hungry, 0 asleep, food for 11.5 days, confidence 78 %
+camp: fire burning (1.1 h), 4 logs stacked, 114 burnt, 4 seats; stew 0 in the pot, 91744 cooked from 1050 meat, 2289 vegetables, 3641 berries, 48 apples, 0 grain; eaten raw 10095 berries, 609 vegetables, 192 apples
+the cook, Juliana: hungry: fetching vegetables for the pot
+skills: gathering 0.49 (4) forestry 0.50 (3) hunting 0.42 (3) portering 0.40 (2) cooking 0.60 (1)
+demand: food 11.5 of 12.0 days; wood 28 of 24; stone 25 of 20; straw 24 of 20; meat 720 of 60; vegetables 30 of 40, asked; 10 at rest
+housing: 8 standing, 0 being built, 5 without a home, 0 at home, room for 0 more (no room for the next)
+storehouse: on the stockyard, standing; floor 57: 16 vegetables, 61 salt; shelves 6 (6 made): 30 hides; meat barrels 6 (6 made, 4 two high): 565 meat; water barrels 2 (2 made, 2 two high): 47 water; under the coverings 36: 16 wood, 25 stone, 24 straw; against the wall 11: 3 ladders; stockman Alan; carpenter Gilbert; the cart at the storehouse's front, 0 lb of salt in it
+beds: 13 of 13 have one, 42 sheaves in them
+salt: 0 lb in the cart, 61 stored; 30 deer salted, 0 not, 0 lb of meat lost; the cart in a stockpile
+ladders: 3 made, 0 standing at a house, 3 stored, 0 carried, 0 lost
+ran 41.00 game days in 22.2 s; 4832 stack rebuilds, 220234 edits; the ground widened 2 times
+box at the end: zone 1, its front from 1232.00, 1052.00 E  48 blocks; 1936 block columns in its box: 1936 its ground, 0 a path's, 0 another zone's, 0 nobody's (0 of those within a metre of its front); 0 places
+box at the end: zone 2, its front from 1234.50, 1064.50 E  40 blocks; 1600 block columns in its box: 1598 its ground, 0 a path's, 0 another zone's, 2 nobody's (0 of those within a metre of its front); 99 places
+box at the end: zone 3, its front from 1248.00, 1051.50 W  80 blocks; 6400 block columns in its box: 6400 its ground, 0 a path's, 0 another zone's, 0 nobody's (0 of those within a metre of its front); 271 places (129 closed)
+storehouse at the end: walls 48 by 32 blocks (15160 blocks in its blueprint, 34 logs, 78 sheaves, 53 stones); before its front wall 1.50 m of ground to its path's edge (1.50 m at the most along it); behind its back wall 10.50 m of yard; beside its ends 3.75 m and 4.25 m; it fronts its stockyard's own path; 0 block columns its own blocks stand in are not its stockyard's ground (0 of them a path's)
+cart at the end: stands at 1232.75, 1050.25, on a stockpile's ground, before the storehouse
+box at the end: 0 trees or stumps still to take out of stockpiles
+square at the end: its floor to be level at 18.25 m, 0 blocks to dig, 0 to fill, 0 square metres of it still to make ready; its hearth stands; 0 m of path still to lay
+square at the end: its walls: 0 blocks of stone still to lay, 0 of earth to dig off; 246 block columns of wall, ledge or stair, the highest bank 7 blocks, 2 lifts, 3 stairs (0 sides too high for one); 0 edge columns with no path laid by them; 1 sleeping places by the fire given up
+square at the end: its stairs, along, against, left and right of its way: its middle, none, its middle, its middle; 0 sides that would have one at their middle take none at either end, 0 sides' stairs are another side's in the corner they meet at; 0 stand in a corner where the path of the side met there comes in level
+square at the end: its walls stand outside its floor: rings kept along, against, left and right of its way 2 2 2 2 (its path as laid asks 2 2 2 2); 0 columns of wall steeper for want of a ring, 0 edge columns of floor left an earth bank, 0 columns of floor of stone that are no stair's, 2 columns of strip capped with stone at the path's level, 0 columns of strip that are a zone's ground
+square at the end: its walls were first wanted after 13.0 game hours (511 blocks of stone), and nothing of them was left after 26.7 game hours
+state: d5bb6e2fdd00202f (238775 bytes)

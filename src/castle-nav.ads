@@ -137,6 +137,98 @@ package Castle.Nav is
    function Ground_Speed (M : Castle.Blocks.Material) return Float;   --  standing on it
    function Brush_Speed (M : Castle.Blocks.Material) return Float;    --  wading through it at the feet
 
+   --  Ground people keep off (a building drawn where it does not stand:
+   --  Castle.Colony.Set_Keep_Off): a cell whose middle lies within a list's
+   --  four-cornered piece of ground, and in neither of its two boxes, is
+   --  walked at Kept_Slow of what its ground gives.  So a way round is taken
+   --  wherever there is one, and whoever has business there still gets
+   --  there: nothing is shut, and the pieces of ground are what they were.
+   --  Set_Kept reads again the stacks the list lies in and those the list
+   --  before it lay in; a route planned before goes on as it was planned.
+   Max_Kept  : constant := 64;
+   Kept_Slow : constant := 0.1;
+   type Kept_Box is record
+      X0, Y0, X1, Y1 : Float := 0.0;      --  metres (a box of no size holds nothing)
+   end record;
+   type Kept_Corners is array (1 .. 4) of Vec3;     --  in order round it, either way; Z is not looked at
+   type Kept_Ground is record
+      Corner       : Kept_Corners := [others => (0.0, 0.0, 0.0)];
+      But_A, But_B : Kept_Box;
+   end record;
+   type Kept_List is array (Positive range <>) of Kept_Ground;
+   procedure Set_Kept (K : Kept_List);
+   function Kept_Count return Natural;
+   function Kept_At (X, Y : Float) return Boolean;   --  (the cell (X, Y) lies in is kept off)
+
+   --  A building walked where it is drawn (Castle.Colony: the storehouse of
+   --  a stockyard laid out along a path at 45 degrees, and since 2026-11-20
+   --  a hovel placed turned).  Its blocks stand square to the grid and are
+   --  drawn turned (Castle.Render.Set_Turns); the feet go by the drawing.
+   --  For each of the list: a cell whose square overlaps one of its Wall
+   --  pieces (its walls as drawn, each a four-cornered piece, the doorways
+   --  left out) has no floor, unless Slow (a hovel's): then its floors are
+   --  Wall_Speed, and a step onto or off one is reckoned at Wall_Pace (a way
+   --  round is taken wherever there is one, and nobody is ever shut in or
+   --  out: shut, on a hillside the ground made round a hovel as drawn, laid
+   --  out when its walls were no walls, held pockets a serf could drop into
+   --  and not climb out of; the rule of the ground kept off, which slows and
+   --  never shuts); and a straight line is reckoned so too when a way is
+   --  straightened (Line), or a way planned round a hovel was straightened
+   --  through its wall.  Any other
+   --  cell that overlaps Box (where its blocks stand, eaves and all) has one
+   --  floor, at row Z, at Speed (beaten yard under a storehouse, turf under a
+   --  hovel), whatever blocks stand in it; Whole: only a cell wholly in Box
+   --  (a hovel's: a cell partly past its eaves is read from the blocks, as
+   --  round any house; made level, a cell half on the bank above a hovel on a
+   --  hillside was a pit).  Every other cell is read from the blocks as ever:
+   --  within its walls as drawn, off Box, that is its floor as it was laid,
+   --  and what is dug or built there counts.
+   --  **Box is the one place where the map is not read from the blocks**:
+   --  the ground under it has to be level at row Z (the colony makes it so),
+   --  nothing else may stand in it, and what is dug or built in it is not
+   --  walked by.  Set_Drawn reads again the stacks the list lies in and those
+   --  the list before it lay in.
+   --  **Doorways** (since the hovels came to be walked so): a cell whose
+   --  middle lies in one of a building's Door pieces is neither shut nor
+   --  slowed by any wall.  A hovel's doorway is a metre wide, and at 45
+   --  degrees a cell spans 0.71 m along the wall: where the doorway fell on
+   --  the cells decided whether one cleared both jambs, and at some places
+   --  none did (path_check: 50 places).  A Door piece is the doorway less a
+   --  little at each jamb, out a little to either side of the wall.  Whoever
+   --  goes in keeps to cells whose middles are in it.
+   --  **Walls are asked of every building before any box**: a cell in one
+   --  building's box that touches another's wall as drawn is shut (or
+   --  slowed) by it.
+   Max_Drawn       : constant := 64;
+   Max_Drawn_Walls : constant := 8;
+   Max_Drawn_Doors : constant := 2;
+   type Drawn_Walls is array (1 .. Max_Drawn_Walls) of Kept_Corners;
+   type Drawn_Doors is array (1 .. Max_Drawn_Doors) of Kept_Corners;
+   type Drawn_House is record
+      Box    : Kept_Box;
+      Wall   : Drawn_Walls := [others => [others => (0.0, 0.0, 0.0)]];
+      Walls  : Natural := 0;
+      Door   : Drawn_Doors := [others => [others => (0.0, 0.0, 0.0)]];
+      Doors  : Natural := 0;
+      Z      : Integer := 0;
+      Speed  : Float := Best_Speed;
+      Whole  : Boolean := False;
+      Slow   : Boolean := False;
+   end record;
+   --  A slowed wall's floors (no ground's pace comes near it: the least is
+   --  bog iron among bushes, wading, kept off, 0.007), and what a step onto
+   --  or off one is reckoned at: a metre of a hovel's wall costs a way as
+   --  much as 100 m of turf, and round the longest hovel is some 20 m.  First
+   --  value, his to tune.  (A pace multiplied into the floor's own would not
+   --  do it: a step's pace is the mean of its two floors', at a twentieth at
+   --  the least, and a way planned through a wall so slowed cost less than
+   --  going round.)
+   Wall_Speed : constant := 1.0E-6;
+   Wall_Pace  : constant := 0.01;
+   type Drawn_List is array (Positive range <>) of Drawn_House;
+   procedure Set_Drawn (D : Drawn_List);
+   function Drawn_Count return Natural;
+
    ------------------------------------------------------- routes
 
    Max_Points : constant := 1_024;

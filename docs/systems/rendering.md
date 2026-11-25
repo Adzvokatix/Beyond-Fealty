@@ -46,7 +46,7 @@ Light and sky, kept cheap on purpose:
 - The sun follows the time of day: up in the east at 6, 60 degrees in the
   south at noon, down at 18. Sunlight, the sky's colours and the light from
   the sky above and the ground below all follow it, warm at a low sun and a
-  readable moonlit blue at night. `Castle.Render.Set_Time`.
+  readable moonlit blue at night. `Castle.Render.Set_Look` (the `Day` and `Hour` of its record).
 - The sky is drawn into whatever the world left empty: a gradient, the sun
   and the moon, and the clouds over them, drifting on the wind (see "The
   sky" below). Distant ground fades into the sky's own colour for that
@@ -1087,17 +1087,53 @@ First values.
   ground haze: no pixel of sky through, rounding on or off. The sun's
   shadows hold still as before (`tools/shadow_still.sh --timescale 0.05`,
   three runs: 0.00 %).
-- What the boulders are made of is untouched: the flora's hash is as it
-  was, and a serf prises off the same stone. Quads in a view +0.4 %; a
+- **Its foot** (`Castle.Mesher.Boulder_Feet`, `--no-boulder-feet`; John,
+  2026-11-16, of the boulders drawn round: "make the base of the boulders,
+  so they don't look like balls plopped everywhere, they need extend into
+  the ground"): where a boulder meets level ground (rock over the corner on
+  one side, the open on the other, nothing but solid under it and ground
+  among that), the corner is drawn out from the rock 0.75 of a block
+  (`Foot_Out`) and down 0.4 (`Foot_Down`), marked with z code 3 in its six
+  bits, so the lowest face leans out and goes under the ground a little way
+  out; its light leans out and up (`Foot_Lean`). Never up and never over a
+  step (the ground's own corners stay put); the same function of the
+  generator's ground and rock on a stack's edge. Alone it is a quarter of a
+  metre at most and did not show from 60 m: the rest is the generator's
+  (generator 15, `world.md`, "A boulder goes into the ground"), which it
+  finishes where rock meets ground.
+- **Each quad cut along the diagonal that folds it least** (2026-11-17;
+  John: "There is some flickering around some of the surface textures for
+  the rock ... it looks like overlapping meshes to me"). A boulder's soft
+  quad has four corners moved different ways, so it is not flat, and it
+  was always cut into its two triangles along the same diagonal: where
+  that diagonal was the wrong one, the two folded back across the faces
+  round them and fought them for the pixel (hatched stripes, a few pixels
+  at a time, as the camera moved). The vertex shader now works out where
+  all four corners go (`rock_corner`) and cuts along the diagonal whose two
+  triangles lie flattest. A slow pan past a boulder on a slope: 868 pixels
+  stepping and stepping back over 120 frames, 30 now (the boulder drawn in
+  steps: 67); past the one on a stack's edge 1,269 to 1,119 (in steps 978,
+  the rest the grass). No frame cost seen. The rock of the mountains
+  shimmers when the camera moves as well (its fine dark-and-light texels
+  and one-block pits): that is older than the rounding (the second round's
+  build the same) and was not changed.
+- What the boulders are made of was untouched by the rounding (the flora's
+  hash as it was, a serf prising off the same stone); the generator's
+  change that came after it is in `world.md`. Quads in a view +0.4 %; a
   stack's meshing as long as it was; no frame cost seen (the view of a
   meadow strewn with them 1.77 and 1.79 ms, on and off; close up 0.53 and
   0.54). The far view's tiles draw boulders as they were, in their own
-  coarse cells.
+  coarse cells. With the feet and generator 15: quads in that view +0.6 %
+  over the rounding alone (4,133,931 to 4,159,707), a stack's meshing 8.9
+  ms of a worker (8.6 to 8.8 before; the corners on a stack's edge keep the
+  last sixteen columns they worked out), the frame 1.79 to 1.82 ms; five
+  close views and the low pan: no pixel of sky through; the shadows' still
+  view 0.00 % in eight runs of ten and 0.01 % in two (the build before the
+  rounding: 0.01 % in one of six).
 
-Not there: a boulder's own shape made rounder in the making (its crags
-are the generator's noise: a rounder rock is a change of the world, the
-stone counts and the reference logs with it); a stone a serf is carrying
-or has laid (fieldstone) drawn round.
+Not there: a boulder's crags made rounder in the making (they are the
+generator's noise; its foot was changed in the making, its round was not);
+a stone a serf is carrying or has laid (fieldstone) drawn round.
 
 ## A dressed roof
 
@@ -1147,6 +1183,116 @@ is drawn smooth is each block that has been trimmed, no sooner:
 Not there: the roof's underside inside the house (in steps still); a
 pitch other than one to one; a ray that meets the slope and not the block
 it was.
+
+### Fuller, with ragged edges (2026-11-19)
+
+John, 2026-11-17: "Make the tatched roofs thicker when smoothing, fuller and add charecter of straw
+to the edges of the roof". Trimmed, the slope lay in the hollows of the roof's steps: the nose of
+every step was cut away, and the eave's edge was half a block thick. With `Castle.Mesher.Full_Thatch`
+(the default) the slope lies over the noses instead: each block's inner top edge is drawn a block up
+and its outer edge where it is, so the roof is a block thicker measured upright, of the same blocks;
+the eave's edge is a whole block and is drawn out a little; a ridge's one middle block lies level. The
+corners along the eaves and at the verges are marked (a slope quad's bits 20 to 23, one a corner),
+and the renderer lets each hang up to `Thatch_Rag_Drop` (0.4 of a block) and draws it in or out by
+0.2 to 1.8 of its quarter block, by a hash of the place the corner is moved to, so every face that
+meets there agrees. `--no-full-thatch`: as it was drawn. Nothing but the drawing: the blocks, the
+walking map and the pointer's ray are as they were. `Castle.Cutaway.Eave_M` is 0.4 since (a ragged
+eave reaches 0.36 m past its wall).
+
+### The whole of its top ragged (2026-11-19, his answer)
+
+"The thatch looks great now, can you do that ragged look to the entire surface of the roof, you
+nailed it on the ends, exactly what I wanted." Every corner of a dressed roof's top is marked too
+(`Castle.Mesher.Ragged_Surface`) and hangs up to `Thatch_Surface_Drop` (0.4 of a block), by the same
+hash of the place it is moved to, so the faces that meet there agree, the step faces hidden under the
+slope among them. The renderer tells a top corner with no pull along the ground from an edge's, so
+the eaves and verges keep `Thatch_Rag_Drop`. **The edges are a measure, to the pixel**: with the
+surface's amount at zero, and with `--no-ragged-roof`, a still of four roofs is the still of 234818c
+(compared above the camp fire, whose sparks differ between any two stills).
+
+## A roof's timbers cleared with it (2026-11-19)
+
+A house begun since 2026-11-19 has tie beams, and a storehouse king posts, rafters and a ridge beam,
+inside its walls. They clear with the roof, by their place: timber inside a cleared house's walls,
+`Timber_Up_M` (1.9 m) or more over its floor, is drawn as the thatch over it is (a share by the walls,
+nothing `Taper_M` in). `Castle.Cutaway.Timber_Cover`, the same sum in the land's shader
+(`timber_cover`), and the pointer's ray passes them then (`Castle.Rays.Stops`). The trusses in the
+gable ends are of the walls and clear with those; plank is among what a wall can be made of since (a
+window's jambs).
+
+## Doors and the cart's wheels (2026-11-19)
+
+Props, drawn only. A door's leaf (`Castle.Props.Door_Leaf`: upright planks, two ledges inside, iron
+straps and a latch outside; a mirrored one for a leaf hung from the other jamb) is put in each
+doorway the colony names (`Doorway_At`), swung toward the inside over 0.45 s while anyone is within
+1.3 m; not drawn where its wall is cleared for the eye. `--no-doors`; `--doors-open` for stills
+(`--no-window-trim`: no trim drawn round a window). The
+cart's wheels are turned about their axles by as far as the cart has gone along its shafts since the
+frame before (`Put_Cart`'s `Roll`). `--no-wheel-roll`; `--wheel-turn R` for stills.
+
+## A building drawn turned (2026-11-19: the first step, the draw)
+
+John: "can't we just \"detatch\" the entire building and rotate it?" (`docs/production/briefs/Stage_6_brief.md`,
+"Buildings at 45 degrees", has the steps). `Castle.Render.Set_Turns` takes up to `Max_Turns` (48) turns:
+a box on the map, a height, a point and an angle. In the land's vertex shader every quad of timber,
+daub, thatch or plank whose block is in a box, from that height up, has its corners turned about the
+point (`u_turn_box`, `u_turn_how`, `u_turn_z`); the ground in the box, and what grows on it, is left.
+The same vertex shader draws the land into the sun's maps and the fire's, so a turned building casts
+turned. The fragment shader lights it by the face as it is turned (`nw`, from `v_turn`), and still goes
+by the face on the grid (`n`) and the place on the grid (`v_grid`) for texels and corners; what clears
+a roof or a wall goes by where the house stands on the grid (`v_home`).
+
+**The ground a turned building stands on loses the mesher's shading** (since the ground of step
+three): the mesher darkens the ground along a wall's foot, and those walls are drawn elsewhere, which
+left the outline of a house that is not there. A top face that is not of a building's stuff, in a
+turn's box at its pad's level, is drawn unshaded (`v_ao` set whole; `u_turn_all`, the box all the
+turns' boxes lie in, is tried first). The plan of a house being built, its door's mark and the
+outline of the house pointed at go by `House_View.Drawn` and `Drawn_Door`.
+
+**A turned house's floor is stepped by the texel** (his question of the same day: "The textures are
+5x5 on the face of each block right, can't we step the texture so it falls under the wall of the
+house?"; `Set_Turn_Floor`, the game's `--no-turn-floor`). The floor is laid in blocks under the house
+as drawn, and at 45 degrees a block's corner stood past the wall at every step. In the fragment
+shader the texel (a fifth of a block, 5 cm) is found first; for a top face at a turned house's pad
+its middle is taken back through the turn and tried against the walls' outer faces as they stand
+(`u_turn_walls`): inside it is drawn as floor whatever its block is, a floor block's texel just
+outside as turf, and the turf fringe is kept off both. `f_mat` is what the texel is drawn as from
+there on; `v_mat` stays what the block is. With no turn set nothing is asked.
+Each turn has its own floor (`Turn.Floor`, `u_turn_mat`, since 2026-11-20): a hovel's beaten earth, a
+storehouse's plank. **A storehouse on a stockyard along a path at 45 degrees is a turn too**
+(`habitation.md`): about the point the colony keeps (`House_View.Pivot`), its box its walls' outer
+faces and 0.25 m (its eaves, to the block: what of its yard stands a block further off is not turned).
+
+**The far view draws a turned house turned** (2026-11-20). A tile's cells of a building's stuff go
+through the same turn in the vertex shader (a cell is asked by its middle and its top; one that
+holds the ground under a wall with the wall's foot stays, as turf at the pad's level), and
+`Castle.Lod`'s mesher draws the top of whatever a building's cell stands on, so the ground a turned
+house stands on is whole there. A floor block's texel past a turned wall is drawn as the ground
+beside it (turf where the mesher marked turf beside the block, else bare earth).
+
+Drawing only. The blocks are where they were for the walking map, the builder and the save. **The pointer and the cleared roof go by where the house is
+drawn** (the fourth step, the same day): `Castle.Pick.Look`, given the caster, walks the ray taken back
+through a turned house's turn into the blocks again (`interface.md`); `Castle.Cutaway.Roof` carries
+the turn, and the eye, what it looks at and what the pointer is on are taken back through it (`Home`)
+before its tests, the shader being given the eye as each cleared house stands (`u_roof_e`) for which
+walls face it. With no turns set the picture is as
+before (three views, the proof's options: 6 to 19 pixels of 1,024,000 differ from the build before,
+which differs from itself by 7 to 32). One view with three hovels turned cost 0.76 ms of the card where
+it cost 0.78 unturned (one short run each).
+
+`--turn-houses` (the game's, for looking): every hovel turned 45 degrees about the middle of its
+doorway. **What is inside is drawn through the same turn** (the second step, the same day): a serf
+within the walls (`Castle.Serfs.Turn_About`: its bones turned at `Submit`, after it is animated where
+it stands on the map; `Frames_Home` is that place, `Frames_Of` and the other accessors the turned
+one), its cloak (`Castle.Props.Put_Cloth` with a point and an angle: the cloth is still worked out on
+the map), and the house's own props (the game's `Put_In_House`: the pallet, the door's leaf, the
+trim). `--clock-add H` moves a loaded save's clock on with the colony left as saved, for a still of
+sleepers by daylight.
+
+**Since the third step a hovel carries its own turn** (`Castle.Colony.House_View.Turn`: an eighth of a
+turn for one placed beside a path at 45 degrees) and the game draws by that; `--turn-houses` still
+turns every hovel. Its builder within three metres of it and the ladder at its eave go through the
+turn; `Castle.Serfs` brings a turn on and off over a moment (`Turn_Want`), so nobody jumps.
 
 ## A roof cleared on the camera's ray
 
@@ -1367,6 +1513,37 @@ tufts drawn one by one made it 4.81 million and 1.96 ms on the meadow,
 the round crowns 5.22 million and 2.03, and standing the tall grass in
 drifts, half as many tufts, brought it back.)
 
+## Serfs of voxel parts (2026-11-23, merged 2026-11-24)
+
+A serf is drawn as voxel parts (`people.md`, "Voxel parts"; `--no-voxel`: as
+boxes). `Castle.Figures` keeps each voxel look's drawn quads on the CPU and, on
+the GPU, a slot of its own in one buffer (`Vox_Data`, binding 14): its palette,
+its part table (each bone's part: where its bytes begin, its size, its corner
+in voxels of the bone's frame) and its voxels' bytes, four to a word. Each
+frame a voxel figure's bones go into the bone buffer with the box figures', and
+its quads into one list (`Vox_List`, binding 13: the quad's two words, its
+figure's first bone, its look). `Vox_Vertex_Source` pulls each quad's corner
+by the vertex number, six a quad: from its part's corner and its own, through
+its bone, wound counter-clockwise seen from outside, and a hair (0.004 of a
+voxel) past its edges so that no crack shows where quads of different sizes
+meet. `Vox_Fragment_Source` reads the face's colour where it is drawn (the
+voxel under the point, its byte, that entry of the palette) and lights it as a
+box figure is lit. `Vox_Caster_Vertex_Source` draws the same quads into the
+sun's figure maps and the fire's six faces. One draw a pass. The slots take
+17 MB of the GPU's memory whatever is in them, the list 2 MB.
+
+What it costs (RX 6900 XT, 1920 x 1080, seed 1, release; a run of 600 frames
+each way, twice): sixty serfs in a row 14 m off, 2.41 and 2.41 ms of the GPU a
+frame as voxel parts (1,557 triangles a serf; 1,582 with the smaller head of
+2026-11-24 and 1,762 at the merge, on 22551f9: neither timed again), 2.35 and 2.39 as boxes. Their
+looks made in one frame when they arrive, some 4 to 6 ms each there (221 and
+338 ms for the sixty); the band of the reference stake dressing for winter at
+the night's turn, one serf a frame, 4 to 8 ms of figures in each of thirteen
+frames (measured on the first try of the reference body, 447 triangles a
+serf). The CPU took 1.53 and 1.89 ms a frame as voxel parts over the run after
+the view had filled, 1.04 and 1.22 as boxes, the sixty looks' making among it
+(a gate was running beside these two runs).
+
 ## What multisampling costs
 
 John, 2026-11-11, watching the stress test: "I think our deferred lighting
@@ -1439,3 +1616,19 @@ against the pixel grid.  The world is drawn into the renderer's own
 multisampled target and resolved to the window, so MSAA never depends on
 the window system; cut-outs (leaves, grass) use alpha-to-coverage there,
 which keeps distant foliage at its true density.
+
+## A stockyard's pieces (2026-11-20)
+
+What of a stockyard is drawn as its design has it rather than as its blocks are laid: a covering's
+roof once smoothed, and along a path at 45 degrees the fence's rails and the planks over its
+gateways (`habitation.md`, "Turned hovels walked where they are drawn; a stockyard's pieces"). **Their
+blocks stay in the world** with the state `Castle.Blocks.Piece` (log, plank or thatch, never
+dressed), and what draws the land leaves them out: `Castle.Blocks.Seen_Mat` is what a block is drawn
+as, read by `Castle.Mesher` (`Mat`, the band's top, a face's material) and `Castle.Lod` (a cell's
+eight blocks). So no stepped shadow is cast and the far view has none of them. The pieces are
+props (`Castle.Props.Rail`, `Thatch_Tile`, `Thatch_Roll`; the game's `Show_Yard_Pieces` from
+`Castle.Colony.Yard_Pieces`), lit and shadowed as the props are, drawn at any distance. A covering's
+roof is one box the size of the roof (3 m by 2.1 m, 20 cm thick): tiles of a metre showed a dark seam
+at every edge from twenty metres off, where the sampler took in what lies round a face in its skin.
+A frame for a piece must stay right-handed (its X, its top's normal, its slope): turned inside out
+it draws the box's insides.

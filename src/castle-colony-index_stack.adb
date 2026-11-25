@@ -17,6 +17,7 @@ procedure Index_Stack (CX, CY : Integer; Far : Boolean := False) is
    end Root;
 begin
    Indexed (CX, CY) := True;
+   Indexed_Far (CX, CY) := Far;
    Index_Trees (CX, CY);
    for I in 0 .. Castle.Nav.Cells_Per_Stack - 1 loop
       for J in 0 .. Castle.Nav.Cells_Per_Stack - 1 loop

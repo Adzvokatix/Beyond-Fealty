@@ -2,7 +2,9 @@ separate (Castle.Colony)
 function Zone_At (Z : Positive) return Zone_View is
    R : Zone_Rec renames Zones (Z);
    V : Zone_View := (Kind => R.Kind, Lo => R.Lo, Hi => R.Hi, Turn => R.Turn, Along => R.Along, Across => R.Across,
-                     Blocks => R.Blocks, Built => R.Built, Got => R.Got, Cells => R.Cells, others => <>);
+                     Blocks => R.Blocks, Built => R.Built, Got => R.Got, Cells => R.Cells, Yard => R.Yard, Leaving => R.Leaving,
+                     Placed => R.Placed, From => (Float (R.Fx) * 0.25, Float (R.Fy) * 0.25, R.Lo.Z),
+                     Way => R.Way, Along_B => R.Along_B, others => <>);
 begin
    case R.Kind is
       when Stockpile_Zone =>
@@ -10,8 +12,20 @@ begin
             declare
                C : Cell renames Cells (K);
             begin
+               if C.Zone = Z and then C.Overflow then
+                  V.Cells := V.Cells - 1;
+                  V.Overflow := V.Overflow + 1;
+               elsif C.Zone = Z and then C.Closed then
+                  V.Cells := V.Cells - 1;          --  (under or before the storehouse: no place now)
+               end if;
                if C.Zone = Z and then C.Kind /= Nothing then
-                  V.In_Use := V.In_Use + 1;
+                  if C.Overflow then
+                     V.Over_In_Use := V.Over_In_Use + 1;
+                  elsif C.Closed then
+                     null;
+                  else
+                     V.In_Use := V.In_Use + 1;
+                  end if;
                   V.Holds (C.Kind) := V.Holds (C.Kind) + C.Count;
                   V.Coming (C.Kind) := V.Coming (C.Kind) + C.Incoming;
                   V.Going (C.Kind) := V.Going (C.Kind) + C.Outgoing;

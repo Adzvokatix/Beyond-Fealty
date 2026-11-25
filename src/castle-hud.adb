@@ -178,8 +178,9 @@ package body Castle.HUD is
       case O.What is
          when Raise_Stake =>
             if R.Done then
-               Say (Tools, "the homestake is raised at " & Img (Castle.Colony.Stake.X, 1) & ", "
-                    & Img (Castle.Colony.Stake.Y, 1));
+               Say (Tools, (if O.As_Square then "the colony is founded: its square's middle at "
+                            else "the homestake is raised at ")
+                           & Img (Castle.Colony.Stake.X, 1) & ", " & Img (Castle.Colony.Stake.Y, 1));
                Tools.Mode := Path;
                Tools.Path_Started := False;
             else
@@ -188,12 +189,52 @@ package body Castle.HUD is
          when Lay_Path =>
             if not R.Done then
                Say (Tools, "no path there: " & Why_Not (O, R), Bad => True);
+            elsif Castle.Colony.Pull_Gave_Way > 0 then
+               Say (Tools, "the path goes through the housing, which gave way under it");
             end if;
-         when Zone_Stockpile =>
+         when Zone_Stockpile | Place_Stockpile =>
             if R.Done then
                Say (Tools, "stockpile zoned:" & R.Count'Image & " cells");
+               --  (placed once: the tool goes; put down whole, another can be: the tool stays in hand)
+               if O.What = Place_Stockpile and then Tools.Mode = Stockpile and then not Castle.Colony.Box_Place then
+                  Tools.Mode := Path;
+                  Tools.Path_Started := False;
+               end if;
             else
                Say (Tools, "no stockpile there: " & Why_Not (O, R), Bad => True);
+            end if;
+         when Zone_Stockyard | Place_Stockyard =>
+            if R.Done then
+               Say (Tools, "stockyard zoned:" & R.Count'Image & " places, closed until its storehouse stands");
+               if Tools.Mode = Stockyard then          --  (zoned once: the tool goes)
+                  Tools.Mode := Path;
+                  Tools.Path_Started := False;
+               end if;
+            else
+               Say (Tools, "no stockyard there: " & Why_Not (O, R), Bad => True);
+            end if;
+         when Unzone_Housing =>
+            if R.Done then
+               Say (Tools, "housing taken out:" & R.Count'Image & " block columns"
+                           & (if R.Marked > 0
+                              then ";" & R.Marked'Image & (if R.Marked = 1 then " hovel" else " hovels")
+                                   & " there nobody's: to be taken down"
+                              else "")
+                           & (if Castle.Colony.Unzone_Lived_In > 0
+                              then ";" & Castle.Colony.Unzone_Lived_In'Image & " lived in: left, with"
+                                   & (if Castle.Colony.Unzone_Lived_In = 1 then " its lot" else " their lots")
+                              else ""));
+            else
+               Say (Tools, "nothing taken out: " & Why_Not (O, R), Bad => True);
+            end if;
+            if Tools.Mode = Unzone then
+               Tools.Mode := Housing;
+            end if;
+         when Mark_Hovel =>
+            if R.Done then
+               Say (Tools, (if O.Marked then "the hovel is to be taken down" else "the mark lifted: the hovel is kept"));
+            else
+               Say (Tools, "a hovel that is lived in is not razed", Bad => True);
             end if;
          when Zone_Camp =>
             if R.Done then
@@ -220,7 +261,25 @@ package body Castle.HUD is
             else
                Say (Tools, "no housing there: " & Why_Not (O, R), Bad => True);
             end if;
-         when Give_Job | Set_Reserve | Set_Winter_Store | Spare_Apples | Castle.Actions.Spare_Deer =>
+         when Pull_Housing =>
+            if R.Done then
+               Say (Tools, "housing with its path: "
+                           & (if Castle.Colony.Pull_Rows_Zoned = 2 then "two rows, " else "")
+                           & (if R.Count = 0 then "room for no hovel yet (pull it further)"
+                              else "room for" & R.Count'Image & (if R.Count = 1 then " hovel" else " hovels"))
+                           & (if Castle.Colony.Pull_Path_M > 0.0
+                              then ";" & Integer'Image (Integer (Castle.Colony.Pull_Path_M)) & " m of path to lay"
+                              else "; along the path that is there")
+                           & (if Castle.Colony.Pull_Gave_Way > 0 then "; housing gave way under it" else ""));
+            else
+               Say (Tools, "no housing there: " & Why_Not (O, R), Bad => True);
+            end if;
+         when Castle.Actions.Remove_Stockpile =>
+            Say (Tools, (if not R.Done then Why_Not (O, R)
+                         elsif O.Remove then "the stockpile is to go: what lies on it is carried off first"
+                         else "the stockpile stays"), Bad => not R.Done);
+         when Give_Job | Make_Builder | Make_Stockman | Make_Carpenter | Set_Reserve | Set_Winter_Store | Spare_Apples
+            | Castle.Actions.Spare_Deer =>
             if not R.Done then
                Say (Tools, Why_Not (O, R), Bad => True);
             end if;
@@ -232,18 +291,44 @@ package body Castle.HUD is
    begin
       case Tools.Mode is
          when Stake =>
-            Carry_Out ((What => Raise_Stake, By => Castle.Colony.The_Player, Stake_At => P), Tools);
+            Carry_Out ((What => Raise_Stake, By => Castle.Colony.The_Player, Stake_At => P,
+                        As_Square => Castle.Actions.Square_Stake, Stake_Way => Tools.Way), Tools);
          when Path =>
+            --  (the line as it will be laid: straight or at 45 degrees, Castle.Actions.Path_Snap)
             if Tools.Path_Started then
-               Carry_Out ((What => Lay_Path, By => Castle.Colony.The_Player, From => Tools.Path_From, To => P), Tools);
-            end if;
-            if not Tools.Path_Started or else Tools.Last_Done then
-               Tools.Path_From := P;         --  (a stretch refused: the line goes on from where it had got to)
+               declare
+                  To : constant Vec3 := Path_Reach (Tools.Path_From, P);
+               begin
+                  Carry_Out ((What => Lay_Path, By => Castle.Colony.The_Player, From => Tools.Path_From, To => To),
+                             Tools);
+                  if Tools.Last_Done then
+                     Tools.Path_From := To;  --  (a stretch refused: the line goes on from where it had got to)
+                  end if;
+               end;
+            else
+               Tools.Path_From := Path_Begin (P);
             end if;
             Tools.Path_Started := True;
          when Stockpile =>
-            if Tools.Zone_Started then
+            if Castle.Colony.Box_Place then            --  (put down whole with its path, where it is held)
+               Carry_Out ((What => Place_Stockpile, By => Castle.Colony.The_Player, Pile_At => P,
+                           Pile_Way => Tools.Way), Tools);
+            elsif Castle.Colony.One_Stockpile then
+               Carry_Out ((What => Place_Stockpile, By => Castle.Colony.The_Player, Pile_At => P, Pile_Way => 0), Tools);
+            elsif Tools.Zone_Started then
                Carry_Out ((What => Zone_Stockpile, By => Castle.Colony.The_Player,
+                           X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => P.X, Y1 => P.Y), Tools);
+               Tools.Zone_Started := False;
+            else
+               Tools.Zone_From := P;
+               Tools.Zone_Started := True;
+            end if;
+         when Stockyard =>
+            if Castle.Colony.Yard_Box then             --  (put down whole with its path, where it is held)
+               Carry_Out ((What => Place_Stockyard, By => Castle.Colony.The_Player, Pile_At => P,
+                           Pile_Way => Tools.Way), Tools);
+            elsif Tools.Zone_Started then
+               Carry_Out ((What => Zone_Stockyard, By => Castle.Colony.The_Player,
                            X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => P.X, Y1 => P.Y), Tools);
                Tools.Zone_Started := False;
             else
@@ -253,8 +338,21 @@ package body Castle.HUD is
          when Camp =>
             Carry_Out ((What => Zone_Camp, By => Castle.Colony.The_Player, Fire_At => P), Tools);
          when Housing =>
-            if Tools.Zone_Started then
+            if Tools.Zone_Started and then Castle.Actions.Housing_Pull then
+               Carry_Out ((What => Pull_Housing, By => Castle.Colony.The_Player, Begun => Tools.Zone_From,
+                           Pulled_To => P, Rows => Castle.Colony.Pull_Rows'Val (Tools.Rows mod 3)), Tools);
+               Tools.Zone_Started := False;
+            elsif Tools.Zone_Started then
                Carry_Out ((What => Zone_Housing, By => Castle.Colony.The_Player,
+                           X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => P.X, Y1 => P.Y), Tools);
+               Tools.Zone_Started := False;
+            else
+               Tools.Zone_From := P;
+               Tools.Zone_Started := True;
+            end if;
+         when Unzone =>
+            if Tools.Zone_Started then
+               Carry_Out ((What => Unzone_Housing, By => Castle.Colony.The_Player,
                            X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => P.X, Y1 => P.Y), Tools);
                Tools.Zone_Started := False;
             else
@@ -275,11 +373,28 @@ package body Castle.HUD is
          Carry_Out (C.Todo, Tools);
       elsif C.Todo.What = Lay_Path then
          Tools.Mode := Path;
-         Tools.Path_From := C.Todo.From;
+         Tools.Path_From := Path_Begin (C.Todo.From);
          Tools.Path_Started := True;
          Tools.Zone_Started := False;
-      elsif C.Todo.What in Zone_Stockpile | Zone_Housing then
-         Tools.Mode := (if C.Todo.What = Zone_Housing then Housing else Stockpile);
+      elsif C.Todo.What = Place_Stockpile then    --  (a box to put down: taken in hand, the next click puts it)
+         Tools.Mode := Stockpile;
+         Tools.Zone_Started := False;
+         Tools.Path_Started := False;
+      elsif C.Todo.What = Place_Stockyard then    --  (the stockyard's box likewise)
+         Tools.Mode := Stockyard;
+         Tools.Zone_Started := False;
+         Tools.Path_Started := False;
+      elsif C.Todo.What = Raise_Stake then        --  (the square: taken in hand, to be turned and put down)
+         Tools.Mode := Stake;
+      elsif C.Todo.What = Pull_Housing then       --  (housing with its path: begun there, the next click pulls it)
+         Tools.Mode := Housing;
+         Tools.Zone_From := C.Todo.Begun;
+         Tools.Zone_Started := True;
+         Tools.Path_Started := False;
+      elsif C.Todo.What in Zone_Stockpile | Zone_Housing | Zone_Stockyard | Unzone_Housing then
+         Tools.Mode := (if C.Todo.What = Zone_Housing then Housing
+                        elsif C.Todo.What = Unzone_Housing then Unzone
+                        elsif C.Todo.What = Zone_Stockyard then Stockyard else Stockpile);
          Tools.Zone_From := (C.Todo.X0, C.Todo.Y0, 0.0);
          Tools.Zone_Started := True;
          Tools.Path_Started := False;
@@ -455,6 +570,11 @@ package body Castle.HUD is
          Tools.Path_Started := False;
          Tools.Zone_Started := False;
          return True;
+      elsif (Tools.Mode = Stockpile and then Castle.Colony.Box_Place)       --  (a box held: put away)
+        or else (Tools.Mode = Stockyard and then Castle.Colony.Yard_Box)
+      then
+         Tools.Mode := Path;
+         return True;
       end if;
       return False;
    end Cancel;
@@ -487,11 +607,15 @@ package body Castle.HUD is
       begin
          if Extra and then Tools.Path_Started then          --  a path line on the go: on to here, or done
             if Button (P, "Path to here") then
-               Carry_Out ((What => Lay_Path, By => Castle.Colony.The_Player, From => Tools.Path_From, To => Here),
-                          Tools);
-               if Tools.Last_Done then
-                  Tools.Path_From := Here;
-               end if;
+               declare
+                  To : constant Vec3 := Path_Reach (Tools.Path_From, Here);
+               begin
+                  Carry_Out ((What => Lay_Path, By => Castle.Colony.The_Player, From => Tools.Path_From, To => To),
+                             Tools);
+                  if Tools.Last_Done then
+                     Tools.Path_From := To;
+                  end if;
+               end;
                Chose := True;
             end if;
             if Button (P, "End the path") then
@@ -501,12 +625,42 @@ package body Castle.HUD is
             Separator (P);
          elsif Extra and then Tools.Zone_Started and then Tools.Mode = Housing then
             if Button (P, "Housing to here") then
-               Carry_Out ((What => Zone_Housing, By => Castle.Colony.The_Player,
-                           X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => Here.X, Y1 => Here.Y), Tools);
+               if Castle.Actions.Housing_Pull then
+                  Carry_Out ((What => Pull_Housing, By => Castle.Colony.The_Player, Begun => Tools.Zone_From,
+                              Pulled_To => Here, Rows => Castle.Colony.Pull_Rows'Val (Tools.Rows mod 3)), Tools);
+               else
+                  Carry_Out ((What => Zone_Housing, By => Castle.Colony.The_Player,
+                              X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => Here.X, Y1 => Here.Y), Tools);
+               end if;
                Tools.Zone_Started := False;
                Chose := True;
             end if;
             if Button (P, "Cancel the housing") then
+               Tools.Zone_Started := False;
+               Chose := True;
+            end if;
+            Separator (P);
+         elsif Extra and then Tools.Zone_Started and then Tools.Mode = Unzone then
+            if Button (P, "Take housing out to here") then
+               Carry_Out ((What => Unzone_Housing, By => Castle.Colony.The_Player,
+                           X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => Here.X, Y1 => Here.Y), Tools);
+               Tools.Zone_Started := False;
+               Chose := True;
+            end if;
+            if Button (P, "Cancel") then
+               Tools.Zone_Started := False;
+               Tools.Mode := Housing;
+               Chose := True;
+            end if;
+            Separator (P);
+         elsif Extra and then Tools.Zone_Started and then Tools.Mode = Stockyard then
+            if Button (P, "Stockyard to here") then
+               Carry_Out ((What => Zone_Stockyard, By => Castle.Colony.The_Player,
+                           X0 => Tools.Zone_From.X, Y0 => Tools.Zone_From.Y, X1 => Here.X, Y1 => Here.Y), Tools);
+               Tools.Zone_Started := False;
+               Chose := True;
+            end if;
+            if Button (P, "Cancel the stockyard") then
                Tools.Zone_Started := False;
                Chose := True;
             end if;
@@ -538,12 +692,6 @@ package body Castle.HUD is
    end Menu_Popup;
 
    ------------------------------------------------------------------ the band
-
-   function Job_Short (J : Castle.Colony.Job_Kind) return String is
-     (case J is
-         when Castle.Colony.Unassigned => "No job", when Castle.Colony.Gatherer => "Gatherer",
-         when Castle.Colony.Forester => "Forester", when Castle.Colony.Hunter => "Hunter",
-         when Castle.Colony.Porter => "Porter", when Castle.Colony.Cook => "Cook");
 
    Row_Hover : Natural := 0;    --  the member whose row of the list the cursor is on, this frame
 
@@ -580,7 +728,7 @@ package body Castle.HUD is
             if V.Dead then
                Beside (P, Castle.Colony.Status (I), Ink_Bad);
             else
-               if Button (P, Job_Short (V.Job), Width => 50.0) then
+               if Button (P, Castle.Views.Job_Label (I), Width => 56.0) then
                   Open_Menu ((Kind => Castle.Pick.A_Person, Index => I, others => <>),
                              (Castle.Actions.A_Person, I, (0.0, 0.0, 0.0)), S.Mouse_X, S.Mouse_Y);
                end if;
@@ -602,7 +750,7 @@ package body Castle.HUD is
       use Castle.Colony;
       Row_H  : constant := 13.0;
       Name_W : constant := 60.0;
-      Job_W  : constant := 52.0;
+      Job_W  : constant := 56.0;
       Col_W  : constant := 30.0;
       function Col_X (K : Working_Skill) return Float is
         (Name_W + 4.0 + Job_W + 4.0 + Float (Skill_Kind'Pos (K)) * (Col_W + 4.0));
@@ -629,7 +777,7 @@ package body Castle.HUD is
                V   : constant Person_View := Person (I);
             begin
                Column_Text (P, 0.0, Name_W, Name_Of (I), (if V.Dead then Ink_Bad else Ink), Drop => 1.0);
-               Column_Text (P, Name_W + 4.0, Job_W, (if V.Dead then "dead" else Job_Short (V.Job)), Ink_Dim,
+               Column_Text (P, Name_W + 4.0, Job_W, (if V.Dead then "dead" else Castle.Views.Job_Label (I)), Ink_Dim,
                             Drop => 1.0);
                if not V.Dead then
                   for K in Working_Skill loop
@@ -671,7 +819,7 @@ package body Castle.HUD is
                 & Img (Logs_Lying) & " logs lying");
       end if;
       for Z in 1 .. Zone_Count loop
-         if Zone_At (Z).Kind = Stockpile_Zone then
+         if Zone_At (Z).Kind = Stockpile_Zone and then Zone_At (Z).Blocks > 0 then      --  (not one removed)
             Piles := Piles + 1;
             if Shown < 3 then
                Shown := Shown + 1;
@@ -767,7 +915,7 @@ package body Castle.HUD is
 
    --  The tooltip of what the cursor rests on: a person (in the world, or
    --  on its line of the band's list), a zone, a deer.
-   procedure Tip_Panel (S : Status) is
+   procedure Tip_Panel (S : Status; Warning : String := "") is
       use Castle.Pick;
       Key : constant Natural :=
         (if Row_Hover > 0 then 1_000 + Row_Hover
@@ -779,6 +927,16 @@ package body Castle.HUD is
                   when A_Cart   => 5_000,
                   when A_Block | Nothing => 0));
    begin
+      --  (a box held where it would be refused: why, at once, in place of what is under it)
+      if not The_Menu.Open and then Warning /= "" then
+         declare
+            P : Panel := Begin_Tip (190.0);
+         begin
+            Wrapped (P, Warning, Ink_Bad, Indent => "");
+            End_Tip (P);
+         end;
+         return;
+      end if;
       if The_Menu.Open or else not Tip_Due (Key) then
          return;
       end if;
@@ -831,8 +989,12 @@ package body Castle.HUD is
          if Button (P, "Path", On => Tools.Mode = Path, Width => 62.0) then
             Tools.Mode := Path;
          end if;
-         if Button (P, "Stockpile", On => Tools.Mode = Stockpile, Width => 62.0) then
-            Tools.Mode := Stockpile;
+         if not Castle.Colony.One_Stockpile or else Castle.Colony.Stockpile_Count = 0 then
+            if Button (P, "Stockpile", On => Tools.Mode = Stockpile, Width => 62.0) then
+               Tools.Mode := Stockpile;
+            end if;
+         elsif Tools.Mode = Stockpile then      --  (the stockpile is placed once)
+            Tools.Mode := Path;
          end if;
          if not Castle.Colony.Has_Camp then
             if Button (P, "Campfire", On => Tools.Mode = Camp, Width => 62.0) then
@@ -844,17 +1006,56 @@ package body Castle.HUD is
          if Button (P, "Housing", On => Tools.Mode = Housing, Width => 62.0) then
             Tools.Mode := Housing;
          end if;
+         if Castle.Colony.Stockyard = 0 then
+            if Button (P, "Stockyard", On => Tools.Mode = Stockyard, Width => 62.0) then
+               Tools.Mode := Stockyard;
+               Tools.Zone_Started := False;
+            end if;
+         elsif Tools.Mode = Stockyard then      --  (the stockyard is zoned once)
+            Tools.Mode := Path;
+         end if;
       end if;
       case Tools.Mode is
-         when Stake     => Label (P, "click the ground", Ink_Dim);
+         when Stake     => if Castle.Actions.Square_Stake then
+                              Label (P, (if Castle.Colony.Square_Wide then "11 m square, a path round"
+                                         else "10 m square, a path round"), Ink_Dim);
+                              Label (P, "Z, X: turn it; click: found it", Ink_Dim);
+                           else
+                              Label (P, "click the ground", Ink_Dim);
+                           end if;
          when Path      => Label (P, "click along the way", Ink_Dim);
                            Label (P, "Esc: stop", Ink_Dim);
-         when Stockpile => Label (P, "click two corners", Ink_Dim);
-                           Label (P, "beside a path", Ink_Dim);
+         when Stockpile => if Castle.Colony.Box_Place then
+                              Label (P, "10 x 10 m, with its path", Ink_Dim);
+                              Label (P, "Z, X: turn it; click: put it", Ink_Dim);
+                           elsif Castle.Colony.One_Stockpile then
+                              Label (P, "click beside a path", Ink_Dim);
+                              Label (P, "10 x 10 m, once", Ink_Dim);
+                           else
+                              Label (P, "click two corners", Ink_Dim);
+                              Label (P, "beside a path", Ink_Dim);
+                           end if;
+         when Stockyard => if Castle.Colony.Yard_Box then
+                              Label (P, "20 x 20 m, with its path", Ink_Dim);
+                              Label (P, "Z, X: turn it; click: put it", Ink_Dim);
+                           else
+                              Label (P, "click two corners", Ink_Dim);
+                              Label (P, "beside a path, 15 x 15 m", Ink_Dim);
+                           end if;
          when Camp      => Label (P, "click the fire's place", Ink_Dim);
                            Label (P, "7 x 7 m, on level grass", Ink_Dim);
-         when Housing   => Label (P, "click beside a path,", Ink_Dim);
-                           Label (P, "then pull along it", Ink_Dim);
+         when Housing   => if Castle.Actions.Housing_Pull then
+                              Label (P, "click, pull its path, click", Ink_Dim);
+                              Label (P, "Z, X: " & (case Tools.Rows mod 3 is
+                                                       when 0 => "this side",
+                                                       when 1 => "the other side",
+                                                       when others => "both sides"), Ink_Dim);
+                           else
+                              Label (P, "click beside a path,", Ink_Dim);
+                              Label (P, "then pull along it", Ink_Dim);
+                           end if;
+         when Unzone    => Label (P, "click the other corner:", Ink_Dim);
+                           Label (P, "housing in it is taken out", Ink_Dim);
          when Edit      => null;
       end case;
       if Placing and then Tools.Mode = Edit then
@@ -1008,10 +1209,12 @@ package body Castle.HUD is
       K20 : aliased constant String := "Right click";        D20 : aliased constant String := "what you may do with it";
       K21 : aliased constant String := "F10 / F11";          D21 : aliased constant String := "interface smaller / larger";
       K22 : aliased constant String := "H";                  D22 : aliased constant String := "houses open: as looked at / all / none";
-      Rows : constant array (1 .. 22) of Pair :=
+      K23 : aliased constant String := "Z / X";              D23 : aliased constant String := "turn what is held to be put down";
+      Rows : constant array (1 .. 23) of Pair :=
         [(K1'Access, D1'Access), (K2'Access, D2'Access), (K3'Access, D3'Access), (K4'Access, D4'Access),
          (K5'Access, D5'Access), (K6'Access, D6'Access), (K7'Access, D7'Access), (K8'Access, D8'Access),
-         (K9'Access, D9'Access), (K10'Access, D10'Access), (K11'Access, D11'Access), (K12'Access, D12'Access),
+         (K9'Access, D9'Access), (K23'Access, D23'Access), (K10'Access, D10'Access), (K11'Access, D11'Access),
+         (K12'Access, D12'Access),
          (K13'Access, D13'Access), (K14'Access, D14'Access), (K15'Access, D15'Access), (K22'Access, D22'Access),
          (K16'Access, D16'Access), (K17'Access, D17'Access), (K18'Access, D18'Access),
          (K19'Access, D19'Access), (K20'Access, D20'Access), (K21'Access, D21'Access)];
@@ -1056,7 +1259,14 @@ package body Castle.HUD is
       end if;
       --  the game's own: none of it needs the panels
       Note_Panel (Tools, S.Seconds);
-      Tip_Panel (S);
+      Tip_Panel (S, (if ((Tools.Mode = Stockpile and then Castle.Colony.Box_Place)
+                         or else (Tools.Mode = Stockyard and then Castle.Colony.Yard_Box)
+                         or else (Tools.Mode = Stake and then Castle.Actions.Square_Stake
+                                  and then not Castle.Colony.Has_Stake)
+                         or else (Tools.Mode = Housing and then Castle.Actions.Housing_Pull
+                                  and then Tools.Zone_Started))
+                       and then not Castle.UI.Wants_Mouse
+                     then Str (Tools.Warn) else ""));
       if The_Menu.Open then
          Menu_Popup (Tools);            --  last: over everything
       end if;

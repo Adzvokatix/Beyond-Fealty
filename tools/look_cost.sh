@@ -17,8 +17,8 @@ cd "$(dirname "$0")/.." || exit 1
 BIN=${BIN:-./bin/castle_game}
 TMP=$(mktemp -d)
 BASE="--float --size 1280 720 --hud none --novsync --seed 1 --mouse 2 2 --frames 2500"
-BAND="--stake 1178 1078 --path 1176 1076 1194 1076 --stockpile 1180 1070 1190 1075
-      --gatherers 2 --foresters 1 --hunters 2 --cooks 1 --camp 1172 1082 --camp-built --paths-built"
+BAND="--stake 1178 1078 --path 1176 1076 1194 1076 --stockpile-least 0 --no-overflow --last-places 0 --one-to-a-bush --no-storehouse --no-path-level --no-roof-timbers --no-window-timber --no-reach-out --no-zigzag --no-paths-meet --no-door-meet --no-build-help --no-place-level --no-cart-room --no-step-at-edge --no-steep-refuse --no-wood-reach --no-house-turn --stockpile 1180 1070 1190 1075
+      --band 6 --gatherers 2 --foresters 1 --hunters 2 --cooks 1 --camp 1172 1082 --camp-built --paths-built"
 EXTRA=("$@")
 
 view() {  # NAME OPTIONS...

@@ -229,6 +229,78 @@ package body Castle.Herds is
 
    function Scatter return Boolean is (Old_Way);
 
+   Walk_Off_On : Boolean := True;
+   procedure Set_Walk_Off (On : Boolean) is
+   begin
+      Walk_Off_On := On;
+   end Set_Walk_Off;
+   function Walk_Off return Boolean is (Walk_Off_On);
+
+   --  From P, stepping as a deer steps (Floor_Near: up a step, down a metre, into no more than
+   --  Wade rows of water), ground Leave_M off can be got to: a flood over the walking map's
+   --  cells within that of P, a cell taken at the first floor it is reached on.
+   function Can_Leave (P : Vec3; Wade : Natural) return Boolean is
+      Cm  : constant Float := Castle.Nav.Cell_M;
+      Cx0 : constant Integer := Integer (Float'Floor (P.X / Cm));
+      Cy0 : constant Integer := Integer (Float'Floor (P.Y / Cm));
+      R   : constant := Integer (Leave_M / Castle.Nav.Cell_M) + 1;    --  cells either way of P's
+      Unseen : constant Float := -2.0;
+      --  (indexed from 0, the cell of P at (R, R).  With bounds of -R .. R this compiler read a
+      --  cell just set as never set: GNAT 16.2.1 at -O1 and up, a two-dimensional array with
+      --  negative lower bounds and an index it can work out beforehand; every place was refused.
+      --  Fifteen lines that show it are kept: the handoff of 2026-11-22.)
+      type Reached is array (Integer range 0 .. 2 * R, Integer range 0 .. 2 * R) of Float;
+      Seen : Reached := [others => [others => Unseen]];             --  the floor each cell was reached on (m)
+      type Cell_At is record
+         I, J : Integer;                                            --  from P's cell: -R .. R
+      end record;
+      Queue : array (1 .. (2 * R + 1) ** 2) of Cell_At;
+      Head  : Positive := 1;
+      Tail  : Natural := 0;
+      Z0    : constant Float := Floor_Near (P.X, P.Y, P.Z, Wade);
+   begin
+      if Z0 < 0.0 then
+         return False;
+      end if;
+      Seen (R, R) := Z0;
+      Tail := 1;
+      Queue (1) := (0, 0);
+      while Head <= Tail loop
+         declare
+            C : constant Cell_At := Queue (Head);
+         begin
+            Head := Head + 1;
+            if Float (C.I * C.I + C.J * C.J) * Cm * Cm >= Leave_M * Leave_M then
+               return True;
+            end if;
+            for K in 1 .. 4 loop
+               declare
+                  Ni : constant Integer := C.I + (case K is when 1 => 1, when 2 => -1, when others => 0);
+                  Nj : constant Integer := C.J + (case K is when 3 => 1, when 4 => -1, when others => 0);
+               begin
+                  if Ni in -R .. R and then Nj in -R .. R and then Seen (Ni + R, Nj + R) = Unseen then
+                     declare
+                        Z : constant Float :=
+                          Floor_Near ((Float (Cx0 + Ni) + 0.5) * Cm, (Float (Cy0 + Nj) + 0.5) * Cm,
+                                      Seen (C.I + R, C.J + R), Wade);
+                     begin
+                        if Z >= 0.0 then
+                           Seen (Ni + R, Nj + R) := Z;
+                           Tail := Tail + 1;
+                           Queue (Tail) := (Ni, Nj);
+                        end if;
+                     end;
+                  end if;
+               end;
+            end loop;
+         end;
+      end loop;
+      return False;
+   end Can_Leave;
+
+   function Can_Walk_Off (P : Vec3) return Boolean is
+     (Can_Leave (P, (if Old_Way then Castle.Nav.Wade_B else Deer_Wade_B)));
+
    ------------------------------------------------------------------ herds
 
    procedure Reset is
@@ -321,6 +393,9 @@ package body Castle.Herds is
                begin
                   if Z >= 0.0 and then In_Range (P, Near_Stake_M)
                     and then (Old_Way or else Dry_Spot (P.X, P.Y, Deer_Wade_B))
+                    --  (and a deer can walk off it: not a tree's top, a tall boulder, a pen)
+                    and then (not Walk_Off_On
+                              or else Can_Leave ((P.X, P.Y, Z), (if Old_Way then Castle.Nav.Wade_B else Deer_Wade_B)))
                   then
                      N_Herds := N_Herds + 1;
                      Hr.Used := True;

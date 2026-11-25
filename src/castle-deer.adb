@@ -79,7 +79,8 @@ package body Castle.Deer is
          Count := Count + 1;
          R.Boxes (Count) := (On => On, Lo => L, Size => Sz,
                              W => Natural (Sz.X), D => Natural (Sz.Y), H => Natural (Sz.Z),
-                             U => 0, V => 0, Cutout => False, Glow => False, Round => Round, Taper => Taper);
+                             U => 0, V => 0, Cutout => False, Glow => False, Round => Round, Taper => Taper,
+                             Round_Ends => 0.0);
          Roles (Count) := What;
       end Add;
 

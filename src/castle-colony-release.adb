@@ -15,6 +15,16 @@ begin
    end if;
    if M.Bush > 0 and then Bushes (M.Bush).Reserved_By = I then
       Bushes (M.Bush).Reserved_By := 0;
+      if Share_On then                      --  (another of its pickers has it now)
+         for J in 1 .. N_Members loop
+            if J /= I and then not Band (J).Is_Dead and then Band (J).Bush = M.Bush
+              and then Band (J).State in To_Bush | Picking
+            then
+               Bushes (M.Bush).Reserved_By := J;
+               exit;
+            end if;
+         end loop;
+      end if;
    end if;
    M.Bush := 0;
    if M.Tree > 0 and then Trees (M.Tree).Reserved_By = I then

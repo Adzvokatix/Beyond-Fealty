@@ -1,5 +1,6 @@
 with Interfaces;
 with Castle.Bodies; use Castle.Bodies;
+with Castle.Bodies.Voxels;
 with Castle.Poses;  use Castle.Poses;
 with Castle.Math;   use Castle.Math;
 
@@ -40,6 +41,26 @@ package Castle.Figures is
    procedure Add (L : Look_Id; F : Frames);
    procedure Add_Shadow (Ground : Vec3; Radius : Float);
 
+   --  Voxel looks (the voxel people's brief, step 1: a serf's boxes filled with
+   --  voxels of 2.5 cm, Castle.Bodies.Voxels).  A look keeps its drawn quads
+   --  here, and on the GPU a slot of Vox_Slot_Words words: its palette, its
+   --  part table and its voxels' bytes.  A voxel figure's bones go into
+   --  Bones as a box figure's do, and its look's quads into this frame's
+   --  Vox_List, each with its figure's first bone and its look; the
+   --  renderer draws the list in one call (Castle.Render's voxel programs:
+   --  each quad pulled by the vertex number, each face's colour read voxel by
+   --  voxel from its part's bytes).  It casts as a box figure does.
+   Max_Vox_Looks  : constant := 256;
+   Vox_Quads_Each : constant := Castle.Bodies.Voxels.Max_Drawn;
+   Vox_Bytes_Each : constant := Castle.Bodies.Voxels.Max_Bytes;
+   subtype Vox_Look_Id is Positive range 1 .. Max_Vox_Looks;
+   function New_Voxel_Look (V : Castle.Bodies.Voxels.Voxel_Look) return Vox_Look_Id;
+   --  Raises Program_Error when every slot is taken.
+   procedure Free_Voxel_Look (L : Vox_Look_Id);
+   function Voxel_Looks_Used return Natural;
+   procedure Add_Voxel (L : Vox_Look_Id; F : Frames);
+   --  (left out, and said once, when this frame's list is full)
+
    ------------------------------------------------------- for the renderer
 
    subtype F32 is Interfaces.IEEE_Float_32;
@@ -78,5 +99,41 @@ package Castle.Figures is
    type Skin_Access is access all Skin_Pixels;
    procedure Next_Upload (L : out Look_Id; Skin : out Skin_Access; Found : out Boolean);
    --  A skin made since the renderer last asked; it is now marked uploaded.
+
+   --  The voxel quads of this frame (std430: uvec4 each): the quad's two
+   --  words (Castle.Voxel_Mesh.Quad), its figure's first bone in Bones, and
+   --  its look less one.
+   type GPU_Vox_Quad is record
+      A, B, Bone_First, Look : U32 := 0;
+   end record with Convention => C;
+   type Vox_Quad_Array is array (Natural range <>) of aliased GPU_Vox_Quad with Convention => C;
+   Max_Vox_List : constant := 131_072;
+   Vox_List : Vox_Quad_Array (0 .. Max_Vox_List - 1);
+   Vox_List_Count : Natural := 0;
+
+   --  A look's slot on the GPU, in 32-bit words: its palette (RGBA as the
+   --  skin's, entry 0 air); its part table, per bone two uvec4s (the offset
+   --  of its first voxel in the slot's bytes, Nx, Ny, Nz; Ox, Oy, Oz each
+   --  plus Vox_Bias, 0); its voxels' bytes, four to a word, the first in
+   --  the low byte (Castle.Bodies.Voxels.Voxel_Look.Bytes).
+   Vox_Bias        : constant := 4_096;
+   Vox_Pal_Words   : constant := 256;
+   Vox_Parts_Words : constant := 8 * Bones_Each;
+   Vox_Bytes_Words : constant := Vox_Bytes_Each / 4;
+   Vox_Slot_Words  : constant := Vox_Pal_Words + Vox_Parts_Words + Vox_Bytes_Words;
+   type U32_Array is array (Natural range <>) of aliased U32 with Convention => C;
+   subtype Vox_Part_Table is U32_Array (0 .. Vox_Parts_Words - 1);
+   type Bytes_Access is access all Castle.Bodies.Voxels.Byte_Array;
+   type Parts_Access is access all Vox_Part_Table;
+   type Pal_Access is access all Castle.Bodies.Voxels.Palette;
+   type Vox_Upload is record
+      Look    : Vox_Look_Id := 1;
+      Pal     : Pal_Access;
+      Parts   : Parts_Access;
+      Bytes   : Bytes_Access;     --  (0 .. Bytes_N - 1)
+      Bytes_N : Natural := 0;
+   end record;
+   procedure Next_Vox_Upload (U : out Vox_Upload; Found : out Boolean);
+   --  A voxel look made since the renderer last asked; it is now marked uploaded.
 
 end Castle.Figures;

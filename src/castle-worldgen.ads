@@ -3,7 +3,7 @@ with Castle.Maps;
 
 package Castle.Worldgen is
 
-   Generator_Version : constant := 14;   --  2: 256 m world, taller mountains; 3: cliffs, veins, water;
+   Generator_Version : constant := 16;   --  2: 256 m world, taller mountains; 3: cliffs, veins, water;
                                         --  4: blocky broadleaf crowns; 5: contained water, lakes feed
                                         --  the streams that start near them; 6: channels carry a
                                         --  discharge, beds fall all the way, fewer lakes;
@@ -24,6 +24,10 @@ package Castle.Worldgen is
                                         --  drifts, some of it two blocks high
                                         --  14: a fifth of the mountains' boulders, and three in ten
                                         --  more on open land (Castle.Flora.Boulders_Mountain, _Open)
+                                        --  15: a boulder goes into the ground: nothing hollow under
+                                        --  it, and a skirt round its foot (Castle.Flora.Skirt_Spread)
+                                        --  16: a tree's trunk goes down through a boulder to the
+                                        --  ground (it stood on the rock)
    --  Bump whenever any stage changes its output for the same seed.  Saves
    --  store only modified chunks and regenerate the rest, so a save must be
    --  loaded with the generator version that created it.

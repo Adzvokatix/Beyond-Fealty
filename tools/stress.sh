@@ -32,8 +32,8 @@ TMP=$(mktemp -d)
 FAILED=0
 PARTS=${*:-runner game debug}
 
-SITE="--seed 1 --stake 1178 1078 --path 1176 1076 1194 1076 --stockpile 1180 1070 1190 1075 --camp 1172 1082"
-SIX="--gatherers 2 --foresters 1 --hunters 2 --cooks 1"
+SITE="--seed 1 --stake 1178 1078 --path 1176 1076 1194 1076 --stockpile-least 0 --no-overflow --last-places 0 --one-to-a-bush --no-storehouse --no-path-level --no-roof-timbers --no-window-timber --no-reach-out --no-zigzag --no-paths-meet --no-door-meet --no-build-help --no-place-level --no-cart-room --no-step-at-edge --no-steep-refuse --no-wood-reach --no-house-turn --stockpile 1180 1070 1190 1075 --camp 1172 1082"
+SIX="--band 6 --gatherers 2 --foresters 1 --hunters 2 --cooks 1"   # (six: thirteen arrive unless told, since 2026-11-17)
 ORDERS="--winter-store 10 --reserve meat 60"     # the reference run's (tools/reference_check.sh): without a
                                                  # winter store the band starves a week into its first winter
 CROWD="--band 48 --gatherers 14 --foresters 6 --porters 8 --hunters 8 --cooks 2"

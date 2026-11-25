@@ -12,11 +12,13 @@ begin
          declare
             Cl : Cell renames Cells (C);
          begin
-            if (Pass = 1 and then Cl.Kind = K)
+            if Cl.Overflow or else Cl.Closed or else not Open_To (C, K) or else not Cl.Made then
+               null;                                --  (into the stockpiles proper: as brought in)
+            elsif (Pass = 1 and then Cl.Kind = K)
               or else (Pass = 2 and then Cl.Kind = Nothing and then Cl.Incoming = 0 and then not Under_Cart (C))
             then
                declare
-                  Room : constant Natural := Integer'Max (0, Cell_Limit (K) - Cl.Count - Cl.Incoming);
+                  Room : constant Natural := Integer'Max (0, Place_Limit (C, K) - Cl.Count - Cl.Incoming);
                   Put  : constant Natural := Natural'Min (Room, Left);
                begin
                   if Put > 0 then

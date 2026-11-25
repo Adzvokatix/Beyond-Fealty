@@ -16,8 +16,11 @@ begin
       Ib1 : constant Integer := Integer (Float'Ceiling (Float'Max (B0, B1))) - 1;
    begin
       Plan_Lot (Ex, Ey, Float (Ia0), Float (Ia1 + 1), Float (Ib0), Float (Ib1 + 1),
-                Seed => (X0, Y0, 0.0), Step_B => Integer (Zone_Step_M * 4.0), Places => True,
-                Ia0 => Ia0, Ia1 => Ia1, Ib0 => Ib0, Ib1 => Ib1);
+                Seed => (X0, Y0, 0.0),
+                Step_B => (if Flat_On then Flat_Most_B else Integer (Zone_Step_M * 4.0)), Places => True,
+                Ia0 => Ia0, Ia1 => Ia1, Ib0 => Ib0, Ib1 => Ib1,
+                Least => Least_M, Overflow => (if Overflow_On then Overflow_Places else 0), One_Level => Flat_On,
+                Steep_B => (if Steep_On and then not Flat_On then Steep_Rise_B else 0));
       if Plan_Refused = Too_Large then
          return;
       end if;
@@ -31,6 +34,7 @@ begin
          Plan_N := 0;
          Plan_Blocks := 0;
          Plan_Cells_N := 0;
+         Plan_Over_N := 0;
          Plan_Under_N := 0;
       end if;
    end;

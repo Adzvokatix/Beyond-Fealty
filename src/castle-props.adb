@@ -1,9 +1,10 @@
 with Interfaces;    use Interfaces;
 with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 with Castle.Bodies; use Castle.Bodies;
+with Castle.Blocks;
 with Castle.Poses;  use Castle.Poses;
-with Castle.Hash;
 with Castle.Colors;
+with Castle.Textures;
 
 package body Castle.Props is
 
@@ -524,14 +525,18 @@ package body Castle.Props is
    end record;
    type Box_Specs is array (Positive range <>) of Box_Spec;
 
+   --  (Fill: what the skin is where no face of a box lies.  Nothing is drawn of it close to, but far
+   --  off the sampler takes in what lies round a face: left clear and black, a large flat face shows
+   --  a dark rim.)
    function Many_Boxes
      (Specs : Box_Specs;
       Paint : not null access function (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float)
-                                        return Unsigned_32)
+                                        return Unsigned_32;
+      Fill  : Unsigned_32 := 0)
       return Castle.Figures.Look_Id
    is
       R    : Rig;
-      Skin : Skin_Pixels := [others => [others => 0]];
+      Skin : Skin_Pixels := [others => [others => Fill]];
       U_At : Natural := 0;
       V_At : Natural := 0;
       Row_H : Natural := 0;
@@ -553,7 +558,7 @@ package body Castle.Props is
             R.Boxes (K - Specs'First + 1) :=
               (On => Specs (K).On, Lo => Specs (K).Lo, Size => Specs (K).Size, W => W, D => D, H => Hh,
                U => U_At, V => V_At, Cutout => False, Glow => Specs (K).Glow,
-               Round => Specs (K).Round, Taper => Specs (K).Taper);
+               Round => Specs (K).Round, Taper => Specs (K).Taper, Round_Ends => 0.0);
             U_At := U_At + Net_W;
             Row_H := Natural'Max (Row_H, Net_H);
             if Net_W > Skin'Length (2) or else V_At + Row_H > Skin'Length (1) then
@@ -618,7 +623,17 @@ package body Castle.Props is
       end;
    end Tiles_Of;
 
-   procedure Put_Cloth (C : Castle.Cloth.Cloth_Id; Colour : RGB) is
+   procedure Put_Cloth (C : Castle.Cloth.Cloth_Id; Colour : RGB;
+                        Pivot : Vec3 := (0.0, 0.0, 0.0); Radians : Float := 0.0) is
+      Tc : constant Float := (if Radians = 0.0 then 1.0 else Cos (Radians));
+      Ts : constant Float := (if Radians = 0.0 then 0.0 else Sin (Radians));
+      function Point (C : Castle.Cloth.Cloth_Id; I, J : Positive) return Vec3 is
+         P : constant Vec3 := Castle.Cloth.Point (C, I, J);
+      begin
+         return (if Radians = 0.0 then P
+                 else (Pivot.X + Tc * (P.X - Pivot.X) - Ts * (P.Y - Pivot.Y),
+                       Pivot.Y + Ts * (P.X - Pivot.X) + Tc * (P.Y - Pivot.Y), P.Z));
+      end Point;
       use Castle.Cloth;
       T  : constant Tile_Looks := Tiles_Of (Colour);
       Fs : array (1 .. 2) of Frames;
@@ -1147,7 +1162,76 @@ package body Castle.Props is
       return Sack_L;
    end Sack;
 
-   procedure Put_Cart (Ground : Vec3; Turn : Float; Sacks : Natural; Towed : Boolean := False) is
+   Barrel_Made : array (Boolean) of Boolean := [others => False];
+   Barrel_L    : array (Boolean) of Castle.Figures.Look_Id := [others => 1];
+   Shelf_Made  : Boolean := False;
+   Shelf_L     : Castle.Figures.Look_Id := 1;
+
+   function Paint_Barrel_Shut (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box);
+      use Castle.Colors;
+   begin
+      if F = Pos_Z then                                   --  the lid: boards across, a rim
+         return (if U = 0 or else V = 0 or else U = Wf - 1 or else V = Hf - 1 then Hex (Dark_Bark)
+                 elsif V mod 3 = 0 then Hex (Weathered_Oak, 0.85) else Hex (Weathered_Oak, (if H < 0.5 then 1.0 else 1.08)));
+      elsif F = Neg_Z then
+         return Hex (Dark_Bark);
+      elsif V in 2 | 3 or else V = Hf / 2 or else V in Hf - 4 | Hf - 3 then
+         return Hex (Iron, (if H < 0.5 then 0.8 else 0.9));          --  the hoops
+      else
+         return (if U mod 3 = 0 then Hex (Dark_Bark, 1.2) else Hex (Weathered_Oak, (if H < 0.5 then 0.95 else 1.05)));
+      end if;
+   end Paint_Barrel_Shut;
+
+   function Paint_Barrel_Water (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+   begin
+      if F = Pos_Z then                                   --  open: water inside a rim of staves
+         return (if U = 0 or else V = 0 or else U = Wf - 1 or else V = Hf - 1 then RGBA (110, 78, 46)
+                 elsif H < 0.4 then RGBA (64, 108, 150) else RGBA (52, 92, 134));
+      end if;
+      return Paint_Barrel_Shut (Box, F, U, V, Wf, Hf, H);
+   end Paint_Barrel_Water;
+
+   function Barrel (Water : Boolean) return Castle.Figures.Look_Id is
+   begin
+      if not Barrel_Made (Water) then
+         Barrel_L (Water) :=
+           Many_Boxes ([(Lo => (-5.5, -5.5, 0.0), Size => (11.0, 11.0, 16.0), Round => 3.0, others => <>)],
+                       (if Water then Paint_Barrel_Water'Access else Paint_Barrel_Shut'Access));
+         Barrel_Made (Water) := True;
+      end if;
+      return Barrel_L (Water);
+   end Barrel;
+
+   function Paint_Shelf (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (V, Wf, Hf);
+      use Castle.Colors;
+   begin
+      if Box <= 4 then                                    --  a post
+         return Hex (Weathered_Oak, (if H < 0.5 then 0.75 else 0.85));
+      end if;
+      return (if F in Pos_Z | Neg_Z and then U mod 7 = 0 then Hex (Weathered_Oak, 0.8)   --  a board's planks
+              else Hex (Weathered_Oak, (if H < 0.5 then 1.0 else 1.1)));
+   end Paint_Shelf;
+
+   function Shelf return Castle.Figures.Look_Id is
+   begin
+      if not Shelf_Made then
+         Shelf_L := Many_Boxes
+           ([(Lo => (-10.0, 0.0, 0.0), Size => (1.4, 1.4, 30.0), Round => 0.3, others => <>),
+             (Lo => (8.6, 0.0, 0.0), Size => (1.4, 1.4, 30.0), Round => 0.3, others => <>),
+             (Lo => (-10.0, 6.6, 0.0), Size => (1.4, 1.4, 30.0), Round => 0.3, others => <>),
+             (Lo => (8.6, 6.6, 0.0), Size => (1.4, 1.4, 30.0), Round => 0.3, others => <>),
+             (Lo => (-10.0, 0.0, 4.0), Size => (20.0, 8.0, 1.0), Round => 0.2, others => <>),
+             (Lo => (-10.0, 0.0, 14.0), Size => (20.0, 8.0, 1.0), Round => 0.2, others => <>),
+             (Lo => (-10.0, 0.0, 24.0), Size => (20.0, 8.0, 1.0), Round => 0.2, others => <>)],
+            Paint_Shelf'Access);
+         Shelf_Made := True;
+      end if;
+      return Shelf_L;
+   end Shelf;
+
+   procedure Put_Cart (Ground : Vec3; Turn : Float; Sacks : Natural; Towed : Boolean := False; Roll : Float := 0.0) is
       Ct : constant Float := Cos (Turn);
       St : constant Float := Sin (Turn);
       Pi : constant := Ada.Numerics.Pi;
@@ -1189,8 +1273,20 @@ package body Castle.Props is
       end if;
       for Ax in 0 .. 1 loop
          for Side in 0 .. 1 loop
-            Put (Wheel, At_Cart ((if Ax = 0 then -Cart_Axle_M else Cart_Axle_M),
-                                 (if Side = 0 then -Cart_Track_M else Cart_Track_M), 0.0), Turn);
+            --  (turned by Roll about its axle, its top going the way the shafts point: the look
+            --  stands on its ground point, its hub Wheel_Hub_M over it)
+            declare
+               Hub : constant Vec3 := At_Cart ((if Ax = 0 then -Cart_Axle_M else Cart_Axle_M),
+                                               (if Side = 0 then -Cart_Track_M else Cart_Track_M), Wheel_Hub_M);
+               Fx  : constant Vec3 := (Ct, St, 0.0);
+               Up  : constant Vec3 := (0.0, 0.0, 1.0);
+               Zr  : constant Vec3 := Up * Cos (Roll) + Fx * Sin (Roll);
+               F   : constant Frame := (X => Fx * Cos (Roll) - Up * Sin (Roll), Y => (-St, Ct, 0.0), Z => Zr,
+                                        O => Hub - Zr * Wheel_Hub_M);
+               Fs  : constant Frames := [others => F];
+            begin
+               Castle.Figures.Add (Wheel, Fs);
+            end;
          end loop;
       end loop;
       --  the sacks left in it: three across the bed, and three more on those
@@ -1207,6 +1303,266 @@ package body Castle.Props is
          end;
       end loop;
    end Put_Cart;
+
+   ------------------------------------------------------------------ a door's leaf
+
+   Leaf_Made : array (Boolean) of Boolean := [others => False];
+   Leaf_L    : array (Boolean) of Castle.Figures.Look_Id := [others => 1];
+
+   --  Planks upright, a ledge across near its head and its foot on the side
+   --  that swings into the house, two iron straps on the other, a latch.
+   function Paint_Leaf_Side
+     (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float; Out_F : Face) return Unsigned_32
+   is
+      use Castle.Colors;
+      --  how far a texel of the outside is from the hinge edge (a face's U runs the other way on the other side)
+      From_Hinge : constant Natural := (if Out_F = Neg_Y then U else Wf - 1 - U);
+   begin
+      if Box > 1 then                                     --  a ledge
+         return Hex (Dark_Bark, (if H < 0.5 then 1.15 else 1.3));
+      elsif F = Out_F and then V in 6 | 7 | Hf - 8 | Hf - 7 and then From_Hinge < 13 then
+         return Hex (Iron, (if H < 0.5 then 0.75 else 0.9));           --  the straps, from the hinge
+      elsif F = Out_F and then From_Hinge in 16 | 17 and then V in Hf / 2 - 1 .. Hf / 2 then
+         return Hex (Iron, 0.8);                                         --  the latch
+      elsif F in Pos_Y | Neg_Y and then U mod 4 = 3 then
+         return Hex (Dark_Bark, 1.1);                                    --  between two planks
+      else
+         return Hex (Weathered_Oak, (if H < 0.33 then 0.82 elsif H < 0.66 then 0.9 else 0.98));
+      end if;
+   end Paint_Leaf_Side;
+
+   function Paint_Leaf (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+     (Paint_Leaf_Side (Box, F, U, V, Wf, Hf, H, Neg_Y));
+   function Paint_Leaf_Mirrored (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+     (Paint_Leaf_Side (Box, F, U, V, Wf, Hf, H, Pos_Y));
+
+   function Door_Leaf (Mirrored : Boolean := False) return Castle.Figures.Look_Id is
+      Ledge_Y : constant Float := (if Mirrored then -1.3 else 0.6);
+   begin
+      if not Leaf_Made (Mirrored) then
+         Leaf_L (Mirrored) := Many_Boxes
+           ([(Lo => (0.2, -0.6, 0.2), Size => (19.6, 1.2, 39.4), Round => 0.1, others => <>),
+             (Lo => (1.0, Ledge_Y, 6.0), Size => (18.0, 0.7, 2.4), Round => 0.1, others => <>),
+             (Lo => (1.0, Ledge_Y, 30.0), Size => (18.0, 0.7, 2.4), Round => 0.1, others => <>)],
+            (if Mirrored then Paint_Leaf_Mirrored'Access else Paint_Leaf'Access));
+         Leaf_Made (Mirrored) := True;
+      end if;
+      return Leaf_L (Mirrored);
+   end Door_Leaf;
+
+   ------------------------------------------------------------------ a gate's leaf, a window's trim
+
+   Gate_Made : array (Boolean) of Boolean := [others => False];
+   Gate_L    : array (Boolean) of Castle.Figures.Look_Id := [others => 1];
+   Trim_Made : array (Boolean) of Boolean := [others => False];
+   Trim_L    : array (Boolean) of Castle.Figures.Look_Id := [others => 1];
+
+   function Paint_Gate (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (F, U, V, Wf, Hf);
+      use Castle.Colors;
+   begin
+      return (if Box <= 3 then Hex (Dark_Bark, (if H < 0.5 then 1.15 else 1.3))            --  its stiles
+              else Hex (Weathered_Oak, (if H < 0.33 then 0.8 elsif H < 0.66 then 0.9 else 1.0)));   --  its rails
+   end Paint_Gate;
+
+   function Gate_Leaf (Mirrored : Boolean := False) return Castle.Figures.Look_Id is
+      Y : constant Float := (if Mirrored then 0.5 else -1.3);      --  (the rails on the side that is outward)
+   begin
+      if not Gate_Made (Mirrored) then
+         Gate_L (Mirrored) := Many_Boxes
+           ([(Lo => (0.2, -0.7, 1.0), Size => (1.4, 1.4, 20.0), others => <>),
+             (Lo => (9.2, -0.5, 1.0), Size => (1.2, 1.0, 19.0), others => <>),
+             (Lo => (18.2, -0.7, 1.0), Size => (1.4, 1.4, 20.0), others => <>),
+             (Lo => (0.4, Y, 4.0), Size => (19.0, 0.8, 2.0), Round => 0.2, others => <>),
+             (Lo => (0.4, Y, 10.0), Size => (19.0, 0.8, 2.0), Round => 0.2, others => <>),
+             (Lo => (0.4, Y, 16.0), Size => (19.0, 0.8, 2.0), Round => 0.2, others => <>)],
+            Paint_Gate'Access);
+         Gate_Made (Mirrored) := True;
+      end if;
+      return Gate_L (Mirrored);
+   end Gate_Leaf;
+
+   ------------------------------------------------------------------ a stockyard's pieces
+
+   Rail_Made  : array (Boolean) of Boolean := [others => False];
+   Rail_L     : array (Boolean) of Castle.Figures.Look_Id := [others => 1];
+   Tile_Made  : Boolean := False;
+   Tile_L     : Castle.Figures.Look_Id := 1;
+   Roll_Made  : array (Boolean) of Boolean := [others => False];
+   Roll_L     : array (Boolean) of Castle.Figures.Look_Id := [others => 1];
+
+   --  The land's own texels of thatch (Cover_Thatch): made once, from the
+   --  seed the land's are made from.
+   Texel_Seed : Castle.Hash.U64 := 1;
+   Land_Set   : Castle.Textures.Texture_Set;
+   Land_Made  : Boolean := False;
+   procedure Set_Texel_Seed (Seed : Castle.Hash.U64) is
+   begin
+      if Land_Made and then Seed /= Texel_Seed then
+         Castle.Textures.Free (Land_Set);
+         Land_Made := False;
+      end if;
+      Texel_Seed := Seed;
+   end Set_Texel_Seed;
+   --  Texel (Tx, Ty) of the block at (Bu, Bv) of a face: one of the land's
+   --  variants by the block's place there, as the land takes one by a
+   --  block's place in the world.  Row 0 is the dark line where one course
+   --  of straw overlaps the next.
+   function Land_Thatch (Bu, Bv, Tx, Ty : Natural) return Unsigned_32 is
+      use Castle.Textures;
+      Var : constant Natural :=
+        Natural (Castle.Hash.Mix (Castle.Hash.U64 (Bu) * 7_919 + Castle.Hash.U64 (Bv) * 104_729 + 13)
+                 mod Castle.Hash.U64 (Variants));
+      I   : constant Natural :=
+        (((Castle.Blocks.Material'Pos (Castle.Blocks.Thatch) * Variants + Var) * Size + Ty) * Size + Tx) * 4;
+   begin
+      if not Land_Made then
+         Land_Set := Generate (Texel_Seed);
+         Land_Made := True;
+      end if;
+      return Unsigned_32 (Land_Set.Detail (I)) or Shift_Left (Unsigned_32 (Land_Set.Detail (I + 1)), 8)
+        or Shift_Left (Unsigned_32 (Land_Set.Detail (I + 2)), 16) or Shift_Left (Unsigned_32'(255), 24);
+   end Land_Thatch;
+
+   --  (a log's texels: its colour, each its own brightness, the bark's furrows along it)
+   function Paint_Rail (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, U, Wf, Hf);
+      K : Float := 0.88 + 0.24 * H;
+   begin
+      if F not in Pos_X | Neg_X and then V mod 2 = 0 then
+         K := K * 0.82;
+      end if;
+      return Hex (Castle.Colors.Weathered_Oak, K);
+   end Paint_Rail;
+   --  (a plank's: a seam where one board meets the next)
+   function Paint_Plank (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, F, U, Wf, Hf);
+      K : Float := 0.88 + 0.24 * H;
+   begin
+      if V mod 5 = 0 then
+         K := K * 0.72;
+      end if;
+      return Hex (Castle.Colors.Copper_Brown, K);
+   end Paint_Plank;
+   function Rail (Plank : Boolean := False) return Castle.Figures.Look_Id is
+   begin
+      if not Rail_Made (Plank) then
+         Rail_L (Plank) := Many_Boxes
+           ([1 => (Lo => (0.0, -2.5, -2.5), Size => (20.0, 5.0, 5.0), Round => 0.4, others => <>)],
+            (if Plank then Paint_Plank'Access else Paint_Rail'Access));
+         Rail_Made (Plank) := True;
+      end if;
+      return Rail_L (Plank);
+   end Rail;
+
+   --  (thatch's texels: courses of straw, a dark line where one overlaps the next every block
+   --  down the slope, the stalks running down it between, on the face that is its top; its other
+   --  faces plain straw)
+   function Paint_Thatch_On (Top : Face; F : Face; U, V : Natural; H : Float) return Unsigned_32 is
+      K : Float := 0.88 + 0.24 * H;
+   begin
+      if F = Top then
+         if V mod 5 = 2 then
+            K := K * 0.7;
+         elsif (U + V / 5) mod 2 = 0 then
+            K := K * 0.9;
+         end if;
+      end if;
+      return Hex (Castle.Colors.Thatch_Straw, K);
+   end Paint_Thatch_On;
+   function Paint_Thatch (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, Wf, Hf);
+   begin
+      return Paint_Thatch_On (Pos_Z, F, U, V, H);
+   end Paint_Thatch;
+   function Paint_Roof (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, Wf, Hf);
+   begin
+      return Paint_Thatch_On (Pos_Y, F, U, V, H);
+   end Paint_Roof;
+   --  (a covering's whole roof, one box: 3 m along X, 4 px thick along Y under its top (Y = 0), and
+   --  2.1 m down its slope along Z: so its skin's net, 2 (60 + 4) by 42 + 8, fits one skin, and no
+   --  seam crosses it.  Tiles of a metre square were tried first: from twenty metres off a dark
+   --  seam showed at every tile's edge, where the sampler took in what lies round its face in the skin)
+   --  (with Cover_Thatch: the land's texels.  A face's U and V run back along the box's X and up its
+   --  Z (Castle.Render, Box_Face_Source), so on the roof's top a block's place and its texel are
+   --  counted from the front's corner along it and down the slope, the dark row at each course's
+   --  lower edge; its other faces, and a roll's, a block every five texels as they come)
+   function Paint_Roof_Land (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, H);
+      X : constant Natural := Wf - 1 - U;
+      Z : constant Natural := Hf - 1 - V;
+   begin
+      if F = Pos_Y then
+         return Land_Thatch (X / 5, Z / 5, X mod 5, 4 - Z mod 5);
+      else
+         return Land_Thatch (U / 5 + 40 + 16 * Face'Pos (F), V / 5 + 40, U mod 5, V mod 5);
+      end if;
+   end Paint_Roof_Land;
+   function Paint_Roll_Land (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (Box, Wf, Hf, H);
+   begin
+      return Land_Thatch (U / 5 + 16 * Face'Pos (F), V / 5 + 80, U mod 5, V mod 5);
+   end Paint_Roll_Land;
+   Straw_Fill : constant Unsigned_32 := Hex (Castle.Colors.Thatch_Straw, 0.9);
+   function Thatch_Tile return Castle.Figures.Look_Id is
+   begin
+      if not Tile_Made then
+         Tile_L := Many_Boxes
+           ([1 => (Lo => (0.0, -4.0, 0.0), Size => (60.0, 4.0, 42.0), Round => 0.0, others => <>)],
+            (if Cover_Thatch then Paint_Roof_Land'Access else Paint_Roof'Access),
+            Fill => (if Cover_Thatch then Straw_Fill else 0));
+         Tile_Made := True;
+      end if;
+      return Tile_L;
+   end Thatch_Tile;
+   --  (with Cover_Thatch a piece is 1.3 m long, its metre from 0 to 20 along X: it reaches Roll_Lap_M
+   --  past each end, where its ends are rounded off, and the next piece, the other width, is whole
+   --  there)
+   function Thatch_Roll (Inner : Boolean := False) return Castle.Figures.Look_Id is
+      Lap : constant Float := Roll_Lap_M * 20.0;
+   begin
+      if not Roll_Made (Inner) then
+         if not Cover_Thatch then
+            Roll_L (Inner) := Many_Boxes
+              ([1 => (Lo => (0.0, -3.0, -3.0), Size => (20.0, 6.0, 6.0), Round => 2.8, others => <>)],
+               Paint_Thatch'Access);
+         elsif Inner then
+            Roll_L (Inner) := Many_Boxes
+              ([1 => (Lo => (-Lap, -2.9, -2.9), Size => (20.0 + 2.0 * Lap, 5.8, 5.8), Round => 2.7, others => <>)],
+               Paint_Roll_Land'Access, Fill => Straw_Fill);
+         else
+            Roll_L (Inner) := Many_Boxes
+              ([1 => (Lo => (-Lap, -3.0, -3.0), Size => (20.0 + 2.0 * Lap, 6.0, 6.0), Round => 2.8, others => <>)],
+               Paint_Roll_Land'Access, Fill => Straw_Fill);
+         end if;
+         Roll_Made (Inner) := True;
+      end if;
+      return Roll_L (Inner);
+   end Thatch_Roll;
+
+   function Paint_Trim (Box : Positive; F : Face; U, V, Wf, Hf : Natural; H : Float) return Unsigned_32 is
+      pragma Unreferenced (F, Wf, Hf);
+      use Castle.Colors;
+   begin
+      --  (plank: the grain along each piece)
+      return (if (if Box = 3 then V else U) mod 2 = 1 and then H < 0.3 then Hex (Weathered_Oak, 1.0)
+              else Hex (Sand_Tan, (if H < 0.5 then 0.82 else 0.9)));
+   end Paint_Trim;
+
+   function Window_Trim (Tall : Boolean) return Castle.Figures.Look_Id is
+      Hh : constant Float := (if Tall then 15.0 else 10.0);
+   begin
+      if not Trim_Made (Tall) then
+         Trim_L (Tall) := Many_Boxes
+           ([(Lo => (-Trim_W, -3.0, 0.0), Size => (Trim_W, 0.6, Hh), Round => 0.05, others => <>),
+             (Lo => (10.0, -3.0, 0.0), Size => (Trim_W, 0.6, Hh), Round => 0.05, others => <>),
+             (Lo => (-Trim_W, -3.0, Hh), Size => (10.0 + 2.0 * Trim_W, 0.6, Trim_W), Round => 0.05, others => <>)],
+            Paint_Trim'Access);
+         Trim_Made (Tall) := True;
+      end if;
+      return Trim_L (Tall);
+   end Window_Trim;
 
    ------------------------------------------------------------------ a ladder
 

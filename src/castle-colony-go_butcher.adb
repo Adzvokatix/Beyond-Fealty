@@ -8,7 +8,8 @@ begin
    for K in 1 .. N_Cells loop
       declare
          C : Cell renames Cells (K);
-         D : constant Float := Flat_Dist (M.Pos, C.Centre);
+         D : constant Float :=               --  (an overflow place only when no ordinary place takes it)
+           Flat_Dist (M.Pos, C.Centre) + (if C.Overflow then Overflow_Last else 0.0);
       begin
          if Takes (K, Meat, Meat_N) and then D < Md
          then
@@ -20,7 +21,8 @@ begin
    for K in 1 .. N_Cells loop
       declare
          C : Cell renames Cells (K);
-         D : constant Float := Flat_Dist (M.Pos, C.Centre);
+         D : constant Float :=               --  (an overflow place only when no ordinary place takes it)
+           Flat_Dist (M.Pos, C.Centre) + (if C.Overflow then Overflow_Last else 0.0);
       begin
          if K /= Mc and then Takes (K, Hide, 1) and then D < Hd
          then

@@ -23,6 +23,10 @@ begin
          M.Why := (if M.Why = No_Room then No_Room else Why);
       end;
    end if;
+   if Room_Gated and then M.Why in No_Room | Nearly_Full and then M.Carried = 0 then
+      Wait_For_Room (I);                    --  (its leisure at the campfire, or the overflow moved in)
+      return;
+   end if;
    M.Wait := 4.0;
    M.State := Idle;
 end Think_Gather;

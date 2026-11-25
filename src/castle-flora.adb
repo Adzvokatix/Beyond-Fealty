@@ -3,7 +3,6 @@ with Ada.Unchecked_Deallocation;
 with Interfaces;     use Interfaces;
 with Castle.Noise;   use Castle.Noise;
 with Castle.Fields;  use Castle.Fields;
-with Castle.Geology; use Castle.Geology;
 with Castle.Dims;   use Castle.Dims;
 with Castle.Channels;
 
@@ -12,14 +11,18 @@ package body Castle.Flora is
    package Ch renames Castle.Channels;
 
    Bush_Reach : constant := 4;
-   Rock_Reach : constant := 8;
 
-   type Put_Mode is (Foliage, Wood, Stone);
+   type Put_Mode is (Foliage, Wood, Trunk_Wood, Stone);
+   --  (Trunk_Wood: a trunk, which goes down through a boulder to the ground
+   --  it stands on; generator 16, John, 2026-11-16: "the trees should go
+   --  through the rock to the ground".  A branch does not.)
 
    function Replaceable (Cur : Material; Mode : Put_Mode) return Boolean is
      (case Mode is
          when Foliage => Cur in Air | Tall_Grass | Wild_Grain | Wild_Vegetables,
          when Wood    => Cur in Air | Tall_Grass | Wild_Grain | Wild_Vegetables | Crown | Berry_Bush | Grass | Dirt,
+         when Trunk_Wood =>
+           Cur in Air | Tall_Grass | Wild_Grain | Wild_Vegetables | Crown | Berry_Bush | Grass | Dirt | Boulder,
          when Stone   => Cur in Air | Tall_Grass | Wild_Grain | Wild_Vegetables | Grass | Dirt | Sand | Gravel);
 
    procedure Put
@@ -242,22 +245,78 @@ package body Castle.Flora is
    -- In_Rock --
    -------------
 
-   function In_Rock (L : Lump; Bx, By, Bz : Integer) return Boolean is
-      Rh : constant Float := Float (L.Rh) + 0.5;
-      Rv : constant Float := Float (L.Rv) + 0.5;
+   function Rock_Reach_Of (L : Lump) return Integer is
+     (L.Rh + 1 + Integer (Float'Ceiling (Skirt_Spread * (Float (L.Rh) + 0.5))));
+
+   --  A boulder in one column (X, Y) whose ground is C: which blocks of it
+   --  are rock (Draw_Rock and In_Rock alike).  The round with its noise,
+   --  as it always was; then, on dry ground, everything under the round
+   --  down into the ground's top block (no hollow under a boulder: it goes
+   --  into the ground); and a skirt round its foot, Skirt_Spread wider in
+   --  the ground's top block and the first over it, half that in the next
+   --  (Skirt_Rise), on a gentler noise of the column alone, so its edge has
+   --  no loose blocks.
+   procedure Rock_Column (L : Lump; X, Y : Integer; C : Column; Lo : out Integer; Span : out Rock_Span) is
+      Rh   : constant Float   := Float (L.Rh) + 0.5;
+      Rv   : constant Float   := Float (L.Rv) + 0.5;
+      Dx   : constant Float   := Float (X - L.Cx) / Rh;
+      Dy   : constant Float   := Float (Y - L.Cy) / Rh;
+      Z_Lo : constant Integer := Integer'Max (1, L.Cz - L.Rv - 1);
+      Z_Hi : constant Integer := Integer'Min (Height_B - 1, L.Cz + L.Rv + 1);
+      Dry  : constant Boolean := C.Water_Top <= C.Solid;
+      Top  : Integer := -1;                         --  the round's top in this column (-1: none)
    begin
-      if not L.Valid or else Bz < 1 or else abs (Bx - L.Cx) > L.Rh + 1 or else abs (By - L.Cy) > L.Rh + 1
-        or else abs (Bz - L.Cz) > L.Rv + 1
+      Lo := Z_Lo;
+      Span := [others => False];
+      for Z in Z_Lo .. Z_Hi loop
+         declare
+            Dz : constant Float := Float (Z - L.Cz) / Rv;
+         begin
+            if Dx * Dx + Dy * Dy + Dz * Dz
+               < 1.0 + 0.45 * Perlin_3 (L.Seed, Float (X) / 2.5, Float (Y) / 2.5, Float (Z) / 2.5)
+            then
+               Span (Z - Lo) := True;
+               Top := Z;
+            end if;
+         end;
+      end loop;
+      if not Dry then
+         return;
+      end if;
+      declare
+         G  : constant Integer := C.Solid - 1;        --  the ground's top block
+         D2 : constant Float   := Dx * Dx + Dy * Dy;
+         Js : constant Float   := 1.0 + 0.25 * Perlin_3 (L.Seed, Float (X) / 2.5, Float (Y) / 2.5, 0.37);
+         --  (how many blocks of skirt over the ground's top block: 2 within the
+         --  half-widened round, 1 within the widened one, none past it: -1)
+         Hs : constant Integer :=
+           (if D2 < Js * (1.0 + 0.5 * Skirt_Spread) ** 2 then Skirt_Rise
+            elsif D2 < Js * (1.0 + Skirt_Spread) ** 2 then Skirt_Rise - 1
+            else -1);
+      begin
+         for Z in G .. Integer'Max (Top, G + Hs) loop
+            if Z - Lo in Span'Range and then Z >= 1 and then Z < Height_B
+              and then (Z <= Top or else Z <= G + Hs)
+            then
+               Span (Z - Lo) := True;
+            end if;
+         end loop;
+      end;
+   end Rock_Column;
+
+   function In_Rock (W : World; L : Lump; Bx, By, Bz : Integer) return Boolean is
+   begin
+      if not L.Valid or else abs (Bx - L.Cx) > Rock_Reach_Of (L) or else abs (By - L.Cy) > Rock_Reach_Of (L)
+        or else Bx < 0 or else By < 0 or else Bx >= Size_B or else By >= Size_B
       then
          return False;
       end if;
       declare
-         Dx : constant Float := Float (Bx - L.Cx) / Rh;
-         Dy : constant Float := Float (By - L.Cy) / Rh;
-         Dz : constant Float := Float (Bz - L.Cz) / Rv;
+         Lo   : Integer;
+         Span : Rock_Span;
       begin
-         return Dx * Dx + Dy * Dy + Dz * Dz
-                < 1.0 + 0.45 * Perlin_3 (L.Seed, Float (Bx) / 2.5, Float (By) / 2.5, Float (Bz) / 2.5);
+         Rock_Column (L, Bx, By, Prepare_Column (W, Bx, By), Lo, Span);
+         return Bz - Lo in Span'Range and then Span (Bz - Lo);
       end;
    end In_Rock;
 
@@ -445,7 +504,7 @@ package body Castle.Flora is
          for Z in T.Bz - 2 .. Top loop
             for X in T.Bx .. T.Bx + T.Trunk_W - 1 loop
                for Y in T.By .. T.By + T.Trunk_W - 1 loop
-                  Put (G, X0, Y0, X, Y, Z, T.Bark, Wood, Hi);
+                  Put (G, X0, Y0, X, Y, Z, T.Bark, Trunk_Wood, Hi);
                end loop;
             end loop;
          end loop;
@@ -649,6 +708,30 @@ package body Castle.Flora is
    -- Draw_Lump --
    ---------------
 
+   procedure Draw_Rock (W : World; L : Lump; X0, Y0 : Integer; G : in out Stack_Grid; Hi : in out Integer) is
+      R  : constant Integer := Rock_Reach_Of (L);
+      Xa : constant Integer := Integer'Max (Integer'Max (X0, L.Cx - R), 0);
+      Xb : constant Integer := Integer'Min (Integer'Min (X0 + Chunk_B - 1, L.Cx + R), Size_B - 1);
+      Ya : constant Integer := Integer'Max (Integer'Max (Y0, L.Cy - R), 0);
+      Yb : constant Integer := Integer'Min (Integer'Min (Y0 + Chunk_B - 1, L.Cy + R), Size_B - 1);
+   begin
+      for X in Xa .. Xb loop
+         for Y in Ya .. Yb loop
+            declare
+               Lo   : Integer;
+               Span : Rock_Span;
+            begin
+               Rock_Column (L, X, Y, Prepare_Column (W, X, Y), Lo, Span);
+               for K in Span'Range loop
+                  if Span (K) then
+                     Put (G, X0, Y0, X, Y, Lo + K, Boulder, Stone, Hi);
+                  end if;
+               end loop;
+            end;
+         end loop;
+      end loop;
+   end Draw_Rock;
+
    procedure Draw_Lump (L : Lump; X0, Y0 : Integer; G : in out Stack_Grid; Hi : in out Integer) is
       Xa : constant Integer := Integer'Max (X0, L.Cx - L.Rh - 1);
       Xb : constant Integer := Integer'Min (X0 + Chunk_B - 1, L.Cx + L.Rh + 1);
@@ -754,7 +837,7 @@ package body Castle.Flora is
                L : constant Lump := Boulder_At (W, I, J);
             begin
                if L.Valid and then (Clear = null or else not Clear (L.Cx, L.Cy)) then
-                  Draw_Lump (L, X0, Y0, G, Top);
+                  Draw_Rock (W, L, X0, Y0, G, Top);
                end if;
             end;
          end loop;
@@ -772,6 +855,36 @@ package body Castle.Flora is
                Near (I, J) := Tree_At (W, I, J);
                if Near (I, J).Valid and then Clear /= null and then Clear (Near (I, J).Bx, Near (I, J).By) then
                   Near (I, J).Valid := False;
+               end if;
+            end loop;
+         end loop;
+         --  (generator 16) A tree where a boulder lies goes down through it to
+         --  the ground: the rock gives way round its trunk, Trunk_Cleft blocks
+         --  each side, from the ground's top block (the ground it stands on,
+         --  as the column has it) up to the trunk's top.
+         for J in J0 .. J1 loop
+            for I in I0 .. I1 loop
+               if Near (I, J).Valid then
+                  declare
+                     T : Tree renames Near (I, J);
+                  begin
+                     for X in Integer'Max (X0, T.Bx - Trunk_Cleft) .. Integer'Min (X1, T.Bx + T.Trunk_W - 1 + Trunk_Cleft) loop
+                        for Y in Integer'Max (Y0, T.By - Trunk_Cleft) .. Integer'Min (Y1, T.By + T.Trunk_W - 1 + Trunk_Cleft) loop
+                           declare
+                              C : constant Column := Prepare_Column (W, X, Y);
+                           begin
+                              for Z in Integer'Max (1, C.Solid - 1) .. Integer'Min (Height_B - 1, T.Bz + T.Trunk_H) loop
+                                 if G (X - X0, Y - Y0, Z).Mat = Boulder then
+                                    G (X - X0, Y - Y0, Z) :=
+                                      (Mat   => (if Z = C.Solid - 1 and then C.Top /= Air then C.Top
+                                                 elsif Z = C.Solid - 1 then Boulder else Air),
+                                       State => 0);
+                                 end if;
+                              end loop;
+                           end;
+                        end loop;
+                     end loop;
+                  end;
                end if;
             end loop;
          end loop;

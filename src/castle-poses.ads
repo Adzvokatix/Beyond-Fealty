@@ -35,10 +35,16 @@ package Castle.Poses is
       Swing    : Per_Side := [others => 0.0];    --  upper arm forward
       Spread   : Per_Side := [others => 0.06];   --  upper arm out from the side
       Elbow    : Per_Side := [others => 0.15];   --  forearm forward from the upper arm
+      Fore_In  : Per_Side := [others => 0.0];    --  and back in toward the body from it (rad, about the
+                                                  --  forward axis): the elbow out of the line of the arm
       Reach    : Flags    := [others => False];  --  arm solved to Hand instead
       Hand     : Points;                          --  wrist targets, world
       Grip     : Per_Side := [others => 0.0];    --  0 to 1: what the hand holds turned from along
                                                   --  the forearm to upright across it (a bow drawn)
+      Elbows   : Per_Side := [others => 0.0];    --  an arm solved to Hand: 0, its elbow goes back (down
+                                                  --  and out a little: reaching out for something); 1,
+                                                  --  down by the ribs and out (a hand held before the
+                                                  --  chest: eating)
       Foot     : Points;                          --  ankle targets, world
       Foot_Heading : Per_Side := [others => 0.0];
    end record;
@@ -47,6 +53,12 @@ package Castle.Poses is
    --  At rest, feet under the hips, on the ground at Ground.
 
    procedure Solve (R : Rig; P : Pose; F : out Frames);
+
+   function Chest_Frame (R : Rig; P : Pose) return Frame;
+   --  The chest's frame as Solve gives it (its joint, at the waist; X the
+   --  body's right, Y forward, Z up the trunk as it leans, bends and
+   --  twists): for whoever places a hand before the chest and not at a
+   --  point of the world.
 
    procedure Two_Bone
      (Root, Target, Pole : Vec3;     --  Pole: the side the middle joint bends toward

@@ -98,7 +98,7 @@ package body Castle.Mesher is
          elsif Z >= Height_B then
             return Air;
          elsif X in 0 .. Chunk_B - 1 and then Y in 0 .. Chunk_B - 1 then
-            return Work.G (X, Y, Z).Mat;
+            return Seen_Mat (Work.G (X, Y, Z));
          end if;
          if View /= null and then View (X, Y).Sim then
             for K in 1 .. View (X, Y).C.N loop
@@ -150,15 +150,27 @@ package body Castle.Mesher is
       --  looked up once, when the first such corner comes).  An edit there
       --  is not seen (the corner may lean toward a stone taken away), but
       --  the two stacks never disagree, so no slit opens between them.
-      Rocks   : array (1 .. 25) of Castle.Flora.Lump;
+      Rocks   : array (1 .. 36) of Castle.Flora.Lump;
       Rocks_N : Integer := -1;
+      type Rock_Bits is array (-32 .. 31) of Boolean;
+      type Column_Memo is record
+         Bx, By : Integer   := Integer'First;
+         Solid  : Integer   := 0;
+         Rock   : Rock_Bits := [others => False];   --  block Solid + K is a boulder's
+      end record;
+      Memo      : array (1 .. 16) of Column_Memo;
+      Memo_Next : Natural := 0;
       --  0 open, 1 ground, 2 a boulder
       function Made_Body (Bx, By, Bz : Integer) return Natural is
       begin
          if Rocks_N < 0 then
             Rocks_N := 0;
-            for J in Floor_Div (Y0 - 9, Castle.Flora.Rock_Cell) .. Floor_Div (Y0 + Chunk_B + 8, Castle.Flora.Rock_Cell) loop
-               for I in Floor_Div (X0 - 9, Castle.Flora.Rock_Cell) .. Floor_Div (X0 + Chunk_B + 8, Castle.Flora.Rock_Cell) loop
+            for J in Floor_Div (Y0 - 1 - Castle.Flora.Rock_Reach, Castle.Flora.Rock_Cell)
+                  .. Floor_Div (Y0 + Chunk_B + Castle.Flora.Rock_Reach, Castle.Flora.Rock_Cell)
+            loop
+               for I in Floor_Div (X0 - 1 - Castle.Flora.Rock_Reach, Castle.Flora.Rock_Cell)
+                     .. Floor_Div (X0 + Chunk_B + Castle.Flora.Rock_Reach, Castle.Flora.Rock_Cell)
+               loop
                   declare
                      L : constant Castle.Flora.Lump := Castle.Flora.Boulder_At (W, I, J);
                   begin
@@ -173,12 +185,53 @@ package body Castle.Mesher is
          if Bx < 0 or else By < 0 or else Bx >= Size_B or else By >= Size_B then
             return 0;                              --  (past the world's rim: open, as Edge_Of has it)
          end if;
-         for K in 1 .. Rocks_N loop
-            if Castle.Flora.In_Rock (Rocks (K), Bx, By, Bz) then
-               return 2;
+         --  (a column is worked out once for the corners round it: the last
+         --  sixteen are kept, the ground's level and its rock 32 blocks either
+         --  side of that, all the boulders near it as one)
+         declare
+            Slot : Natural := 0;
+         begin
+            for M in Memo'Range loop
+               if Memo (M).Bx = Bx and then Memo (M).By = By then
+                  Slot := M;
+               end if;
+            end loop;
+            if Slot = 0 then
+               Memo_Next := Memo_Next mod Memo'Last + 1;
+               Slot := Memo_Next;
+               declare
+                  C  : constant Column := Prepare_Column (W, Bx, By);
+                  Mc : Column_Memo renames Memo (Slot);
+               begin
+                  Mc := (Bx => Bx, By => By, Solid => C.Solid, Rock => [others => False]);
+                  for K in 1 .. Rocks_N loop
+                     if abs (Bx - Rocks (K).Cx) <= Castle.Flora.Rock_Reach_Of (Rocks (K))
+                       and then abs (By - Rocks (K).Cy) <= Castle.Flora.Rock_Reach_Of (Rocks (K))
+                     then
+                        declare
+                           Lo   : Integer;
+                           Span : Castle.Flora.Rock_Span;
+                        begin
+                           Castle.Flora.Rock_Column (Rocks (K), Bx, By, C, Lo, Span);
+                           for Q in Span'Range loop
+                              if Span (Q) and then Lo + Q - C.Solid in Mc.Rock'Range then
+                                 Mc.Rock (Lo + Q - C.Solid) := True;
+                              end if;
+                           end loop;
+                        end;
+                     end if;
+                  end loop;
+               end;
             end if;
-         end loop;
-         return (if Bz < Prepare_Column (W, Bx, By).Solid then 1 else 0);
+            declare
+               Mc : Column_Memo renames Memo (Slot);
+            begin
+               if Bz - Mc.Solid in Mc.Rock'Range and then Mc.Rock (Bz - Mc.Solid) then
+                  return 2;
+               end if;
+               return (if Bz < Mc.Solid then 1 else 0);
+            end;
+         end;
       end Made_Body;
 
       --  (Rock: a boulder's corner.  Its body is what is solid about it, grass
@@ -187,8 +240,15 @@ package body Castle.Mesher is
       --  is drawn out toward the open as an edge is drawn in, so a notch or
       --  a step in it is filled to a slope as well: then the code has 64 in
       --  it besides.)
+      --  (Boulder_Feet) Where a boulder meets level ground (rock over the corner
+      --  on one side, the open on the other, and nothing but solid under it)
+      --  the corner is its foot: drawn out away from the rock and down into
+      --  the ground, so the rock's lowest faces spread into the ground and
+      --  go under it; z code 3 says so.  The ground's own corners stay put:
+      --  a foot only ever goes down and over solid ground at its level.
       function Pull (Gx, Gy, Gz : Integer; Rock : Boolean := False) return Unsigned_32 is
          Sx, Sy, Sz, C, R : Integer := 0;
+         Under, Gu, Ra, Ga, Oa, Fx, Fy : Integer := 0;  --  (for the foot: solid and ground under; rock, ground, open over; rock's sums)
          function Code (S : Integer; Of_N : Integer) return Unsigned_32 is
            (if 2 * abs S >= Of_N then (if S > 0 then 1 else 2) else 0);
          Edge : constant Boolean := Gx = 0 or else Gx = Chunk_B or else Gy = 0 or else Gy = Chunk_B;
@@ -215,10 +275,28 @@ package body Castle.Mesher is
                         Sy := Sy + 2 * Dy + 1;
                         Sz := Sz + 2 * Dz + 1;
                      end if;
+                     if Dz = -1 then
+                        Under := Under + (if K > 0 then 1 else 0);
+                        Gu := Gu + (if K = 1 then 1 else 0);
+                     elsif K = 2 then
+                        Ra := Ra + 1;
+                        Fx := Fx + 2 * Dx + 1;
+                        Fy := Fy + 2 * Dy + 1;
+                     elsif K = 1 then
+                        Ga := Ga + 1;
+                     else
+                        Oa := Oa + 1;
+                     end if;
                   end;
                end loop;
             end loop;
          end loop;
+         --  (ground under it too: a step within the rock itself is a hollow, below)
+         if Rock and then Round_Boulders and then Boulder_Feet and then Under = 4 and then Gu > 0 and then Ra > 0 and then Ga = 0
+           and then Oa > 0 and then (Code (-Fx, Ra) /= 0 or else Code (-Fy, Ra) /= 0)
+         then
+            return Code (-Fx, Ra) or Shift_Left (Code (-Fy, Ra), 2) or Shift_Left (3, 4);
+         end if;
          if C = 0 or else C = 8 then
             return 0;
          elsif Rock and then C >= 5 and then R = C then
@@ -354,6 +432,21 @@ package body Castle.Mesher is
             return (if Cz = 0 and then not Outer then Shift_Left (1, 4) else 0)
               or (if Drawn then Shift_Left ((if Side_C = 0 then 1 else 2), (if Falls < 2 then 2 else 0)) else 0);
          end if;
+         if Full_Thatch then
+            --  Fuller: the slope lies over the steps' noses, not in their hollows (the inner edge
+            --  of each block's top up a block, its outer edge where it is); the eave's edge a whole
+            --  block thick and drawn out a little; the ridge's one middle block level.
+            if Cz = 1 and then not Outer and then not Ridge then
+               Code := Shift_Left (1, 4);
+            end if;
+            if Outer and then (State and At_Eave) /= 0 then
+               Code := Code or Shift_Left ((if Falls mod 2 = 0 then 1 else 2), (if Falls < 2 then 0 else 2));
+            end if;
+            if Drawn and then (Cz = 1 or else (State and At_Eave) = 0) then
+               Code := Code or Shift_Left ((if Side_C = 0 then 1 else 2), (if Falls < 2 then 2 else 0));
+            end if;
+            return Code;
+         end if;
          if Cz = 0 then
             return (if Drawn and then (State and At_Eave) = 0
                     then Shift_Left ((if Side_C = 0 then 1 else 2), (if Falls < 2 then 2 else 0)) else 0);
@@ -368,6 +461,45 @@ package body Castle.Mesher is
          end if;
          return Code;
       end Slope_Code;
+
+      --  And whether that corner is of the roof's ragged edge (Full_Thatch):
+      --  the eave's outer edge, and the end of a row at a verge, above and
+      --  below.  The renderer lets such a corner hang a little, each by its
+      --  place (John, 2026-11-17: "add charecter of straw to the edges of
+      --  the roof").
+      function Slope_Rag (Mt : Material; State : Unsigned_8; Cx, Cy, Cz : Integer) return Boolean is
+         Falls  : constant Unsigned_8 := State and Falls_Mask;
+         Out_C  : constant Integer := (if Falls < 2 then Cx else Cy);
+         Side_C : constant Integer := (if Falls < 2 then Cy else Cx);
+         Outer  : constant Boolean := Out_C = (if Falls mod 2 = 0 then 1 else 0);
+      begin
+         --  (and, Ragged_Surface, every corner of the roof's top: the renderer tells those from the
+         --  edge's by their having no pull along the ground)
+         return Full_Thatch and then Mt = Thatch
+           and then ((Outer and then (State and At_Eave) /= 0 and then (State and Under) = 0)
+                     or else (Side_C = 0 and then (State and Verge_Lo) /= 0)
+                     or else (Side_C = 1 and then (State and Verge_Hi) /= 0)
+                     or else (Ragged_Surface and then Cz = 1 and then (State and Under) = 0));
+      end Slope_Rag;
+      function Slope_Rags (Face : Integer; Mt : Material; State : Unsigned_8) return Unsigned_32 is
+         D  : constant Integer := Face / 2;
+         Up : constant Integer := (if Face mod 2 = 0 then 1 else 0);
+         type Steps is array (0 .. 3) of Integer;
+         Cu : constant Steps := (0, 1, 1, 0);
+         Cv : constant Steps := (0, 0, 1, 1);
+         R  : Unsigned_32 := 0;
+      begin
+         for K in Steps'Range loop
+            if (case D is
+                   when 0      => Slope_Rag (Mt, State, Up, Cu (K), Cv (K)),
+                   when 1      => Slope_Rag (Mt, State, Cu (K), Up, Cv (K)),
+                   when others => Slope_Rag (Mt, State, Cu (K), Cv (K), Up))
+            then
+               R := R or Shift_Left (1, K);
+            end if;
+         end loop;
+         return R;
+      end Slope_Rags;
 
       --  The four corners of a face of a dressed block, in the occlusion's order.
       function Slope_Pulls (Face : Integer; Mt : Material; State : Unsigned_8) return Unsigned_32 is
@@ -416,7 +548,7 @@ package body Castle.Mesher is
       for X in 0 .. Chunk_B - 1 loop
          for Y in 0 .. Chunk_B - 1 loop
             for Z in reverse Z_Lo .. Work.Air_From - 1 loop
-               if Work.G (X, Y, Z).Mat /= Air then
+               if Seen_Mat (Work.G (X, Y, Z)) /= Air then
                   Z_Hi := Integer'Max (Z_Hi, Z);
                   exit;
                end if;
@@ -506,7 +638,7 @@ package body Castle.Mesher is
                         X  : constant Integer := (if D = 0 then Sl else U);
                         Y  : constant Integer := (if D = 0 then U elsif D = 1 then Sl else V);
                         Z  : constant Integer := (if D = 2 then Sl else Z_Lo + V);
-                        Raw : constant Material := Work.G (X, Y, Z).Mat;
+                        Raw : constant Material := Seen_Mat (Work.G (X, Y, Z));
                         --  Deep laid open by an edit shows its real rock (or ore).
                         Mb  : constant Material :=
                           (if Raw /= Deep then Raw
@@ -555,7 +687,8 @@ package body Castle.Mesher is
                      begin
                         if Shows and then Trim then
                            Mask (U, V) := 0;
-                           Emit_Soft (Face, X, Y, Z, Mb, Slope_Pulls (Face, Mb, State), Slope => True);
+                           Emit_Soft (Face, X, Y, Z, Mb, Slope_Pulls (Face, Mb, State), Slope => True,
+                                      Outs => Slope_Rags (Face, Mb, State));
                         elsif Shows and then (Mb in Soft or else (Round_Boulders and then Mb = Boulder)) then
                            Corner_Pulls (Face, X, Y, Z, Pulls, Moved, Rock => Mb = Boulder, Outs => Outs);
                         end if;

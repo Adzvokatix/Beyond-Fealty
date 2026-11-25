@@ -6,7 +6,8 @@ begin
    case M.State is
       when To_Tree =>
          Keep_Route_Good (M, Ok);
-         if not Ok or else M.Tree = 0 or else Trees (M.Tree).Down then
+         --  (a tree that is down is gone to only for its stump, in a stockpile put down over it)
+         if not Ok or else M.Tree = 0 or else (Trees (M.Tree).Down and then not Box_Stump (M.Tree)) then
             Release (M, I);
             M.State := Idle;
             M.Wait := 0.5;
@@ -17,7 +18,25 @@ begin
          end if;
 
       when Chopping =>
-         if M.Tree = 0 or else Trees (M.Tree).Down
+         if M.Tree > 0 and then Box_Stump (M.Tree) then
+            --  the stump of a tree felled before a stockpile was put down over it: taken out, roots and
+            --  all, in the time the tree took to fell; its place is the stockpile's to use
+            Trees (M.Tree).Down := True;
+            M.Work := M.Work + Tick_S * Work_Rate (M, Felling);
+            if M.Work >= Chop_S (Trees (M.Tree).Info) then
+               declare
+                  Zone : constant Natural := Tree_In_Box (M.Tree);
+               begin
+                  Stump_Out (M.Tree);
+                  if Zone /= 0 then
+                     Box_Tree_Felled (Zone);
+                  end if;
+               end;
+               Release (M, I);
+               M.State := Idle;
+               M.Wait := 1.0;
+            end if;
+         elsif M.Tree = 0 or else Trees (M.Tree).Down
            or else Mat (Trees (M.Tree).Info.Bx, Trees (M.Tree).Info.By, Trees (M.Tree).Info.Bz + 1) not in Trunk
          then
             if M.Tree > 0 then

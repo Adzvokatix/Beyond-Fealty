@@ -85,7 +85,7 @@ package body Castle.Lod is
          for Y in 0 .. Chunk_B / 2 - 1 loop
             for Z in B_Lo / 2 .. B_Hi / 2 loop
                for I in K'Range loop
-                  K (I) := Seen (Work.G (2 * X + I mod 2, 2 * Y + (I / 2) mod 2, 2 * Z + I / 4).Mat);
+                  K (I) := Seen (Seen_Mat (Work.G (2 * X + I mod 2, 2 * Y + (I / 2) mod 2, 2 * Z + I / 4)));
                end loop;
                Dst (X, Y, Z) := Parent (K);
             end loop;
@@ -270,7 +270,13 @@ package body Castle.Lod is
                                 X + Dx not in 0 .. Chunk_B - 1 or else Y + Dy not in 0 .. Chunk_B - 1;
                               Mn : constant Material := Cell (X + Dx, Y + Dy, Z + Dz);
                            begin
-                              if not Occ (Mn) or else (Out_Side and then Z > Top (X, Y) - Skirt_Cells) then
+                              --  (the top of what a building's cell stands on is drawn too: a building
+                              --  drawn turned, Castle.Render.Set_Turns, is drawn elsewhere, and the
+                              --  ground it stands on showed as a hole along its walls)
+                              if not Occ (Mn) or else (Out_Side and then Z > Top (X, Y) - Skirt_Cells)
+                                or else (Face = 4 and then Mn in Daub | Log | Thatch | Plank
+                                         and then Mb not in Daub | Log | Thatch | Plank)
+                              then
                                  Key := Unsigned_32 (Material'Pos ((if Mb = Deep then Granite else Mb))) + 1
                                    + Shift_Left ((if With_AO and then not Occ (Mn)
                                                   then Corners (X + Dx, Y + Dy, Z + Dz) else 255), 8);
@@ -398,7 +404,7 @@ package body Castle.Lod is
                for X in 0 .. Chunk_B - 1 loop
                   for Y in 0 .. Chunk_B - 1 loop
                      for Z in reverse B_Lo .. Work.Air_From - 1 loop
-                        if Work.G (X, Y, Z).Mat /= Air then
+                        if Seen_Mat (Work.G (X, Y, Z)) /= Air then
                            B_Hi := Integer'Max (B_Hi, Z);
                            exit;
                         end if;

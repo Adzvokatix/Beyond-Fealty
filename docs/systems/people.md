@@ -19,8 +19,9 @@ hats read from above.
   build, skin, hair and eye colour, hair style, beard, handedness, scar,
   freckles, a coif) and an outfit (job, winter or not) are all a look
   needs. `Build` turns them into a skeleton of 15 bones, up to 28 boxes on
-  them and a 128 x 64 painted skin (each box's faces unfolded as a net and
-  the nets shelf-packed), the same every time, so a save will need only the
+  them and a 128 x 128 painted skin (each box's faces unfolded as a net and
+  the nets shelf-packed; 128 x 64 until 2026-11-24, and every net of the
+  body as it was still lies in its top half), the same every time, so a save will need only the
   genome. The left limbs are built and painted and the right ones are their
   mirror images; then the symmetry is broken on purpose: the tool goes in
   the dominant hand (one in ten is left-handed), one sleeve may be pushed
@@ -58,6 +59,128 @@ hats read from above.
   at the top of `castle-bodies.ads`, first values). A new model is made
   the same way: boxes, with `Round` and `Taper` where the rule does not
   suit. The shadow pass draws the same shape.
+* **More form** (`Castle.Bodies.More_Form`; John, 2026-11-22: "I had
+  someone play the game and they suggest that the serfs need a little bit
+  higher detail, a bit more "form""). First values of mine, his to judge:
+  `--no-form` is the serfs as they were, to the box. Still boxes on the
+  5 cm pixel with a painted skin; a serf has besides
+  - **a neck**: a pixel of the trunk's height (`Neck_Px`), out of the
+    chest. The head is where it was and a serf as tall as its genome
+    says; the shoulders, and all that hangs from them (the arms, a pack,
+    a cloak, a bow across the back), are a pixel lower; the hips and the
+    legs as they were;
+  - **a nose**, a pixel proud of the face between the eyes' row and the
+    mouth's;
+  - **its hair as a cap** over the crown, the back and the sides of its
+    head as far forward as the temples and as far down as the hair is
+    painted at the sides, a quarter of a pixel proud of the head (a
+    kerchief likewise, in linen; a bald head has none);
+  - **limbs rounded further**, all but round (`Form_Limb_Round`), and
+    narrowing more to the wrist and the ankle (`Form_Limb_Taper`); the
+    trunk a little more to the waist, the head to the jaw.
+* **The reference body** (`Castle.Bodies.Reference_Body`; John,
+  2026-11-23, of the voxel characters he bought: "the skeleton model is the
+  refrence bone structure, there are some examples when they are "fleshed"
+  out, a small button nose is fine, but the nose you have is too long").
+  First values of mine, read from the bought skeleton's own files (a head
+  20 voxels of 61, the thighs' joints at 40 %, the hands, hanging, ending
+  at 28 %, the upper arm and the forearm as 11 to 8). Still boxes on the
+  5 cm pixel with a painted skin (the joints too): **the head a bit
+  smaller than the skeleton's third** (John, 2026-11-24, with a chart of
+  a face's proportions: "I mean it's close, just cut the head down a bit,
+  make it a bit smaller"; it was 10 pixels at 1.525 m and 7 deep): 8.5
+  pixels at 1.525 m, as the square root of the height else, never under
+  8, so 9 for nearly every adult (24 % of a tall man, 29 % of a short
+  woman) and 8 for children and the shortest; 6 wide (the skeleton's 12
+  voxels) and 6 deep; **the face in thirds as on his chart** (three rows
+  from the brows to the nose's foot, three from there to the chin), **the
+  eyes on its middle row** (on a head of 8, the row over it), the
+  brows above them and the hair over the rows above those, the nose under
+  the eyes, a row of cheek, the mouth, the chin to the head's last row; **no
+  neck**, the head on the chest; the hips' joint at 57.5 % of the height
+  under the head; the chest a pixel deeper; the arms as long as leaves the
+  hands' ends, hanging, at 28 % of the height (the middle of the thigh);
+  **a button nose**, a pixel square and half a pixel proud; the hair a voxel
+  proud of the head over the crown and the forehead to the brows, and
+  down the back and the sides as far as the style is painted there; a
+  hood sized to the head. **The head's shape** (`Head_Shape`; John,
+  2026-11-24, with eight voxel characters: "I have provided some
+  refrences for the head shape", then "can we make the heads more oval
+  shapped? so the hair doesn't look like blocks or afros?"): the hair a
+  mass, a voxel proud at the temples and two over the crown and at the
+  back, narrowing over the crown (`Crown_Taper`) and down the sides
+  (`Side_Taper`) in one piece with it, to over the ears or, long, to the
+  mouth's row (cropped hair and kerchiefs close to the head, narrowing over
+  the crown too); ears, a voxel proud, where the sides are bare; a full
+  beard round the jaw, narrowing to its foot; so that the head is an oval,
+  widest about the brows. `--no-head-shape`: the hair, the ears and the
+  beard as before them (to the bit on 85511a1; what came after stays). **His
+  list of 2026-11-24** ("clip the arms at the sholders into the main body
+  ..., make the arms a bit thinner, ... make the chin a bit more rounded,
+  make the detail finer, elbows angled away from the body at a resting
+  state, slight bend at the arms, add thumbs, and improve the detail of the
+  hair a bit"): the upper arm's inner side half a pixel (a voxel) into the
+  chest's (`Ref_Shoulder_In`; a pixel since, below); a grown serf's arm 2.5 pixels across
+  (`Ref_Arm_W`: five voxels, set a quarter of a pixel toward the chest; it
+  was six; a child's as it was); the head's edges rounded a pixel and a
+  half (`Ref_Head_Round`, the chin's corners with them); a thumb on each
+  hand, a voxel square and two tall, a voxel proud at the front on the
+  side toward the body; **the head and the hair painted a voxel fine**
+  (their nets two texels a body pixel: the brows a voxel tall, an eye a
+  white and an iris, the nostrils, the mouth a line, freckles and a scar a
+  voxel; the hair in strands of five shades along its fall; a fine net's
+  grain in five shades), on the skin and not on the voxels as the brief
+  has it; standing at rest, the elbows out (`Castle.Serfs.Rest_Arms`,
+  `--no-rest-arms`). And of his next word ("The nose isn't attached to the
+  face, they look a bit crosseyed now, lower the nose a square, lower the
+  eyes a square and spread them apart by two squares? Lower the forhead by
+  two squares, ... the hood of the cloak a bit more shapely"): the nose set
+  into the face, a voxel proud and a voxel lower (`Nose_Z`); the brows and
+  the eyes a voxel lower, the eyes each a voxel further out; the winter
+  hood's edges rounded two pixels (`Hood_Round`), and no cap of hair under
+  it. And then ("the wrist exposes the bone, bring the sholders in another
+  square, what I meant was lower the top of the head a couple of blocks,
+  make the head shorter"): the head's crown cut a pixel (`Ref_Crown_Cut`:
+  every head 7 or 8 pixels, the face where it was; the hair over the
+  forehead where it was, `Hair_Z`, two voxels of forehead over the brows),
+  the body under it as it was (the serf a pixel shorter than its genome
+  says, until his next word); the upper arm a pixel into the chest's side
+  (`Ref_Shoulder_In`); the forearm narrowing by 0.3 (`Ref_Fore_Taper`) and
+  reaching half a pixel into the hand. And then ("Let's extend the torso
+  and legs proportionally to regain the 5cm, let's shape the chin a little
+  bit more, by another step, and the top of the head let's round it a bit
+  more"): the legs and the trunk built to the height less the head as it
+  is, each in its share, so that the serf is its genome's height again
+  (the hips' joints at 41.9 to 45.9 % of it); the head's chin's and
+  crown's edges rounded two pixels (`Ref_Head_Ends`, `Box.Round_Ends`:
+  voxel parts only), its upright edges a pixel and a half as before, which
+  keeps the eyes' whites on the face; the hair over the crown narrowing by
+  0.35 to its top (`Crown_Taper`; it was 0.25). **The rest as more form has it**: limbs three
+  pixels thick (a child's two; on the reference body a grown serf's 2.5
+  since his list), rounded and narrowing to the wrist and the
+  ankle, the hands and the feet as they were; the waist drawn in by 0.22
+  and the forearm narrowing by half to a wrist narrower than the hand, so
+  that both show in voxels of half a pixel. (A first try that evening had
+  straight limbs two pixels thick, a straight waist and the face in the
+  head's lowest six rows; his word on its stills: "why are their forheads
+  so big? where are the hands? the slim waists? the shaped arms and
+  legs?".) `--no-reference-body` is the serfs as they were
+  before it, to the bit (`More_Form` and `--no-form` as they were: hashed
+  over 72,000 rigs and skins against the commit before). The poses were
+  made for the old head and are as they were: at work, the hands and
+  forearms of every serf go into its head when it aims, chops and eats, as
+  they did before, chopping 0.6 of a pixel deeper and eating 0.3 (counted
+  on 22551f9; `serf_check`, "hands at work", prints it: a call put to John).
+
+  Two or three boxes more a serf, 25 at the most of the 28 a look may
+  have (26 at the most as built now: `serf_check` on 22551f9). Tried and left out, as they looked: a shoulder round the top of
+  each arm (puffed sleeves), a belt proud of the tunic (a square platter
+  round the waist of anyone bending), the hair as a cap over the whole
+  crown (a flat hat), the head stood a pixel higher on its neck (a serf
+  5 cm taller than its genome says: `serf_check` holds that). Seen from
+  22 m it changes little; it is for a close look. `serf_check` builds
+  6,000 serfs both ways: as tall, the legs and the arms as long, the
+  head where it was, the shoulders a pixel lower.
 * **Tools** (John, 2026-11-11: "The shortbow for the hunter is a bit of an
   issue, right now it's just a stick jutting directly out from the hand,
   same with the axe, and is there a way to place the bow on the back, and
@@ -105,7 +228,22 @@ hats read from above.
   reaching the hands and feet with two-bone IK (knees bend forward, elbows
   back). A hand can be turned at the wrist (`Grip`): what it holds swings
   from along the forearm to upright across it, so a bow drawn stands
-  upright in the hand held out instead of pointing at the deer.
+  upright in the hand held out instead of pointing at the deer. **An arm
+  that reaches bends its elbow back unless told otherwise** (`Elbows`: 1
+  is down by the ribs and out), and back is wrong for a hand held near
+  the chest's middle: the elbow goes behind the back and the forearm
+  through the body. **Eating, standing or seated, the hands are placed
+  before the chest** in the chest's own frame (`Chest_Frame`: the food a
+  hand's breadth off its front in the off hand, the other hand going
+  between it and the mouth) with the elbows down, wherever the trunk
+  leans and bends (John, 2026-11-22, with two pictures of serfs on a
+  seat: "serfs arms and hands are behind there back when they sit down
+  to eat". The hands had been put 20 cm before the hips whatever the
+  trunk did; measured on a seated eater in the chest's frame, that was
+  9 cm before the chest's middle where its front is at 10, 3 cm from its
+  middle line, and the elbow came out 13 cm behind the middle, behind
+  the back. Standing eaters had it too). `--no-chest-hands`
+  (`Castle.Serfs.Hands_Before_Chest`) is the pose as it was.
 * **Movement is presentation** (`Castle.Serfs`, `Castle.Second_Order`).
   Where a serf is meant to be comes from outside (for now a lineup or a
   scripted route; later the colony); the body follows it through
@@ -155,7 +293,11 @@ and what it carries can be looked at with no colony; record it, since a
 `--walk X0 Y0 X1 Y1`
 (a serf walking between two points, in metres, and back, pausing at each
 end, by planned routes (see Routes); up to eight), `--follow` (the camera follows the first serf),
-`--winter` (winter dress whatever the season) and `--record DIR N` (save
+`--winter` (winter dress whatever the season), `--no-form` (the serfs as
+they were before 2026-11-22: no neck, nose or cap of hair), `--no-reference-body`
+(the serfs as they were before the bought skeleton's proportions, 2026-11-23),
+`--no-voxel` (the serfs drawn as boxes, not as voxel parts), `--no-chest-hands`
+(the eaters' arms as they were) and `--record DIR N` (save
 N frames as `DIR/frame_0001.png` on, the animation stepping a thirtieth of
 a second each, then exit; the first frame is the first with the people
 asked for on loaded ground, or, with no people and no colony asked for,
@@ -175,10 +317,35 @@ the response settings, square waves at frame times from 4 ms to 0.5 s, the
 same curve at 20 to 144 fps) and shows the writeup's own discretisation
 on the same tests for comparison. `./bin/debug/serf_check` builds 36,000
 serfs (every net inside the skin, mirrored limbs, handedness, heights),
-stands 500 of them up, tests the IK on 1,000 targets and walks one over
-flat ground (pace, reach, bob, no sliding feet, one foot always down, arms
-against legs, the same stride at 30 and 120 fps); `--png FILE` writes a
-sheet of skins to look at.
+holds the reference body to the skeleton's measures, stands 500 of them up,
+tests the IK on 1,000 targets, walks one over flat ground (pace, reach,
+bob, no sliding feet, one foot always down, arms against legs, the same
+stride at 30 and 120 fps), counts the hands at work that go into the head,
+and checks the voxel parts (below); `--png FILE` writes a sheet of skins to
+look at.
+
+**Voxel parts** (2026-11-23, merged 2026-11-24; his brief `docs/design/Voxel_people_brief.md`,
+step 1; `docs/handoffs/Handoff_2026_11_23_voxel_people_counted.md` and
+`Handoff_2026_11_23_voxel_people_drawn.md`). `Castle.Bodies.Voxels.Build` fills each box of a rig
+with voxels of 2.5 cm (`Castle.Voxel_Mesh.Vx`: the voxels whose centre lies inside the box as the
+figure shader rounds and narrows it; a box's top and bottom edges rounded more than its upright ones,
+`Round_Ends`, the reference head's chin and crown since 2026-11-24, are the voxel parts' alone: the
+figure shader rounds every edge by `Round`), one grid a bone, coloured from the skin's texel at the nearest
+point of the nearest face, a palette a look. **Since the evening of 2026-11-23 a serf is drawn so**
+(`Castle.Bodies.Voxels.Voxel_People`; `--no-voxel`: as boxes, as it was): when its look is made, its
+look as voxel parts is made beside it (3.4 ms; the game makes at most one again a frame, so the band
+dressing for winter is spread over as many frames), and drawn in place of its boxes in the view, the
+sun's figure maps and the fire's six faces (`rendering.md`, "Figures"). **How a face is coloured
+departs from the brief**: a part's open faces are merged into rectangles whatever their colour
+(`Mesh`, `By_Colour => False`), and a face's colour is read where it is drawn, voxel by voxel; merged
+by colour as the brief has it a look would be 7,429 triangles on the reference body (its limit
+2,600), and is 1,762 so (the most 2,044, in room for 4,096 quads; as boxes 2,456; on the heads of
+2026-11-23 and of 85132c5, 1,557 and 1,582; counted on 22551f9). `serf_check`, "voxel parts", holds the parity (a voxel is
+solid where its centre lies inside a box of its bone and nowhere else), the mirror and the sameness
+of two builds over 7,200 looks; that the drawn quads lie on open faces and cover them all, and that
+each part's bytes are its grid; the room a look needs; and prints the counts and what a look costs
+to make. `./bin/debug/serf_check --voxels FILE [N [JOB [winter]]]` writes one serf's voxels for a
+picture.
 
 ## Cloth
 
@@ -243,6 +410,27 @@ is the cloaks as they were, exactly.
   (a load, a fast clock), and a cloak more than 40 m from the eye hangs
   straight and is not stepped. The outfit's own cloak is never drawn while
   cloth is on (`Cloak_Off`).
+- **Over a sleeper the cloak is kept off all the sleeper is dressed in**
+  (the game's `Dressed`, `Cloak_Fit`; John, 2026-11-22: "the cloak
+  clipping through their clothing when they sleep needs a bit of a fix ...
+  just add their clothes to the "clip box", so the cloak wraps around it
+  when they sleep"). The ten capsules above are a body's middle lines
+  with radii of their own: none lies along the ribs at all (the first
+  runs from the hips to the waist), and a sleeve, a skirt or the shoulder
+  that is uppermost is wider than the one it hangs on, so a chest and an
+  arm stood through the cloak of everyone asleep. Laid over a sleeper,
+  the cloth is now kept out of every box of the sleeper's own rig as its
+  bones lie: a capsule along the box's longest side, as thick as the box
+  from corner to corner across it, two or three side by side for a box
+  much wider than it is deep (the chest, the hips, a skirt); what is
+  thinner than a pixel and a half is left out (a braid, a scabbard). So
+  whatever a look is dressed in is in it, and a box added to a look is in
+  it with nothing more to do. The sheet is laid 15 cm higher for it. **A
+  worn cloak is kept off the ten capsules as before**: it hangs as it
+  did, and costs what it did. A sleeper's costs only while it settles (it
+  is frozen once still). `--no-cloak-fit`: as it was. Looked at on the
+  thirteen asleep on the square of the played game, its second night,
+  frame by frame as the cloaks settle, beside the build before.
 
 Where it clips (John, 2026-11-13, of the cloaks: "it works great, it would
 be nice if the clipping was less, but it's workable"; looked for close up
@@ -250,15 +438,29 @@ on the band setting off and at its work, and asleep): a basket or a sack
 on the back came through a worn cloak (mended, above); a hunter's bow and
 quiver lie over and through its cloak; a sheaf or a log on the shoulder
 cuts its collar; where the cloth bends sharply its thirty panels part into
-shards; and the sleeper's, below. The last four stand.
+shards; and the sleeper's (mended 2026-11-22, above: it was the chest,
+which no capsule covered, and the sleeves). The three between stand.
 
-Not there yet: on the sleeper looked at in a hovel a brown shape on its
-flank shows through the cloak (by its place its upper arm, whose sleeve
-is wider than the capsule the cloth is kept off; not identified for
-certain: capsules for the forearms were tried and changed nothing seen);
-cloth for anything else (skirts are rigid,
+**Clothes of cloth: tried and dropped** (John, 2026-11-22: "They asked if
+the clothes could be dynamic cloth too, I will leave that up to you, try
+it, if it's too expensive to either work or performance wise, drop it").
+The tunic's skirt and the dress as a sheet of the cloaks' cloth closed
+into a tube, hung from a ring round the belt and kept off the hips and
+the legs, in a scratch tree: thirteen skirts cost 0.88 to 1.02 ms a frame
+in three recorded runs (the gate running beside them; thirteen worn
+cloaks in one of the same runs 0.89), and a skirt is worn all day by
+everyone where a cloak costs only while it is worn. Standing and walking
+it read as a skirt, a bell of six flat sides, without the belt, the
+hem's trim or a gatherer's apron (those are painted on the rigid skirt);
+on someone turning it swung out into a skewed cone; asleep it was a
+barrel round the legs, and it and the cloak cut through each other (the
+cloth is kept out of capsules, not out of other cloth). The patch, six
+stills and the figures are kept:
+`~/CASTLE_GAME/releases/wip/cloth_skirts_trial_2026_11_22/`.
+
+Not there yet: cloth for anything else (skirts are rigid,
 so a long stride can push a leg through a skirt; the cloth package is made
-to hang from anything, and nothing else hangs from it yet), the cloak
+to hang from anything, and nothing else hangs from it yet: the trial above), the cloak
 taken up again by hand (it is put on, or laid over its sleeper, at once),
 a cloak on the row put to sleep in daylight (`--lineup`: the old spread
 cloak), cloth that blows in the wind, culling figures off

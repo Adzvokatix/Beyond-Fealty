@@ -1,5 +1,7 @@
 with Ada.Numerics;
+with Ada.Text_IO;
 with Interfaces; use Interfaces;
+with Castle.Bodies.Voxels;
 with Ada.Numerics.Elementary_Functions; use Ada.Numerics.Elementary_Functions;
 with Castle.Blocks;      use Castle.Blocks;
 with Castle.World_Blocks;
@@ -21,11 +23,25 @@ package body Castle.Serfs is
    package S3 renames Castle.Second_Order_3;
    Pi : constant := Ada.Numerics.Pi;
 
+   Made_Up_Ground : Solid_Reader := null;       --  (the checks': Set_Ground_Source)
+   procedure Set_Ground_Source (Solid : Solid_Reader) is
+   begin
+      Made_Up_Ground := Solid;
+   end Set_Ground_Source;
+
    function Ground_At (X, Y, Near_Z : Float) return Float is
       Bx  : constant Integer := Integer (Float'Floor (X * 4.0));
       By  : constant Integer := Integer (Float'Floor (Y * 4.0));
       Top : constant Integer := Integer (Float'Floor (Near_Z * 4.0)) + 4;
    begin
+      if Made_Up_Ground /= null then
+         for Bz in reverse Top - 24 .. Top loop
+            if Made_Up_Ground (Bx, By, Bz) and then not Made_Up_Ground (Bx, By, Bz + 1) then
+               return Float (Bz + 1) * 0.25;
+            end if;
+         end loop;
+         return Near_Z;
+      end if;
       for Bz in reverse Top - 24 .. Top loop
          if Class_Of (Castle.World_Blocks.Block_At (Bx, By, Bz).Mat) = Solid
            and then Class_Of (Castle.World_Blocks.Block_At (Bx, By, Bz + 1).Mat) /= Solid
@@ -57,10 +73,12 @@ package body Castle.Serfs is
    type Serf is record
       Used     : Boolean := False;
       Last_F   : Frames;                --  its bones as last submitted (what a cloth hangs on)
+      Last_Home : Frames;                 --  (and before any turn: Frames_Home)
       G        : Genome;
       O        : Outfit;
       R        : Rig;
       Slot     : Castle.Figures.Look_Id := 1;
+      Vox      : Natural := 0;              --  its look as voxel parts (Castle.Figures.Vox_Look_Id; 0: drawn as boxes)
       --  where it is meant to be (later: the simulation's business)
       Target   : Vec3;
       Walker   : Boolean := False;
@@ -72,6 +90,10 @@ package body Castle.Serfs is
       Facing   : Float := 0.0;
       Prev_Target : Vec3;
       Up_Want, Up : Float := 0.0;          --  how far over the ground it stands (on a ladder), asked and as drawn
+      Turn_C  : Float := 1.0;              --  drawn turned about Turn_P (Turn_About): the turn's cosine and
+      Turn_S  : Float := 0.0;              --  sine (1, 0: not turned)
+      Turn_P  : Vec3 := (0.0, 0.0, 0.0);
+      Turn_Want, Turn_A : Float := 0.0;    --  the turn asked and as drawn (it comes on and off in a moment)
       Route    : Castle.Nav.Route;         --  walkers: the way to the end they are heading for
       Leg      : Positive := 1;            --  between Route points Leg and Leg + 1
       Along    : Float := 0.0;             --  metres along that leg
@@ -128,9 +150,36 @@ package body Castle.Serfs is
 
    function Posed (I : Positive) return Pose is (Serfs (I).P);
    function Frames_Of (I : Positive) return Frames is (Serfs (I).Last_F);
+   function Frames_Home (I : Positive) return Frames is (Serfs (I).Last_Home);
    function Rig_Of (I : Positive) return Rig is (Serfs (I).R);
 
    function Hash01 (S : Serf; K, J : Integer) return Float is (Unit (Hash_2 (S.G.Seed + 99, K, J)));
+
+   --  A serf's look as voxel parts, made from its rig and skin (Castle.Bodies.Voxels.Voxel_People;
+   --  the game's --no-voxel: none, drawn as boxes as it was).  0 when there is none: off, no slot
+   --  free, or a look too big for its parts (drawn as boxes, and said once).
+   Scratch_Look : Castle.Bodies.Voxels.Look_Access := null;
+   Too_Big_Said : Boolean := False;
+   function Voxel_Look_Of (R : Rig; Skin : Skin_Pixels) return Natural is
+   begin
+      if not Castle.Bodies.Voxels.Voxel_People
+        or else Castle.Figures.Voxel_Looks_Used = Castle.Figures.Max_Vox_Looks
+      then
+         return 0;
+      end if;
+      if Castle.Bodies.Voxels."=" (Scratch_Look, null) then
+         Scratch_Look := new Castle.Bodies.Voxels.Voxel_Look;
+      end if;
+      Castle.Bodies.Voxels.Build (R, Skin, Scratch_Look.all, Brief_Mesh => False);
+      return Castle.Figures.New_Voxel_Look (Scratch_Look.all);
+   exception
+      when Constraint_Error =>
+         if not Too_Big_Said then
+            Too_Big_Said := True;
+            Ada.Text_IO.Put_Line (Ada.Text_IO.Standard_Error, "serfs: a look too big for its voxel parts, drawn as boxes");
+         end if;
+         return 0;
+   end Voxel_Look_Of;
 
    procedure Spawn (G : Genome; O : Outfit; Where : Vec3; Facing : Float;
                     Walker : Boolean; To : Vec3; Speed : Float)
@@ -151,6 +200,7 @@ package body Castle.Serfs is
          S.O := O;
          Build (G, O, S.R, Skin);
          S.Slot := Castle.Figures.New_Look (S.R, Skin);
+         S.Vox := Voxel_Look_Of (S.R, Skin);
          S.Target := (Where.X, Where.Y, Gz);
          S.Prev_Target := S.Target;
          S.Ground := Gz;
@@ -408,6 +458,15 @@ package body Castle.Serfs is
    begin
       S.Clock := S.Clock + Dt;
       S.Up := S.Up + (S.Up_Want - S.Up) * Float'Min (1.0, 4.0 * Dt);      --  (up or down its ladder in a moment)
+      --  (into a building drawn turned, or out of it: turned with it in a moment, no jump)
+      if S.Turn_A /= S.Turn_Want then
+         S.Turn_A := S.Turn_A + (S.Turn_Want - S.Turn_A) * Float'Min (1.0, 6.0 * Dt);
+         if abs (S.Turn_A - S.Turn_Want) < 2.0E-3 then
+            S.Turn_A := S.Turn_Want;
+         end if;
+         S.Turn_C := (if S.Turn_A = 0.0 then 1.0 else Cos (S.Turn_A));
+         S.Turn_S := (if S.Turn_A = 0.0 then 0.0 else Sin (S.Turn_A));
+      end if;
 
       --  1. where it is meant to be: walkers go back and forth along routes
       S.Prev_Target := S.Target;
@@ -605,6 +664,11 @@ package body Castle.Serfs is
          declare
             Stride : constant Float := Float'Max (0.3, Spd * Step_T);
             Gain   : constant Float := (if S.Buckets then 0.1 else 0.35) * Float'Min (1.0, Spd / 1.2);
+            --  standing at rest, on the reference body: the elbows out from the sides and the arms bent a
+            --  little more (Rest_Arms), gone as it walks or works
+            Rest_W : constant Float :=
+              (if Rest_Arms and then Castle.Bodies.Reference_Body
+               then (1.0 - Float'Min (1.0, Spd / 0.6)) * (1.0 - W) else 0.0);
          begin
             for Sd in Side loop
                declare
@@ -613,8 +677,10 @@ package body Castle.Serfs is
                   S1.Update (S.Arms (Sd), Dt, Gain * Clamp (Ahead, -1.0, 1.0));
                   S.P.Swing (Sd) := S1.Value (S.Arms (Sd));
                   S.P.Elbow (Sd) := 0.18 + (if Walking then 0.12 else 0.0)
-                    + 0.35 * Float'Max (0.0, S.P.Swing (Sd));
-                  S.P.Spread (Sd) := 0.05 + 0.03 * Float'Max (0.0, S.G.Build) + (if S.Buckets then 0.14 else 0.0);
+                    + 0.35 * Float'Max (0.0, S.P.Swing (Sd)) + Rest_Elbow * Rest_W;
+                  S.P.Spread (Sd) := 0.05 + 0.03 * Float'Max (0.0, S.G.Build) + (if S.Buckets then 0.14 else 0.0)
+                    + Rest_Spread * Rest_W;
+                  S.P.Fore_In (Sd) := Rest_Fore_In * Rest_W;
                end;
             end loop;
             S.P.Twist := -0.25 * (S1.Value (S.Arms (Left)) - S1.Value (S.Arms (Right))) * 0.5;
@@ -644,6 +710,15 @@ package body Castle.Serfs is
                Axe_Hand : constant Vec3 := Wound + (Hit - Wound) * Chop_T;   --  1: at the trunk
                Shoulder_Mid : constant Vec3 := S.P.Pelvis + Up * (0.3 * R.Height);
                Up_Haft : constant Vec3 := Axe_Hand - Shoulder_Mid;
+               --  eating, the hands before the chest (Hands_Before_Chest): in the chest's own frame,
+               --  metres from its joint at the waist (X the body's right, Y forward, Z up the trunk)
+               Chest_F   : constant Frame := Chest_Frame (R, S.P);
+               Chest_Top : constant Float := (R.Boxes (2).Lo.Z + R.Boxes (2).Size.Z) * Px;   --  the shoulders' height
+               Mouth_Z   : constant Float := R.Joint (Head).Z - 0.02 * Chest_Top;      --  the hand at the mouth
+               Chest_Fr  : constant Float := 0.5 * R.Boxes (2).Size.Y * Px;    --  the chest's front
+               Bite      : constant Float := Smooth (0.5 + 0.5 * Sin (2.0 * Pi * 0.45 * S.Clock));
+               function Before_Chest (X, Y, Z : Float) return Vec3 is
+                 (Chest_F.O + Chest_F.X * X + Chest_F.Y * Y + Chest_F.Z * Z);
             begin
                for Sd in Side loop
                   declare
@@ -672,7 +747,14 @@ package body Castle.Serfs is
                               else S.Spot + Rt * (Out_Of (Off) * 0.2) - Fw * 0.05 + Up * 0.12),
                            --  food at the chest in the off hand, the other hand to the mouth and back
                            when Eat | Sit_Eat =>
-                             (if Sd = Dom then
+                             (if Hands_Before_Chest then
+                                (if Sd = Dom then
+                                   --  from the food, held at the chest, up to the mouth and back
+                                   Before_Chest (Out_Of (Dom) * (0.06 - 0.03 * Bite),
+                                                 Chest_Fr + 0.14 - 0.02 * Bite,
+                                                 0.55 * Chest_Top + Bite * (Mouth_Z - 0.55 * Chest_Top))
+                                 else Before_Chest (Out_Of (Off) * 0.05, Chest_Fr + 0.13, 0.5 * Chest_Top))
+                              elsif Sd = Dom then
                                 S.P.Pelvis + Up * (0.27 * R.Height) + Fw * 0.2
                                 + (Up * (0.13 * R.Height) - Fw * 0.08)
                                   * Smooth (0.5 + 0.5 * Sin (2.0 * Pi * 0.45 * S.Clock))
@@ -683,6 +765,7 @@ package body Castle.Serfs is
                        S.P.Pelvis + Rt * (Out_Of (Off) * (R.Hip_Half + 0.06)) + Fw * 0.12
                        + Up * (0.36 * R.Height);
                   begin
+                     S.P.Elbows (Sd) := (if Hands_Before_Chest and then S.Work in Eat | Sit_Eat then W else 0.0);
                      if W > 0.02 then
                         S.P.Reach (Sd) := True;
                         S.P.Hand (Sd) := Rest + (Goal - Rest) * W;
@@ -759,6 +842,28 @@ package body Castle.Serfs is
       return N_Serfs;
    end Spawn_Driven;
 
+   procedure Turn_About (I : Positive; Pivot : Vec3; Radians : Float) is
+   begin
+      if I <= N_Serfs then
+         Serfs (I).Turn_Want := Radians;
+         if Radians /= 0.0 then
+            if Serfs (I).Turn_A = 0.0 then
+               Serfs (I).Turn_P := Pivot;          --  (into a turn: about its point)
+            elsif Serfs (I).Turn_P /= Pivot then
+               Serfs (I).Turn_P := Pivot;          --  (from one turned house straight into another: at once)
+               Serfs (I).Turn_A := Radians;
+            end if;
+         end if;
+      end if;
+   end Turn_About;
+
+   --  A point and a way of serf S's, as it is drawn (Turn_About).
+   function Turned_Way (S : Serf; V : Vec3) return Vec3 is
+     (if S.Turn_S = 0.0 then V else (S.Turn_C * V.X - S.Turn_S * V.Y, S.Turn_S * V.X + S.Turn_C * V.Y, V.Z));
+   function Turned (S : Serf; P : Vec3) return Vec3 is
+     (if S.Turn_S = 0.0 then P
+      else (S.Turn_P.X, S.Turn_P.Y, 0.0) + Turned_Way (S, (P.X - S.Turn_P.X, P.Y - S.Turn_P.Y, P.Z)));
+
    procedure Perch (I : Positive; Up : Float) is
    begin
       if I <= N_Serfs then
@@ -786,7 +891,7 @@ package body Castle.Serfs is
          return (0.0, 0.0, 0.0);
       end if;
       Solve (Serfs (I).R, Serfs (I).P, F);
-      return F (if S = Left then Hand_L else Hand_R).O;
+      return Turned (Serfs (I), F (if S = Left then Hand_L else Hand_R).O);
    end Hand_At;
 
    function Log_Rest (I : Positive) return Vec3 is
@@ -802,12 +907,14 @@ package body Castle.Serfs is
       begin
          Solve (S.R, S.P, F);
          --  on top of the shoulder, out from the head
-         return F (Arm).O + F (Chest).X * (0.06 * (if Off = Left then -1.0 else 1.0)) + F (Chest).Z * 0.07;
+         return Turned (S, F (Arm).O + F (Chest).X * (0.06 * (if Off = Left then -1.0 else 1.0)) + F (Chest).Z * 0.07);
       end;
    end Log_Rest;
 
    function Heading (I : Positive) return Float is
-     (if I <= N_Serfs then Serfs (I).P.Heading else 0.0);
+     (if I > N_Serfs then 0.0
+      elsif Serfs (I).Turn_S = 0.0 then Serfs (I).P.Heading
+      else Serfs (I).P.Heading + Arctan (Serfs (I).Turn_S, Serfs (I).Turn_C));
 
    function Shoulders_Top (I : Positive) return Vec3 is
       F : Frames;
@@ -816,7 +923,7 @@ package body Castle.Serfs is
          return (0.0, 0.0, 0.0);
       end if;
       Solve (Serfs (I).R, Serfs (I).P, F);
-      return (F (Upper_Arm_L).O + F (Upper_Arm_R).O) * 0.5 + F (Chest).Z * 0.06 - F (Chest).Y * 0.04;
+      return Turned (Serfs (I), (F (Upper_Arm_L).O + F (Upper_Arm_R).O) * 0.5 + F (Chest).Z * 0.06 - F (Chest).Y * 0.04);
    end Shoulders_Top;
 
    procedure Restyle (I : Positive; O : Outfit) is
@@ -828,8 +935,12 @@ package body Castle.Serfs is
          begin
             S.O := O;
             Castle.Figures.Free_Look (S.Slot);
+            if S.Vox > 0 then
+               Castle.Figures.Free_Voxel_Look (S.Vox);
+            end if;
             Build (S.G, O, S.R, Skin);
             S.Slot := Castle.Figures.New_Look (S.R, Skin);
+            S.Vox := Voxel_Look_Of (S.R, Skin);
          end;
       end if;
    end Restyle;
@@ -839,6 +950,9 @@ package body Castle.Serfs is
       for I in 1 .. N_Serfs loop
          if Serfs (I).Used then
             Castle.Figures.Free_Look (Serfs (I).Slot);
+            if Serfs (I).Vox > 0 then
+               Castle.Figures.Free_Voxel_Look (Serfs (I).Vox);
+            end if;
             Serfs (I).Used := False;
          end if;
       end loop;
@@ -982,6 +1096,9 @@ package body Castle.Serfs is
          Fy := Flat (F (Chest).Y);
          Fy := Fy - Along * Dot (Fy, Along);
          Belly := (if Len (Fy) > 0.05 then Fy * (1.0 / Len (Fy)) else (-Along.Y, Along.X, 0.0));
+         Hips := Turned (S, Hips);
+         Along := Turned_Way (S, Along);
+         Belly := Turned_Way (S, Belly);
       end;
    end Lying_Frame;
 
@@ -1140,13 +1257,24 @@ package body Castle.Serfs is
                      F (B).O := F (B).O + (0.0, 0.0, S.Up);
                   end loop;
                end if;
-               Castle.Figures.Add (S.Slot, F);
+               S.Last_Home := F;
+               if S.Turn_S /= 0.0 then             --  (within a building drawn turned: all of it through that turn)
+                  for B in Bone loop
+                     F (B) := (X => Turned_Way (S, F (B).X), Y => Turned_Way (S, F (B).Y), Z => Turned_Way (S, F (B).Z),
+                               O => Turned (S, F (B).O));
+                  end loop;
+               end if;
+               if S.Vox > 0 then
+                  Castle.Figures.Add_Voxel (S.Vox, F);
+               else
+                  Castle.Figures.Add (S.Slot, F);
+               end if;
                S.Last_F := F;
                Show_Tool (S, F);
                declare
                   Root : constant Vec3 := S3.Value (S.Root);
                begin
-                  Castle.Figures.Add_Shadow ((Root.X, Root.Y, S.Ground), 0.14 * S.R.Height + 0.05);
+                  Castle.Figures.Add_Shadow (Turned (S, (Root.X, Root.Y, S.Ground)), 0.14 * S.R.Height + 0.05);
                end;
             end if;
          end;

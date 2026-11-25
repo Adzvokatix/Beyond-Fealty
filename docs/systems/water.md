@@ -351,7 +351,9 @@ scripted run prints one line on the live water when it ends (`water out of
 its sources: N columns, V m^3; source water below its level: N columns, at
 most D m`). Test options on the game:
 `--dig` (up to eight boxes), `--fill`, `--puddle X0 Y0 Z0 X1 Y1 Z1 DEPTH`
-(pour water there once loaded), `--late` (do the edits once the view has
+(pour water there once loaded: **with `--late` only**; without it the
+option is taken, a box is said to be dug and nothing is poured: found
+2026-11-23), `--late` (do the edits once the view has
 loaded, the same path a click takes), `--simticks N` (run N water ticks at
 once after them), `--timescale H`, `--flowmap`, `--nofalls`, `--throw S`
 (a scripted run with a fall in it ends with "falls: sheets over N

@@ -1,4 +1,4 @@
-# Castle Game handoff (2026-11-16, evening: the far view's third round, on his answer to the second: no haze on the mountains and no fingers, the land's haze as thin as the water's, the sun and the moon go down behind the map's edge, the boulders drawn round)
+# Castle Game handoff (2026-11-16, evening: the far view's third round, on his answer to the second: no haze on the mountains and no fingers, the land's haze as thin as the water's, the sun and the moon go down behind the map's edge, the boulders drawn round; and on his answers to that, the boulders into the ground, generator 15, then trees through the rock, generator 16, and the rock's flicker)
 
 - **On branch `haze-horizon-boulders`, from `main` at c8f1c40 (the second round as merged), not
   merged**: he asked for each piece by name and said nothing of merging, so `main` stays where he
@@ -143,3 +143,115 @@ build on silence:
 3. When the overflow is full too? The serf sets its load down where it stands, and nobody sets out
    for that kind until there is room.
 4. The improvements (a covering, a fence, a storehouse): this pass or after? After.
+
+## His answer, and the boulders into the ground (the same night)
+
+> ok great I like the changes, the last thing we need to do for visual asthetic, is make the base of
+> the boulders, so they don't look like balls plopped everywhere, they need extend into the ground.
+
+Taken as liking what he saw, not as "merge": still on the branch, unmerged. The calls above stand as
+built. One commit after 6275352, with the documents and the logs.
+
+- **Found first**: a boulder's centre already sits at the ground's level or a block under it, so half
+  of each was always buried; what was missing was spread where the rock meets the ground, and on a
+  slope the downhill side hung over the ground.
+- **Tried in the drawing first** (`Boulder_Feet`, `--no-boulder-feet`): the corners where the rock
+  meets level ground drawn out 0.75 of a block and down 0.4, so the lowest face leans out and goes
+  under the ground. At most a quarter of a metre: close up it shows, from 60 m nothing. Kept, as the
+  finish where rock meets ground.
+- **So the shape is the generator's (generator 15)**: column by column, on each column's own ground,
+  nothing is hollow under a boulder (everything under its round goes down into the ground's top
+  block; on a slope the downhill side goes down to the ground), and a skirt round its foot 0.4 wider
+  than the round for two blocks and 0.2 for the next, on a gentler noise so its edge has no loose
+  blocks. Where the boulders are, how many and their rounds are as they were.
+- **Its price**: the world changed, so saves from before are refused; **all eight reference logs
+  were recorded again** (every run's scene set as it was, to the line; how each ends moved both
+  ways: living at the end of the eight 32 before, 29 after); the 16 boulders by the stake are
+  9,638 blocks of rock for 6,071, 5,733 over the ground for 3,554, and cover 146 m2 of ground for
+  63 (about 60 % more rock, 2.3 times the ground under it), so there is more stone to prise.
+  There is no switch for it: a world that changed by an option would not be the world a save was
+  made in. The way back is the commit before it (`git checkout 006576c~2`, then build both modes). The two herd demos'
+  moments (found on generator 14) were not looked for again.
+- Measured: the nine checks as they were (77, 41, 112, 18, 19, 70, 643, 14, 59); the reference check
+  passes on the new logs; making a stack 1.45 ms of a worker for 1.43; meshing one 8.9 ms (8.6 to
+  8.8 before); quads +0.6 % over a meadow of boulders; the frame 1.79 to 1.82 ms (1.77 to 1.79);
+  five close views and the low pan with no floor and no ground haze: no sky through; the shadows'
+  still view 0.00 % in eight runs of ten, 0.01 % in two (the build before the rounding: 0.01 % in one
+  of six); the debug build run over the boulders and panned away and back: nothing raised.
+- Gated from a clean copy of 76247fe: both builds with the six known warnings only; the nine checks
+  as they were; the eight logs (as recorded again) line for line; the stress runner "nothing died,
+  nothing dropped", its states new with the world and alike within each family (crowd
+  5a7d6d76b87e7780, crowd_as_it_is 73f294226ca2eace, housing b2da6dd40e9295ce); the flora's hash of
+  the trees and bushes as it was (5676219328934879273).
+- How each log's end moved: the herds' flight run ended with no one living and now ends with four;
+  the hands and levelling run and stage 5b's ended with five and four and now end with no one; stage
+  5a's 2 to 6, the camp and zones 6 to 4, the other three as they were.
+- Looked at again on the final build: the five close views and the low pan, no sky through (the
+  boulder on a stack's edge the same to the pixel as before the edge corners kept their columns);
+  the map from 440 m and a forest from 140 m beside the same before generator 15: the far view's
+  boulders a little larger as grey dots in the meadows, no grey patches. A boulder crossing the
+  first ring of the far view was not watched in motion (the pan recorded hardly moved).
+- Trees: 697 of the map's 99,220 have the foot of their trunk in a boulder (370 by the round
+  alone): the trunk stands on the rock there, as a tree does that grows out of one.
+- Stills: `~/CASTLE_GAME/releases/boulders_into_the_ground.png` (as he had them beside now, five
+  views).
+- His calls: **the skirt's 0.4** (the ground under rock more than doubles); **the generator's change
+  itself** (the way back is the commit before it); on a terraced slope the rock going down to the
+  ground ends in points where it meets the steps.
+
+## His next answer: trees through the rock, and the rock's flicker (2026-11-17)
+
+> The rock sizing is fine, see if we can do something about the trees being on top of the rock, the
+> trees should go through the rock to the ground, don't worry about the herds, we are about to detach
+> the herds from the stake, we can control their placement afterwords. The stepped slope rock is great
+> as is. There is some flickering around some of the surface textures for the rock, see if we can
+> change that, or redesign the rocks generation to fit the smoothing, it looks like overlapping
+> meshes to me. Whatever requires the least work to fix.
+
+Still on the branch, unmerged. Taken as: the skirt's 0.4 and the slope's rock accepted as they are;
+the herds' demos and the logs' herd moments no concern.
+
+- **The flicker, found first**: a slow pan recorded past three boulders and every pixel counted that
+  steps and steps straight back between three frames. Past the boulder on a slope 868 such pixels in
+  120 frames, 67 with the boulders drawn in steps: the rounding's. In a frame of it, hatched stripes
+  on a sliver: a soft quad's four corners move different ways, so it is not flat, and cut along the
+  wrong diagonal its two triangles fold back across the faces round them. **Mended in the drawing**
+  (the least work, nothing of the world): the vertex shader works out all four corners and cuts along
+  the diagonal that folds least. 868 -> 30; past the boulder on a stack's edge 1,269 -> 1,119 (in
+  steps 978; the rest is grass). No frame cost seen (1.81 to 1.84 ms). The mountains' own rock
+  shimmers in a pan too (its fine texels and one-block pits): older than the rounding (the second
+  round's build the same, 8,268 for 6,815) and not changed.
+- **Trees through the rock (generator 16)**: a trunk where a boulder lies stood on the rock (697 of
+  the map's 99,220 trees). Letting the trunk replace the rock alone changed nothing to see (the rock
+  still wrapped it), so the rock gives way round a trunk, a block each side, from the ground up (the
+  ground's top block put back as it was): the trunk stands on the ground in a cleft of the rock, and
+  the rounding draws the cleft's walls in to it.
+- Its price: saves from generator 15 refused; all eight logs recorded again (each scene as it was;
+  one log unmoved; living at the end of the eight 29 -> 33).
+- Gated from a clean copy of d4c843c: both builds with the six known warnings only; the nine checks
+  as they were; the eight logs (as recorded again) line for line; the stress runner "nothing died,
+  nothing dropped", its states new with the world (crowd d0f37a9fe49ed1c2, crowd_as_it_is
+  a8fb418744446be8, housing f5f4ce1950813a9b). Stills: `~/CASTLE_GAME/releases/rock_flicker_and_trees.png`.
+- Checked on the final build: the nine checks, five close views and the low pan with no sky through,
+  the shadows' still view 0.00 % three times, a debug run by a tree in a boulder panned away and back.
+- Limits: a tree felled in a cleft leaves the cleft; at a stack's edge the corners lean toward the
+  rock as made (the cleft is not known there); the trunk does not show its foot in every view (where
+  the rock's foot spreads to meet it).
+
+## His word on it (2026-11-17)
+
+> I love what I see great job, it really came together, I am not experiencing any anomolies, is tree
+> leaving a whole in the stone is expected, no need to change it.
+
+Taken as: what he has tried shows him nothing wrong; **a tree felled in a cleft leaves its hole in the
+rock, and that is expected: not a limit, not to be mended.** The cleft's width (a block each side) was
+not spoken of: it stands as built. He did not say "merge": the branch stays as it is, unmerged, `main`
+at c8f1c40. Nothing was built on this answer. The stockpile's four questions are still open, with
+their defaults (above): the defaults are offers, not leave to build on silence.
+
+## Merged (2026-11-17)
+
+> Ok merge.
+
+`main` fast-forwarded to the branch (d0efbb9: the code is d4c843c's, gated as gate 41). The way back:
+`git checkout c8f1c40` (main before it) and both builds again.

@@ -120,6 +120,27 @@ package Castle.Herds is
    function Scatter return Boolean;
    --  The herds as they were (see above).  Off unless set; saved.
 
+   --  **A herd is put down only where a deer can walk off** (John,
+   --  2026-11-22, with a picture of deer up a spruce: "get stuck in the tree
+   --  if they spawn in inside a tree?").  A herd was put on the highest floor
+   --  the walking map has at the place drawn for it, and where a trunk two
+   --  blocks thick stands that is the trunk's top, among its leaves: of 800
+   --  herds put down at 400 stakes round the reference stake, 14 were put
+   --  3.6 to 6.4 m up a tree and one on a boulder (colony_run --herd-scan),
+   --  all five deer with it, none of which can step down more than a metre.
+   --  Now a place is taken only if, stepping as a deer steps (up a step,
+   --  down a metre, into no water), ground Leave_M away can be got to from
+   --  it; one that fails is passed over for the next drawn, as one in water
+   --  is.  So a herd is not put on a tree's top, on a boulder with sides
+   --  over a metre, or in a pen.  Set_Walk_Off (False), --herds-anywhere:
+   --  as it was.  Not saved: it is how a herd is put down, once.
+   Leave_M : constant := 6.0;
+   procedure Set_Walk_Off (On : Boolean);
+   function Walk_Off return Boolean;
+   function Can_Walk_Off (P : Vec3) return Boolean;
+   --  That test of the place P, whether the rule is on or not: for the
+   --  tools (colony_run --herd-scan counts the deer that cannot).
+
    type Person is record
       P        : Vec3;
       Stalking : Boolean := False;

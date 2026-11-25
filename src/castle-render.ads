@@ -1,3 +1,4 @@
+with Castle.Blocks;
 with Castle.Maps;
 with Castle.Math;   use Castle.Math;
 with Castle.Mesher; use Castle.Mesher;
@@ -236,6 +237,43 @@ package Castle.Render is
    --  How much of a light shows by day, in any weather (the eye is set
    --  for the day: a fire at noon lights its own stones and little else).
    --  It comes up as the day goes down, to all of it at night.
+   --  Buildings drawn turned (John, 2026-11-19: "can't we just \"detatch\" the
+   --  entire building and rotate it?"; the first step of it: the draw).
+   --  Every block of timber, daub, thatch or plank whose place is in a
+   --  turn's box, from Z0 up, is drawn turned by Radians about Pivot, as one
+   --  piece (the ground there, and what grows on it, is not): lit by its faces as
+   --  they are turned, casting so into the sun's maps and the fire's, and
+   --  cleared (a roof, a wall) by where it stands on the grid.  Drawing
+   --  only: the blocks are where they were for everything else, the far
+   --  view draws them there, and what is drawn from a house's place (its
+   --  door's leaf, its people) is not turned by this.  With no turns set
+   --  (the default) nothing is drawn otherwise than before.
+   Max_Turns : constant := 48;
+   type Turn is record
+      X0, Y0, X1, Y1 : Float := 0.0;      --  the box of its blocks (metres; X1, Y1 not in it)
+      Z0             : Float := 0.0;      --  blocks from this height up
+      Pivot          : Vec3 := (0.0, 0.0, 0.0);
+      Radians        : Float := 0.0;
+      Margin         : Float := 0.5;      --  the box is its walls' outer faces and this much round them
+      Floor          : Castle.Blocks.Material := Castle.Blocks.Footpath;
+                                          --  what its floor is of (the texels within its walls as drawn)
+   end record;
+   type Turn_List is array (Positive range <>) of Turn;
+   procedure Set_Turns (T : Turn_List);
+   --  **The floor of a house drawn turned is stepped by the texel** (John,
+   --  2026-11-19: "The textures are 5x5 on the face of each block right,
+   --  can't we step the texture so it falls under the wall of the house?").
+   --  Its floor is laid in blocks under it as drawn, and along a wall at 45
+   --  degrees a block's corner stood out from under the wall, and the turf
+   --  beside it in from it, by a fifth of a block: seen wherever a wall is
+   --  cleared.  With this on (the default) each texel of the ground at a
+   --  turned house's pad is drawn by where it lies as the house is drawn:
+   --  within its walls' outer faces, as its floor, whatever its block is;
+   --  a floor block's texel past them, as turf.  So the floor's edge runs
+   --  along the wall's outer face in steps of a texel (5 cm), under the wall.
+   --  Drawing only: the blocks are what they were.  Set_Turn_Floor (False),
+   --  the game's --no-turn-floor: the blocks as they lie.  Before Set_Turns.
+   procedure Set_Turn_Floor (On : Boolean);
    procedure Clear_Lights;
    procedure Add_Light (At_P : Vec3; Strength : Float; Reach_M : Float := Fire_Reach_M;
                         Colour : Vec3 := (1.0, 0.55, 0.22));
@@ -362,6 +400,15 @@ package Castle.Render is
    --  at a moved corner goes by the way out of the rock there, the same
    --  for every face that meets it, so the rock is lit as a round thing
    --  and not by its facets.
+   Foot_Out        : constant := 0.75;
+   Foot_Down       : constant := 0.4;
+   Foot_Lean       : constant := 1.0;
+   --  A boulder's foot (Castle.Mesher.Boulder_Feet; John, 2026-11-16: "they
+   --  need extend into the ground"): drawn Foot_Out of a block out from the
+   --  rock along each axis it is open on and Foot_Down of a block down, so
+   --  the lowest face leans out and goes under the ground a little way out
+   --  from where the rock's block ends; its light leans out and up by
+   --  Foot_Lean (1: half way), as ground rising to the rock would.
    Foliage_Cut     : constant := 0.30;
    Foliage_Jitter  : constant := 0.14;
    Foliage_Bend    : constant := 0.6;

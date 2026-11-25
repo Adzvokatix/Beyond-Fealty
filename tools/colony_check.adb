@@ -37,6 +37,7 @@ with Castle.Math;      use Castle.Math;
 with Castle.Colony;    use Castle.Colony;
 with Castle.Actions;
 with Castle.Views;
+with Castle.Scenario;
 with Castle.Text;      use Castle.Text;
 with Test_World;       use Test_World;
 with Castle.Herds;
@@ -47,6 +48,7 @@ with Castle.Animals;
 with Castle.Deer;
 with Ada.Streams.Stream_IO;
 with Ada.Strings.Fixed;
+with Ada.Strings.Unbounded;
 with Interfaces;
 
 procedure Colony_Check is
@@ -82,6 +84,55 @@ procedure Colony_Check is
       Set_Ladders (False);
       Set_Path_Holes (False);
       Set_Cart_Pull (False);
+      Set_Builders (0);
+      Set_Stockpile_Least (0.0);
+      Set_Overflow (False);
+      Set_Storehouse (False);
+      --  and with the rules of the playtest round of 2026-11-18 off (a section that is about one says so):
+      --  none of the stores' last places kept, a bush one gatherer's, long grass cut where it is found
+      Set_Last_Places (0);
+      Set_Bush_Sharing (False);
+      Set_Top_Cut (False);
+      Set_Path_Level (False);          --  (and a path laid on the ground as it lies, as before 2026-11-19)
+      Set_Roof_Timbers (False);        --  (and a house without its roof's timbers or its windows' timber)
+      Set_Full_Truss (False);          --  (nor the fuller truss of 2026-11-23, where a section sets its timbers)
+      Set_Window_Timber (False);
+      Set_Wood_Reach (False);          --  (and a forester's trees no further than the work radius, as before 2026-11-19)
+      Set_House_Turn (False);          --  (and no house turned to a path at 45 degrees)
+      Castle.Actions.Path_Snap := False;   --  (and a path ordered along the line as it is given)
+      Castle.Actions.Dev_Jobs := False; --  (and a person's menu the opening jobs alone, as the player is to have it)
+      Set_One_Stockpile (False);       --  (and the player's stockpile zoned corner to corner, as often as asked)
+      Set_Stores_Move (True);          --  (and every stockpile closed when the storehouse stands, as before 2026-11-19)
+      Set_Box_Place (False);           --  (and no stockpile put down whole with its path, as before 2026-11-20)
+      Set_Yard_Box (False);            --  (nor the stockyard: zoned corner to corner, as before 2026-11-21)
+      Set_Store_Size (40, 20, 18);     --  (and its storehouse 10 m by 5 m, 4.5 m of staging before it, as before)
+      Set_Cart_Search (False);         --  (and the lord's cart brought to the one place before it, or not at all)
+      Set_Store_Stacks (False);        --  (and a place in the storehouse its own, one barrel to a place)
+      Castle.Actions.Square_Stake := False;   --  (and the homestake the player raises a post, the camp zoned apart)
+      Castle.Actions.Housing_Pull := False;   --  (and the player's housing zoned beside a path that is there)
+      Set_Square_Fell (True);          --  (a square's trees felled by the band: the rule as it stands; not saved)
+      Set_Box_Fell (True);             --  (and a tree in a stockpile put down whole: not saved either)
+      Set_Path_Through (False);        --  (and a path ordered through housing refused, as before 2026-11-20)
+      Set_Square_Walls (False);        --  (and a square's banks left earth, its path brought level column by column)
+      Set_Square_Wide (False);         --  (and a square founded ten metres, twelve with its path, as before 2026-11-21)
+      Set_Square_Outside (False);      --  (and its walls on its own outermost quarter metre, its path a fixed ring)
+      Set_Yard_Stair_Corner (False);   --  (and a stockyard's stair at the middle of its storehouse's front, as before)
+      Set_Yard_Floor_Low (False);      --  (and its floor chosen from the land under it, as before 2026-11-22)
+      Set_Path_Steps (False);          --  (and the square's path left as it lies where a levelled stretch ends)
+      Set_Corner_Whole (False);        --  (and the square metre where two sides' paths cross laid as it was)
+      Set_Strip_Wait (False);          --  (and a column of two sides' strips walled by whichever path is laid first)
+      Set_Corner_Steps (False);        --  (and no step of stone in it)
+      Set_Reach_Out (False);           --  (and a builder standing on the ground it makes ready, as before 2026-11-23)
+      Set_Zigzag (False);              --  (and a storehouse's ground worked every row from the same end)
+      Set_Paths_Meet (False);          --  (and a path left as it was laid where it meets trodden ground)
+      Set_Door_Meet (False);           --  (and a door's way as it was planned when its hovel was placed)
+      Set_Build_Help (False);          --  (and one builder a house)
+      Set_Kill_Home (False);           --  (and a deer put down when its carrier is given another job)
+      Set_Place_Level (False);         --  (and a stockpile's place as its ground lies)
+      Set_Cart_Room (False);           --  (and things put beside the cart's wheels and under its shafts)
+      Set_Step_At_Edge (False);        --  (and a walker's height changed at the next point of its way)
+      Set_Pile_Flat (False);           --  (and a stockpile's ground as it lies, each place made level by itself)
+      Set_Steep_Refuse (False);        --  (and a stockpile put down however steep its ground)
    end Reset;
 
    --  Every ladder made is stored, in somebody's arms, standing at a house, or
@@ -148,13 +199,37 @@ procedure Colony_Check is
       In_Cell (Broadleaf, 112, 100, 1, 16)];
    Use_Pair : Boolean := False;
 
+   --  For a stake in the meadow's south-west corner (8 8): an apple tree
+   --  near it, and broadleaves past the work radius of it (68 m, 66 m and
+   --  72 m off): the foresters' trees further off (John, 2026-11-19).  The
+   --  third is walled in by The_Far's check.
+   The_Far : constant Tree_List :=
+     [In_Cell (Apple, 80, 80, 1, 12),
+      In_Cell (Broadleaf, 224, 224, 1, 16),
+      In_Cell (Broadleaf, 232, 200, 1, 16),
+      In_Cell (Broadleaf, 208, 248, 1, 16)];
+   Use_Far : Boolean := False;
+   Far_N   : Positive := The_Far'Last;      --  (how many of them there are)
+
    --  A bough of every tree at one place, as a tree's shape may say it has
    --  one where a house has been built since: a column of log, rows
    --  Bough_Z0 .. Bough_Z1.
    Bough_On : Boolean := False;
    Bough_X, Bough_Y, Bough_Z0, Bough_Z1 : Integer := 0;
 
-   function Active return Tree_List is (if Use_Pair then The_Pair else The_Trees);
+   --  A tree on a knoll: its foot Knoll_B blocks over the meadow (the check of a stockpile made
+   --  one level builds the knoll under it): a broadleaf, or a conifer two block columns thick
+   --  (whose pillar may be a whole cell of the walking map).
+   Knoll_B : constant := 8;
+   The_Knoll : constant Tree_List :=
+     [(100 / Tree_Cell_B, 100 / Tree_Cell_B, (True, Broadleaf, 100, 100, Ground_Row + Knoll_B, 1, 16))];
+   The_Thick_Knoll : constant Tree_List :=
+     [(100 / Tree_Cell_B, 100 / Tree_Cell_B, (True, Conifer, 100, 100, Ground_Row + Knoll_B, 2, 24))];
+   Use_Knoll, Knoll_Thick : Boolean := False;
+
+   function Active return Tree_List is
+     (if Use_Knoll then (if Knoll_Thick then The_Thick_Knoll else The_Knoll)
+      elsif Use_Far then The_Far (1 .. Far_N) elsif Use_Pair then The_Pair else The_Trees);
 
    function Find (I, J : Integer) return Tree_Info is
    begin
@@ -299,7 +374,7 @@ procedure Colony_Check is
    --  one's top up to its own (no more than a block of earth is left to
    --  stand by itself).  Steps: how many such there are.  Bare: how many of
    --  them are not stone so.
-   procedure Count_Steps (H : Positive; Steps, Bare : out Natural) is
+   procedure Count_Steps (H : Positive; Steps, Bare : out Natural; About_B : Natural := 12) is
       V  : constant House_View := House_At (H);
       X0 : constant Integer := B (Float'Min (V.Corner (1).X, V.Corner (3).X) + 0.01);
       X1 : constant Integer := B (Float'Max (V.Corner (1).X, V.Corner (3).X) - 0.01);
@@ -311,17 +386,17 @@ procedure Colony_Check is
       Steps := 0;
       Bare := 0;
       --  (3 m about its walls, and as far again as its ground reaches over to a neighbour's)
-      for X in X0 - 12 - Far .. X1 + 12 + Far loop
-         for Y in Y0 - 12 - Far .. Y1 + 12 + Far loop
+      for X in X0 - About_B - Far .. X1 + About_B + Far loop
+         for Y in Y0 - About_B - Far .. Y1 + About_B + Far loop
             if (abs (V.Corner (1).X - V.Corner (2).X) > abs (V.Corner (1).Y - V.Corner (2).Y)
-                and then Y in Y0 - 12 .. Y1 + 12
-                and then X in X0 - 12 - (if V.Corner (1).X < V.Corner (2).X then V.Reach_L else V.Reach_R)
-                              .. X1 + 12 + (if V.Corner (1).X < V.Corner (2).X then V.Reach_R else V.Reach_L))
+                and then Y in Y0 - About_B .. Y1 + About_B
+                and then X in X0 - About_B - (if V.Corner (1).X < V.Corner (2).X then V.Reach_L else V.Reach_R)
+                              .. X1 + About_B + (if V.Corner (1).X < V.Corner (2).X then V.Reach_R else V.Reach_L))
               or else
                (abs (V.Corner (1).X - V.Corner (2).X) <= abs (V.Corner (1).Y - V.Corner (2).Y)
-                and then X in X0 - 12 .. X1 + 12
-                and then Y in Y0 - 12 - (if V.Corner (1).Y < V.Corner (2).Y then V.Reach_L else V.Reach_R)
-                              .. Y1 + 12 + (if V.Corner (1).Y < V.Corner (2).Y then V.Reach_R else V.Reach_L))
+                and then X in X0 - About_B .. X1 + About_B
+                and then Y in Y0 - About_B - (if V.Corner (1).Y < V.Corner (2).Y then V.Reach_L else V.Reach_R)
+                              .. Y1 + About_B + (if V.Corner (1).Y < V.Corner (2).Y then V.Reach_R else V.Reach_L))
             then
             if not Walls (X, Y) and then House_On ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25) in 0 | H then
                for D in 1 .. 4 loop
@@ -414,12 +489,12 @@ procedure Colony_Check is
    --  In and round house H, half a metre apart: the spots a serf can get to
    --  from the stake (Spots is added to), and those of them it cannot get
    --  back to the stake from (Pits).
-   procedure Count_Pits (H : Positive; Spots, Pits : in out Natural) is
+   procedure Count_Pits (H : Positive; Spots, Pits : in out Natural; About : Float := 3.0) is
       V  : constant House_View := House_At (H);
-      X0 : constant Float := Float'Min (V.Corner (1).X, V.Corner (3).X) - 3.0;
-      X1 : constant Float := Float'Max (V.Corner (1).X, V.Corner (3).X) + 3.0;
-      Y0 : constant Float := Float'Min (V.Corner (1).Y, V.Corner (3).Y) - 3.0;
-      Y1 : constant Float := Float'Max (V.Corner (1).Y, V.Corner (3).Y) + 3.0;
+      X0 : constant Float := Float'Min (V.Corner (1).X, V.Corner (3).X) - About;
+      X1 : constant Float := Float'Max (V.Corner (1).X, V.Corner (3).X) + About;
+      Y0 : constant Float := Float'Min (V.Corner (1).Y, V.Corner (3).Y) - About;
+      Y1 : constant Float := Float'Max (V.Corner (1).Y, V.Corner (3).Y) + About;
       X, Y : Float;
    begin
       X := X0;
@@ -929,6 +1004,209 @@ begin
    Check (Trees_Felled = 2 and then Wood_Total >= 3 and then Status (1) = "enough wood (the reserve is met)",
           "one forester stops once the colony has 3 logs: felled" & Trees_Felled'Image & ", wood"
           & Wood_Total'Image & ", '" & Status (1) & "'");
+
+   --  The foresters' trees past the work radius (John, 2026-11-19: "Still
+   --  having issues with the foresters not finding trees in range").
+   Put_Line ("a forester with no tree to fell in reach:");
+   declare
+      Far_Stake : constant Vec3 := (8.0, 8.0, Ground_M);
+      Laid, Cells : Natural;
+      procedure Far_Set_Up (Trees_N : Positive; Wall : Boolean := False; Food : Boolean := False) is
+      begin
+         Use_Far := True;
+         Far_N := Trees_N;
+         Reset;
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Meadow;
+         for T of Active loop
+            Shape (T.I, T.J, Grow'Access);
+         end loop;
+         if Food then                 --  a bush 67 m from the stake, and long grass 64 m from it
+            Put_Bush (56.0, 54.0);
+            for X in 0 .. 7 loop
+               for Y in 0 .. 7 loop
+                  Set (B (56.0) + X, B (48.0) + Y, Ground_Row, Tall_Grass);
+               end loop;
+            end loop;
+         end if;
+         if Wall then                 --  the third broadleaf (52 62) shut in by a wall a metre high, five metres square
+            Fill (49.5, 59.5, 54.5, 60.0, Ground_Row, Ground_Row + 3, Granite);
+            Fill (49.5, 59.5, 50.0, 64.0, Ground_Row, Ground_Row + 3, Granite);
+            Fill (54.0, 59.5, 54.5, 64.0, Ground_Row, Ground_Row + 3, Granite);
+         end if;
+         Hours := 16.0 * 24.0;
+         Place_Stake (Far_Stake, 6, 42);
+         Lay_Path ((8.5, 5.5, Ground_M), (28.0, 5.5, Ground_M), Laid);
+         Zone_Stockpile (9.0, 3.0, 13.0, 5.0, Cells);
+         Index_All;
+      end Far_Set_Up;
+      function Far_Standing return Natural is
+         N : Natural := 0;
+      begin
+         for K in 1 .. Tree_Count loop
+            if not Tree_Down (K) and then Tree_At (K).Kind /= Apple then
+               N := N + 1;
+            end if;
+         end loop;
+         return N;
+      end Far_Standing;
+   begin
+      --  as it was: nothing past the work radius is anybody's to fell
+      Far_Set_Up (3);
+      Set_Job (1, Forester);
+      Run (300);
+      Check (Tree_Count = 3 and then Trees_Felled = 0 and then Status (1) = "no trees to fell in reach"
+             and then Fell_Reach_M = Work_Radius_M and then Ground_Reach_M = Work_Radius_M,
+             "with --no-wood-reach a forester whose trees stand 66 and 68 m from the stake fells none, as before: '"
+             & Status (1) & "'");
+      --  looking further: a ring is enough for both
+      Far_Set_Up (3);
+      Set_Wood_Reach (True);
+      Set_Job (1, Forester);
+      declare
+         Said_Further : Boolean := False;
+         Reach_At_First : Float := 0.0;
+         Snap_Ok : Boolean := True;
+      begin
+         for S in 1 .. 2_400 loop
+            Run (1);
+            Said_Further := Said_Further or else Status (1) = "looking further off for a tree to fell";
+            if Trees_Felled = 1 and then Reach_At_First = 0.0 then
+               Reach_At_First := Fell_Reach_M;
+               declare                       --  (and it saves, loads and saves again to the same bytes)
+                  Data : constant Bytes := Save;
+                  Ok   : Boolean;
+               begin
+                  Load (Data, Ok);
+                  Snap_Ok := Ok and then Save = Data and then Fell_Reach_M = Reach_At_First and then Wood_Reach_On;
+               end;
+            end if;
+            exit when Trees_Felled = 2 and then Logs_Lying = 0 and then Carried_All = 0;
+         end loop;
+         Check (Said_Further and then Reach_At_First = Work_Radius_M + Reach_Step_M,
+                "looking further (the default) it says so, and looks one ring further: "
+                & Img (Reach_At_First, 0) & " m when the first tree is down");
+         Check (Snap_Ok, "a colony that looks further saves, loads and saves again to the same bytes");
+         Check (Trees_Felled = 2 and then Stored (Wood) = 4 and then Ground_Reach_M >= Fell_Reach_M,
+                "both trees past the work radius are felled and their logs brought home:" & Trees_Felled'Image
+                & " felled," & Natural'Image (Stored (Wood)) & " logs stored; the colony's ground reaches "
+                & Img (Ground_Reach_M, 0) & " m");
+         --  nothing left but the apple tree: it looks as far as it may and then says why
+         Run (300);
+         Check (Fell_Reach_M = Fell_Reach_Max_M
+                and then Status (1) = "only apple trees stand in reach, and they are spared",
+                "with nothing left to fell but an apple tree it has looked as far as it may ("
+                & Img (Fell_Reach_M, 0) & " m: John's 250) and says so: '" & Status (1) & "'");
+      end;
+      --  a tree somebody else is felling is no reason to look further
+      Far_Set_Up (2);
+      Set_Wood_Reach (True);
+      Set_Job (1, Forester);
+      Set_Job (2, Forester);
+      declare
+         Said_Taken : Boolean := False;
+         Reach_Then : Float := 0.0;
+      begin
+         for S in 1 .. 900 loop
+            Run (1);
+            for I in 1 .. 2 loop
+               if Status (I) = "the trees left in reach are being felled by others" then
+                  Said_Taken := True;
+                  Reach_Then := Fell_Reach_M;
+               end if;
+            end loop;
+            exit when Trees_Felled = 1;
+         end loop;
+         Check (Said_Taken and then Reach_Then = Work_Radius_M + Reach_Step_M,
+                "of two foresters and one tree, the one without it says the tree is another's, and looks no further for that ("
+                & Img (Reach_Then, 0) & " m)");
+      end;
+      --  a tree there is no way to
+      Far_Set_Up (4, Wall => True);
+      Set_Wood_Reach (True);
+      Set_Job (1, Forester);
+      declare
+         Plans_Before : Natural;
+      begin
+         for S in 1 .. 2_400 loop
+            Run (1);
+            exit when Trees_Felled = 2 and then Logs_Lying = 0 and then Carried_All = 0;
+         end loop;
+         Run (200);
+         --  saved with a tree left untried, loaded and run on: the same colony as one run straight on
+         declare
+            Snap : Snapshot;
+            Saved_Hours : constant Long_Float := Hours;
+            Data : constant Bytes := Save;
+            Untried : constant Natural := Trees_Left_Untried;
+            Ok   : Boolean;
+         begin
+            Take (Snap);
+            Run (900);
+            declare
+               A : constant Bytes := Save;
+            begin
+               Give_Back (Snap);
+               Hours := Saved_Hours;
+               Load (Data, Ok);
+               Check (Ok and then Untried = 1 and then Trees_Left_Untried = 1 and then Save = Data,
+                      "a save with a tree left untried loads with it left untried still, and saves again to the same"
+                      & Data'Length'Image & " bytes");
+               Run (900);
+               Check (Save = A, "and fifteen game hours later the colony is the one that was never saved");
+            end;
+         end;
+         Plans_Before := Castle.Nav.Totals.Short_Plans;
+         Run (600);
+         Check (Trees_Felled = 2 and then Far_Standing = 1 and then Fell_Reach_M = Fell_Reach_Max_M
+                and then Status (1) = "can't get to the trees left in reach",
+                "the two it can get to are felled; the one walled in is left standing, and it says why: '"
+                & Status (1) & "'");
+         --  (once a minute where the walking map's pieces of ground say there is no way; once a day
+         --  where the search for a way ran out, as it does here)
+         Check (Castle.Nav.Totals.Short_Plans - Plans_Before <= 12,
+                "and its way there is not asked every time it thinks:"
+                & Natural'Image (Castle.Nav.Totals.Short_Plans - Plans_Before) & " times in ten minutes");
+      end;
+      --  gatherers and porters the same (John, 2026-11-19: "Let workers go 250m for resources")
+      Far_Set_Up (1, Food => True);
+      Set_Job (1, Gatherer);
+      Set_Job (2, Porter);
+      Run (600);
+      Check (Stored (Berries) = 0 and then Stored (Straw) = 0 and then Food_Reach_M = Work_Radius_M
+             and then Haul_Reach_M = Work_Radius_M,
+             "with --no-wood-reach a gatherer and a porter whose bush and long grass are 67 and 64 m from the stake"
+             & " bring nothing, as before ('" & Status (1) & "', '" & Status (2) & "')");
+      Far_Set_Up (1, Food => True);
+      Set_Wood_Reach (True);
+      Set_Job (1, Gatherer);
+      Set_Job (2, Porter);
+      for S in 1 .. 3_000 loop
+         Run (1);
+         exit when Stored (Berries) > 0 and then Stored (Straw) > 0;
+      end loop;
+      Check (Stored (Berries) > 0 and then Food_Reach_M = Work_Radius_M + Reach_Step_M,
+             "looking further, the gatherer picks the bush 67 m off:" & Natural'Image (Stored (Berries))
+             & " berries stored, the gatherers looking " & Img (Food_Reach_M, 0) & " m");
+      --  (the porters' one reach goes on out for the stone it is also sent for: there is none on this meadow)
+      Check (Stored (Straw) > 0 and then Haul_Reach_M >= Work_Radius_M + Reach_Step_M,
+             "and the porter cuts the long grass 64 m off:" & Natural'Image (Stored (Straw))
+             & " sheaves stored, the porters looking " & Img (Haul_Reach_M, 0) & " m");
+      declare
+         Data  : constant Bytes := Save;
+         Haul  : constant Float := Haul_Reach_M;
+         Ok    : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then Food_Reach_M = Work_Radius_M + Reach_Step_M
+                and then Haul_Reach_M = Haul,
+                "how far they look is saved: loaded and saved again, the same bytes");
+      end;
+      Use_Far := False;
+   end;
 
    Put_Line ("a branch through a neighbour's trunk:");
    Use_Pair := True;
@@ -2590,9 +2868,11 @@ begin
       S := Castle.Views.Zone (1);
       Check (Str (S.Title) = "Stockpile" and then Str (S.Note) = "zone 1: 4 x 2 m"
              and then Value_Of (S, "Cells") = "8, 1 in use"
-             and then Value_Of (S, "Berries") = Img (Stored (Berries)) and then Row_Named (S, "Wood") = 0,
+             and then Value_Of (S, "Berries") = Img (Stored (Berries)) and then Value_Of (S, "Wood") = "none"
+             and then Value_Of (S, "Stone") = "none" and then Value_Of (S, "Apples") = "none"
+             and then Value_Of (S, "Salt") = "none" and then Row_Named (S, "Water") = 0 and then S.Lost = 0,
              "a stockpile's sheet: " & Str (S.Note) & ", its cells, " & Value_Of (S, "Berries")
-             & " berries, and no line for what it has none of");
+             & " berries, the staples it has none of said so (stone, apples, salt: 'none'), no line for the rest");
       S := Castle.Views.Zone (Camp_Zone);
       Check (Str (S.Title) = "The camp" and then Row_Named (S, "Fire") > 0 and then Row_Named (S, "Pot") > 0
              and then Value_Of (S, "Seats") = "0 of 4 laid",
@@ -2635,13 +2915,13 @@ begin
              "before the stake, all there is to do with the ground is raise it");
       Perform ((What => Lay_Path, By => The_Player, From => (20.5, 17.5, Ground_M), To => (40.0, 17.5, Ground_M)), R);
       Check (not R.Done and then R.Why = Not_Now, "no path before the stake: refused, not now");
-      Perform ((What => Raise_Stake, By => 2, Stake_At => Stake_P), R);
+      Perform ((What => Raise_Stake, By => 2, Stake_At => Stake_P, As_Square => False, Stake_Way => 0), R);
       Check (not R.Done and then R.Why = Not_Permitted and then not Has_Stake,
              "a serf may not raise the stake: refused, "
-             & Why_Not ((What => Raise_Stake, By => 2, Stake_At => Stake_P), R));
-      Perform ((What => Raise_Stake, By => The_Player, Stake_At => Stake_P), R);
+             & Why_Not ((What => Raise_Stake, By => 2, Stake_At => Stake_P, As_Square => False, Stake_Way => 0), R));
+      Perform ((What => Raise_Stake, By => The_Player, Stake_At => Stake_P, As_Square => False, Stake_Way => 0), R);
       Check (R.Done and then Has_Stake and then Members = 6, "the player raises it, and the band of six arrives");
-      Perform ((What => Raise_Stake, By => The_Player, Stake_At => (30.0, 30.0, Ground_M)), R);
+      Perform ((What => Raise_Stake, By => The_Player, Stake_At => (30.0, 30.0, Ground_M), As_Square => False, Stake_Way => 0), R);
       Check (not R.Done and then R.Why = Not_Now and then Members = 6, "once only");
       Perform ((What => Lay_Path, By => The_Player, From => (20.5, 17.5, Ground_M), To => (40.0, 17.5, Ground_M)), R);
       Check (R.Done and then R.Count > 200, "a path laid by order:" & R.Count'Image & " blocks");
@@ -2682,28 +2962,32 @@ begin
          Check (not R.Done and then R.Why = Not_Permitted, "but not for a serf");
       end;
       M := Menu_For (The_Player, (Kind => A_Person, Index => 2, Point => (0.0, 0.0, 0.0)));
-      Check (M.N = 7 and then Str (M.Title) = Name_Of (2)
-             and then (for all K in 1 .. 6 => M.Items (K).Todo.What = Give_Job
+      --  (the opening jobs alone: the cook's is come to by skill and is a development entry since
+      --  2026-11-22, and the development entries are off here, Reset)
+      Check (M.N = 6 and then Str (M.Title) = Name_Of (2)
+             and then (for all K in 1 .. 5 => M.Items (K).Todo.What = Give_Job and then M.Items (K).Todo.Job /= Cook
                                               and then M.Items (K).Is_Now = (M.Items (K).Todo.Job = Gatherer))
-             and then M.Items (7).Todo.What = Follow,
-             "a person's menu: a job for each there is, its own marked, and follow");
+             and then M.Items (6).Todo.What = Follow,
+             "a person's menu: no job and the four jobs the player gives, its own marked, and follow");
       Check (Menu_For (3, (Kind => A_Person, Index => 2, Point => (0.0, 0.0, 0.0))).N = 0,
              "for a serf the same person's menu is empty");
       M := Menu_For (The_Player, Ground_T);
-      Check (M.N = 5 and then M.Items (1).Todo.What = Lay_Path and then M.Items (1).Two_Point
+      Check (M.N = 6 and then M.Items (1).Todo.What = Lay_Path and then M.Items (1).Two_Point
              and then M.Items (2).Todo.What = Zone_Stockpile and then M.Items (2).Two_Point
-             and then M.Items (3).Todo.What = Zone_Camp and then not M.Items (3).Two_Point
-             and then M.Items (4).Todo.What = Zone_Housing and then M.Items (4).Two_Point
-             and then M.Items (5).Todo.What = Fill_Housing and then not M.Items (5).Two_Point,
-             "the ground's menu now: a path, a stockpile or housing from here (each wants a second point), the camp here,"
-             & " housing inside these paths");
-      Perform (M.Items (3).Todo, R);
-      Check (R.Done and then Has_Camp and then Menu_For (The_Player, Ground_T).N = 4,
+             and then M.Items (3).Todo.What = Zone_Stockyard and then M.Items (3).Two_Point
+             and then M.Items (4).Todo.What = Zone_Camp and then not M.Items (4).Two_Point
+             and then M.Items (5).Todo.What = Zone_Housing and then M.Items (5).Two_Point
+             and then M.Items (6).Todo.What = Fill_Housing and then not M.Items (6).Two_Point,
+             "the ground's menu now: a path, a stockpile, a stockyard or housing from here (each wants a second point),"
+             & " the camp here, housing inside these paths");
+      Perform (M.Items (4).Todo, R);
+      Check (R.Done and then Has_Camp and then Menu_For (The_Player, Ground_T).N = 5,
              "the camp zoned from the menu; after that the ground offers no second one");
       M := Menu_For (The_Player, (Kind => A_Stockpile, Index => 1, Point => (0.0, 0.0, 0.0)));
-      Check (M.N = 10 and then (for all K in 1 .. 5 => M.Items (2 * K - 1).Step = Fewer
-                                                        and then M.Items (2 * K).Step = More),
-             "a stockpile's menu: a step down and up for each reserve (wood, straw, meat, vegetables) and the"
+      Check (M.N = 13 and then (for all K in 1 .. 6 => M.Items (2 * K - 1).Step = Fewer
+                                                        and then M.Items (2 * K).Step = More)
+             and then M.Items (13).Todo.What = Remove_Stockpile,       --  (since 2026-11-23: and "Remove this stockpile")
+             "a stockpile's menu: a step down and up for each reserve (wood, straw, meat, vegetables, apples) and the"
              & " winter store");
       for K in 1 .. M.N loop
          if M.Items (K).Todo.What = Set_Reserve and then M.Items (K).Todo.Kind = Meat
@@ -3048,7 +3332,7 @@ begin
       Check (Ok and then Full < Max_Rows - 3,
              "no sheet runs out of rows (the fullest has " & Img (Full) & " of " & Img (Integer'(Max_Rows)) & ")");
       M := Castle.Actions.Menu_For (The_Player, (Kind => Castle.Actions.A_Person, Index => 3, Point => (0.0, 0.0, 0.0)));
-      Check (M.N = 7 and then Str (M.Items (1).Label) = "No job"
+      Check (M.N = 6 and then Str (M.Items (1).Label) = "No job"
              and then Str (M.Items (3).Label) = "Forester: " & Img (Integer (100.0 * Skill_Of (3, Forestry))) & " %, x"
                                                  & Img (Aptitude_Of (3, Forestry), 1),
              "a person's menu shows its level and aptitude beside each job: " & Str (M.Items (3).Label));
@@ -3125,7 +3409,7 @@ begin
               + 8 + 3 * 6
               + 2 + 6
               + 9 + 4
-              + 3 + 33 * House_Count + 3 * 6
+              + 3 + 34 * House_Count + 3 * 6
               + 7 + 23 * 6                           --  (the band's pace; beds: a flag, the straw in them, each
                                                      --  member's own, where, what is in it, its place by the fire)
               + 2                                    --  (the lots laid out: a count and a flag, none here)
@@ -3135,8 +3419,37 @@ begin
               + 4 * (Item_Kind'Pos (Item_Kind'Last) - Item_Kind'Pos (Salt) + 1)    --  what is asked and kept of salt and ladders;
               + 5 + 14 * House_Count + 6             --  ladders: the switch, those made and lost, each house's, each member's)
               + 1                                    --  (the fifth round: whether a hole under a path is filled)
-              + 1 + 4 + 1 + 1 + 1 + 12 + 4 + 12;     --  (the cart pulled into a stockpile: the switch, its turn, in tow,
+              + 1 + 4 + 1 + 1 + 1 + 12 + 4 + 12      --  (the cart pulled into a stockpile: the switch, its turn, in tow,
                                                      --  by whom, a place held, where and which way, where it was lifted from)
+              + 1 + 4 + 1 + Cell_Count               --  (the stockpile's first pass: builders at once, how large a
+                                                     --  stockpile has to be, the overflow, each place's flag)
+              + 1 + 2 + 1 + 1 + Cell_Count           --  (the storehouse: asked for, the stake's day, asked, its house,
+                                                     --  each place closed or not)
+              + 2 * Cell_Count + 1 + 1 + 1 + 1 + 1 + 1    --  (the storehouse used: each place's fitting and made,
+                                                     --  the stockman's switch and who, the carpenter's, water,
+                                                     --  who raised the storehouse)
+              + 2 + 1 + 1 + 1                        --  (the playtest round of 2026-11-18: the last places kept, the
+                                                     --  one stockpile, long grass cut from the top, bushes shared)
+              + Zone_Count + 1 + 1                   --  (the stockyard: a flag a zone, its ground levelled, the stores moved)
+              + 4                                    --  (the next pass, 31: making way, paths levelled, a house's roof
+                                                     --  timbers and window timber)
+              + 6                                    --  (his answers of 2026-11-19, 32: who is set to building, a member each)
+              + 4 + 1 + 2                            --  (33: how far the foresters look, whether they look further,
+                                                     --  and the trees none could get to: none here)
+              + 4                                    --  (34: the measuring start for wood)
+              + 8                                    --  (35: how far the gatherers and the porters look)
+              + 1                                    --  (36: whether houses are turned; a byte a house is with the houses)
+              + 2                                    --  (37: a turned house's ground made where it is drawn, and kept off)
+              + 3                                    --  (38: whether the band is told of ways that are not there, and how
+                                                     --  many it has been told of: none here)
+              + 1                                    --  (39: whether a stockyard beside a path at 45 degrees lies along it)
+              + 1                                    --  (40: whether a hovel placed turned is walked where it is drawn)
+              + 2                                    --  (41: whether a storehouse begun is smoothed, and in pieces)
+              + 1 + Zone_Count                       --  (42: whether the player's stockpile is put down whole, and a
+                                                     --  flag a zone: none here was put down so)
+              + 1                                    --  (43: whether the colony was founded on a square)
+              + Zone_Count                           --  (46: a flag a zone, whether it is ordered removed)
+              + 1 + House_Count;                     --  (45: the fuller truss's switch, and a byte a house)
             Skills_At : constant Natural := Data'Last - After - Tail + 1;
             Head   : constant Bytes := Data (Data'First .. Skills_At - 1);
             Flag   : constant Interfaces.Unsigned_8 := Data (Skills_At);
@@ -5225,8 +5538,8 @@ begin
             Ok2 : Boolean;
          begin
             Load (Again, Ok2);
-            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 25,
-                   "it saves as version 25 and loads back the same (" & Boolean'Image (Save = Again)
+            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 46,
+                   "it saves as version 46 and loads back the same (" & Boolean'Image (Save = Again)
                    & Again'Length'Image & " bytes, version" & Again (0)'Image & ")");
          end;
       end;
@@ -5274,8 +5587,8 @@ begin
             Ok2 : Boolean;
          begin
             Load (Again, Ok2);
-            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 25 and then Again'Length > Data'Length,
-                   "it saves as version 25 and loads back the same (" & Boolean'Image (Save = Again)
+            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 46 and then Again'Length > Data'Length,
+                   "it saves as version 46 and loads back the same (" & Boolean'Image (Save = Again)
                    & Again'Length'Image & " bytes, version" & Again (0)'Image & ")");
          end;
       end;
@@ -5334,8 +5647,8 @@ begin
             Ok2 : Boolean;
          begin
             Load (Again, Ok2);
-            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 25 and then Again'Length > Data'Length,
-                   "it saves as version 25 and loads back the same (" & Boolean'Image (Save = Again)
+            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 46 and then Again'Length > Data'Length,
+                   "it saves as version 46 and loads back the same (" & Boolean'Image (Save = Again)
                    & Again'Length'Image & " bytes, version" & Again (0)'Image & ")");
          end;
       end;
@@ -5413,8 +5726,8 @@ begin
             Ok2 : Boolean;
          begin
             Load (Again, Ok2);
-            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 25 and then Again'Length > Data'Length - 400,
-                   "it saves as version 25 and loads back the same (" & Boolean'Image (Save = Again)
+            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 46 and then Again'Length > Data'Length - 400,
+                   "it saves as version 46 and loads back the same (" & Boolean'Image (Save = Again)
                    & Again'Length'Image & " bytes, version" & Again (0)'Image & ")");
          end;
       end;
@@ -5937,6 +6250,52 @@ begin
    ------------------------------------------------------------------ the colony's own ground
    --  The game holds the whole map (2026-11-14); the colony reads the stacks
    --  its host says are its own and nothing beyond, whatever else is loaded.
+   --  A herd is put down only where a deer can walk off (Castle.Herds.Set_Walk_Off; John, 2026-11-22:
+   --  "get stuck in the tree if they spawn in inside a tree?").  The made-up meadow, a trunk two
+   --  blocks thick put where the first herd is put down on it bare, and the rule off and on.
+   Put_Line ("a herd is not put up a tree:");
+   declare
+      use Castle.Herds;
+      Bare, Bare_2, Up, Down : Vec3 := (0.0, 0.0, 0.0);
+      Bare_Free, Up_Held, Down_Free, Same_Bare : Boolean := False;
+      Cx, Cy : Float := 0.0;
+      procedure Found_Again (Rule, Trunk : Boolean) is
+      begin
+         Set_Up (With_Bushes => False, With_Flight => True);
+         if Trunk then        --  (four metres of it, filling the walking map's cell: its top is the highest floor there)
+            Fill (Cx, Cy, Cx + 0.5, Cy + 0.5, Ground_Row, Ground_Row + 15, Log);
+            Changed_World;
+         end if;
+         Set_Walk_Off (Rule);
+         Run (1);
+      end Found_Again;
+   begin
+      Found_Again (Rule => False, Trunk => False);
+      Bare := Node (1);
+      Bare_2 := Node (2);
+      Bare_Free := Herd_Count = 2 and then Can_Walk_Off (Bare) and then abs (Bare.Z - Ground_M) < 0.01;
+      Cx := Float'Floor (Bare.X / 0.5) * 0.5;
+      Cy := Float'Floor (Bare.Y / 0.5) * 0.5;
+      Found_Again (Rule => True, Trunk => False);
+      Same_Bare := Herd_Count = 2 and then Node (1) = Bare and then Node (2) = Bare_2;
+      Found_Again (Rule => False, Trunk => True);
+      Up := Node (1);
+      Up_Held := not Can_Walk_Off (Up);
+      Found_Again (Rule => True, Trunk => True);
+      Down := Node (1);
+      Down_Free := Herd_Count = 2 and then Can_Walk_Off (Down);
+      Check (Bare_Free, "on the bare meadow the first herd is put down at " & Img (Bare.X, 1) & ", " & Img (Bare.Y, 1)
+             & " on the ground, where a deer can walk off");
+      Check (Same_Bare, "and with the rule on both herds are put on the very same ground (it draws no number)");
+      Check (abs (Up.Z - (Ground_M + 4.0)) < 0.01 and then Flat (Up, Bare) < 0.01 and then Up_Held,
+             "as it was (the rule off): with a trunk two blocks thick standing there the herd is put on its top, "
+             & Img (Up.Z - Ground_M, 1) & " m up, where a deer cannot walk off");
+      Check (abs (Down.Z - Ground_M) < 0.01 and then Flat (Down, Up) > 1.0 and then Down_Free,
+             "with the rule that place is passed over for the next drawn: on the ground, " & Img (Flat (Down, Up), 1)
+             & " m from the trunk, where a deer can walk off");
+      Set_Walk_Off (True);
+   end;
+
    Put_Line ("the colony's own ground:");
    declare
       function Bushes_Known return Natural is
@@ -6079,8 +6438,8 @@ begin
             Ok2 : Boolean;
          begin
             Load (Again, Ok2);
-            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 25,
-                   "it saves as version 25 and loads back the same (" & Again'Length'Image & " bytes)");
+            Check (Ok2 and then Save = Again and then Natural (Again (0)) = 46,
+                   "it saves as version 46 and loads back the same (" & Again'Length'Image & " bytes)");
          end;
       end;
    end;
@@ -6279,13 +6638,23 @@ begin
                      Give_Back (Snap);
                      Hours := Saved_Hours;
                      Load (Data, Ok);
-                     Check (Ok and then Save = Data and then Natural (Data (0)) = 25 and then House_At (1).Phase = Framing,
+                     Check (Ok and then Save = Data and then Natural (Data (0)) = 46 and then House_At (1).Phase = Framing,
                             "a save taken with a log on its way to the frame loads back to the same" & Data'Length'Image
                             & " bytes");
                      declare
                         Older : Bytes := Data;
-                        Ok_18, Ok_19, Ok_20, Ok_21, Ok_22, Ok_23, Ok_24 : Boolean;
+                        Ok_18, Ok_19, Ok_20, Ok_21, Ok_22, Ok_23, Ok_24, Ok_25, Ok_26, Ok_27, Ok_28, Ok_29 : Boolean;
                      begin
+                        Older (0) := 29;       --  (and before the stockyard)
+                        Load (Older, Ok_29);
+                        Older (0) := 28;       --  (and before the playtest round of 2026-11-18)
+                        Load (Older, Ok_28);
+                        Older (0) := 27;       --  (and before the storehouse was used)
+                        Load (Older, Ok_27);
+                        Older (0) := 26;       --  (and before the storehouse: the stockpile's first pass)
+                        Load (Older, Ok_26);
+                        Older (0) := 25;       --  (and before the stockpile's first pass)
+                        Load (Older, Ok_25);
                         Older (0) := 24;       --  (and before the cart was pulled into a stockpile)
                         Load (Older, Ok_24);
                         Older (0) := 23;       --  (and before the fifth round: holes under a path filled)
@@ -6302,8 +6671,9 @@ begin
                         Load (Older, Ok_20);
                         Load (Data, Ok);
                         Check (not Ok_18 and then not Ok_19 and then not Ok_20 and then not Ok_21 and then not Ok_22
-                               and then not Ok_23 and then not Ok_24 and then Ok and then Save = Data,
-                               "a blob marked version 18 to 24 is refused");
+                               and then not Ok_23 and then not Ok_24 and then not Ok_25 and then not Ok_26
+                               and then not Ok_27 and then not Ok_28 and then not Ok_29 and then Ok and then Save = Data,
+                               "a blob marked version 18 to 29 is refused");
                      end;
                      Run (400);
                      Check (Save = A and then House_At (1).Placed = A_Placed and then A_Placed > V.Placed,
@@ -9694,8 +10064,10851 @@ begin
       Check (Offered and then (for all K in 1 .. M.N => M.Items (K).Todo.What /= Give_Job),
              "the ground's menu offers housing from there, corner to corner");
       M := Menu_For (The_Player, (Kind => A_Person, Index => 1, Point => (0.0, 0.0, 0.0)));
-      Check (M.N = 7 and then Job_Kind'Pos (Job_Kind'Last) = 5,
+      Check (M.N = 6 and then Job_Kind'Pos (Job_Kind'Last) = 5,
              "nobody can be made a builder: it is not a job to give, but a trade a forester takes up");
+   end;
+
+   ------------------------------------------------------------------ the stockpile's first pass
+   --  (John, 2026-11-17: thirteen arrive, at most four builders, a stockpile
+   --  at least 15 m by 15 m, five places of overflow round it and nobody
+   --  setting out with no room)
+   Put_Line ("at most four builders at once:");
+   for Capped in reverse Boolean loop
+      Set_Up (With_Bushes => False, With_Demand => True, With_Labour => True);
+      declare
+         Laid, Lots, Lots_West, Placed : Natural;
+         Most_Builders_Seen, Most_Begun : Natural := 0;
+      begin
+         Set_Builders (if Capped then Most_Builders else 0);
+         Build_Paths_Now;
+         Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+         Build_Paths_Now;
+         Zone_Housing (44.6, 22.0, 55.0, 56.0, Lots);
+         Zone_Housing (43.4, 22.0, 43.4, 56.0, Lots_West);
+         Supply (Wood, 160, Placed);
+         for I in 1 .. Members loop
+            Set_Job (I, Forester);
+         end loop;
+         for S in 1 .. 600 loop
+            Run (1);
+            declare
+               N : Natural := 0;
+            begin
+               for I in 1 .. Members loop
+                  if Site_Of (I) > 0 then
+                     N := N + 1;
+                  end if;
+               end loop;
+               Most_Builders_Seen := Natural'Max (Most_Builders_Seen, N);
+               Most_Begun := Natural'Max (Most_Begun, House_Count);
+            end;
+         end loop;
+         if Capped then
+            Check (Lots + Lots_West >= 6 and then Most_Builders_Seen = Most_Builders and then Most_Begun = Most_Builders,
+                   "six foresters, room for" & Natural'Image (Lots + Lots_West) & " hovels: never more than"
+                   & Most_Builders_Seen'Image & " builders, and" & Most_Begun'Image & " hovels begun");
+         else
+            Check (Most_Builders_Seen = 6 and then Most_Begun = 6,
+                   "with no limit (--builders 0), as before: six builders at six hovels ("
+                   & Most_Builders_Seen'Image & "," & Most_Begun'Image & ")");
+         end if;
+      end;
+   end loop;
+
+   Put_Line ("a stockpile at least 15 m by 15 m, and its overflow:");
+   Set_Up (With_Stockpile => False);
+   declare
+      Cells, Placed : Natural;
+      Z, Over_N, Ordinary : Natural := 0;
+      All_Out, All_Zone, All_Off_Path, All_Near, None_Filled : Boolean := True;
+      Where_Over : Ada.Strings.Unbounded.Unbounded_String;
+      function Has (S, Part : String) return Boolean is (Ada.Strings.Fixed.Index (S, Part) > 0);
+   begin
+      Set_Stockpile_Least (Stockpile_Least_M);
+      Set_Overflow (True);
+      Zone_Stockpile (21.0, 17.0, 35.0, 3.0, Cells);
+      Check (Cells = 0 and then Has (Stockpile_Refusal, "too small"),
+             "14 m by 14 m is refused: " & Stockpile_Refusal);
+      declare
+         P : constant Lot_Plan := Plan_Stockpile (21.0, 17.0, 36.0, 2.0);
+      begin
+         Zone_Stockpile (21.0, 17.0, 36.0, 2.0, Cells);
+         Z := Zone_Count;
+         for K in 1 .. Cell_Count loop
+            declare
+               C : constant Cell_View := Cell_At (K);
+            begin
+               if C.Overflow then
+                  Over_N := Over_N + 1;
+                  Ada.Strings.Unbounded.Append (Where_Over, " " & Img (C.Centre.X, 1) & "," & Img (C.Centre.Y, 1));
+                  All_Out := All_Out and then not (C.Centre.X in 21.0 .. 36.0 and then C.Centre.Y in 2.0 .. 17.0);
+                  All_Near := All_Near and then C.Centre.X in 20.0 .. 37.0 and then C.Centre.Y in 1.0 .. 18.0;
+                  All_Zone := All_Zone and then Zone_On (C.Centre.X, C.Centre.Y) = Z;
+                  All_Off_Path := All_Off_Path and then not On_Path (C.Centre.X, C.Centre.Y);
+               else
+                  Ordinary := Ordinary + 1;
+               end if;
+            end;
+         end loop;
+         Check (P.Ok and then P.Cells = Ordinary and then P.Overflow = Overflow_Places
+                and then Cells = Ordinary + Overflow_Places and then Ordinary in 215 .. 225 and then Over_N = Overflow_Places,
+                "15 m by 15 m is taken:" & Ordinary'Image & " places (the bushes on it left out), and" & Over_N'Image
+                & " for its overflow, as its plan said");
+      end;
+      Check (All_Out and then All_Near and then All_Zone and then All_Off_Path
+             and then Zone_At (Z).Cells = Ordinary and then Zone_At (Z).Overflow = Overflow_Places,
+             "its overflow places lie in the ring just outside it, on its ground, none on the path:"
+             & Ada.Strings.Unbounded.To_String (Where_Over));
+      Supply (Berries, 225 * Cell_Limit (Berries), Placed);
+      for K in 1 .. Cell_Count loop
+         None_Filled := None_Filled and then (not Cell_At (K).Overflow or else Cell_At (K).Count = 0);
+      end loop;
+      Check (Placed = Ordinary * Cell_Limit (Berries) and then None_Filled and then Zone_At (Z).In_Use = Ordinary
+             and then Zone_At (Z).Over_In_Use = 0,
+             "berries supplied fill the" & Ordinary'Image & " places and none of the overflow's");
+      Set_Job (1, Gatherer);
+      Run (60);
+      Check (Carried (1) = 0 and then Status (1) = "the stockpiles are full"
+             and then Flat (Where (1), Stake_P) <= 6.0,
+             "a gatherer with no room for a basketful does not set out, and waits about the stake (no camp yet): '"
+             & Status (1) & "', " & Img (Flat (Where (1), Stake_P), 1) & " m from it");
+   end;
+   --  A basket picked while there was room, and the room gone before it came
+   --  home: into the overflow, and nothing more brought in.  (John,
+   --  2026-11-17: "So the overflow, signals to the serfs, don't carry
+   --  anything else to the stockpile ... When space opens up in the
+   --  stockpile someone can move it from the overflow to the stockpile. And
+   --  then once a spot opens up at the stockpile, people can go back to
+   --  work.")
+   for Part in 1 .. 2 loop
+      Set_Up (With_Stockpile => False);
+      declare
+         Cells, Placed : Natural;
+         Picking : Boolean := False;
+         function Over_Held return Natural is
+            N : Natural := 0;
+         begin
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Overflow then
+                  N := N + Cell_At (K).Count;
+               end if;
+            end loop;
+            return N;
+         end Over_Held;
+         Before : Natural;
+      begin
+         Set_Stockpile_Least (Stockpile_Least_M);
+         Set_Overflow (True);
+         Zone_Stockpile (21.0, 17.0, 36.0, 2.0, Cells);
+         Set_Job (1, Gatherer);
+         for S in 1 .. 300 loop
+            Run (1);
+            Picking := Carried (1) > 0;
+            exit when Picking;
+         end loop;
+         Supply (Berries, 225 * Cell_Limit (Berries), Placed);
+         for S in 1 .. 600 loop
+            Run (1);
+            exit when Over_Held > 0 and then Carried (1) = 0;
+         end loop;
+         if Part = 1 then
+            Check (Picking and then Placed = Zone_At (Zone_Count).Cells * Cell_Limit (Berries) and then Over_Held > 0
+                   and then Carried (1) = 0 and then Store_Counts.Overflow_Loads = 1,
+                   "the stockpile filled while it picked: its basket goes to an overflow place (" & Over_Held'Image
+                   & " berries there)");
+            Run (60);
+            Check (Carried (1) = 0 and then Status (1) = "the stockpiles are full",
+                   "and it does not set out again: '" & Status (1) & "'");
+            --  the player zones more ground: a stockpile of three places by two
+            --  at the path's end (any size, for the check)
+            Set_Stockpile_Least (0.0);
+            Zone_Stockpile (37.0, 17.0, 40.0, 15.0, Cells);
+            declare
+               Z2 : constant Natural := Zone_Count;
+               Moved_Then : Boolean := False;
+               Back : Boolean := False;
+            begin
+               for S in 1 .. 600 loop
+                  Run (1);
+                  Moved_Then := Moved_Then or else (Over_Held = 0 and then Zone_At (Z2).Holds (Berries) > 0);
+                  Back := Moved_Then and then Carried (1) > 0 and then Ada.Strings.Fixed.Index (Status (1), "picking") > 0;
+                  exit when Back;
+               end loop;
+               Check (Zone_At (Z2).Cells = 6 and then Moved_Then and then Store_Counts.Overflow_Moves >= 1,
+                      "more ground zoned: the overflow is moved into it (" & Zone_At (Z2).Holds (Berries)'Image
+                      & " berries there,"  & Store_Counts.Overflow_Moves'Image & " loads moved)");
+               Check (Back, "and with the overflow empty and room in the stores, the gatherer goes back to work: '"
+                      & Status (1) & "'");
+            end;
+         else
+            --  what is eaten from the stores is taken from the overflow
+            --  first (nobody left to move it: the gatherer given no job)
+            Set_Job (1, Unassigned);
+            Set_Needs (True);
+            Before := Stored (Berries) - Over_Held;
+            --  (six get hungry at once: the first to set out has the overflow's
+            --  berries set aside for it, the others go on to the stockpile's own,
+            --  and who gets there first is the walk's: by the time the overflow is
+            --  empty the stockpile's own has lost the first round of meals, some
+            --  sixty berries each, where eaten last it would be all of them)
+            declare
+               Was : constant Natural := Over_Held;
+            begin
+               for S in 1 .. 4_000 loop
+                  Run (1);
+                  exit when Over_Held = 0;
+               end loop;
+               Check (Was > 0 and then Over_Held = 0 and then Stored (Berries) <= Before
+                      and then Before - Stored (Berries) < 2 * Members * Carry_Limit (Berries),
+                      "what is eaten from the stores is the overflow's first: its" & Was'Image & " berries gone in the"
+                      & " first meals, with" & Integer'Image (Before - Stored (Berries)) & " of the stockpile's own "
+                      & Before'Image & " eaten by then");
+            end;
+            declare
+               Data  : constant Bytes := Save;
+               Ok    : Boolean;
+               Flags : array (1 .. Cell_Count) of Boolean;
+            begin
+               for K in Flags'Range loop
+                  Flags (K) := Cell_At (K).Overflow;
+               end loop;
+               Load (Data, Ok);
+               declare
+                  Again : constant Bytes := Save;
+               begin
+                  Check (Ok and then Again = Data and then Overflow and then Stockpile_Least = Stockpile_Least_M
+                         and then Builders_Most = 0
+                         and then (for all K in Flags'Range => Cell_At (K).Overflow = Flags (K)),
+                         "saved and loaded: the same bytes, the overflow's places and the three rules as they were");
+               end;
+            end;
+         end if;
+      end;
+   end loop;
+
+   ------------------------------------------------------------------ the storehouse
+   --  (the stockpile's second pass: John, 2026-11-17, "On the second day,
+   --  the advisor asks ... the builders will build a stockhouse, compact the
+   --  land of the stockpile, build a fence with a gate, build coverings for
+   --  outside materials"; and his notes of the same day, after trying it:
+   --  "Keep stockpile, move storehouse to a new stockyard zone. Storehouse to
+   --  be built with doors at each end of the building, the fence is to be
+   --  placed around the stockyard with the gates extending from the
+   --  storehouse, inline with the inside wall of the storehouse to the
+   --  stockyard")
+   Put_Line ("the storehouse, on a stockyard, on the second morning:");
+   for On in reverse Boolean loop
+      Set_Up (With_Stockpile => False);
+      declare
+         use type Castle.Buildings.Building_Kind;
+         Cells, Pile, Placed : Natural;
+         Z : Natural;
+         function Has (S, Part : String) return Boolean is (Ada.Strings.Fixed.Index (S, Part) > 0);
+         function Closed_N (Of_Zone : Natural) return Natural is
+            N : Natural := 0;
+         begin
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Closed and then Zone_Of_Cell (K) = Of_Zone then
+                  N := N + 1;
+               end if;
+            end loop;
+            return N;
+         end Closed_N;
+         Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+      begin
+         Set_Storehouse (On);
+         Set_Demand_Chain (True);
+         Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Pile);        --  (the stockpile: north of the path, by the stake)
+         Zone_Stockyard (21.0, 17.0, 36.0, 2.0, Cells);        --  (the stockyard: south of it, 15 m by 15 m)
+         Z := Zone_Count;
+         Supply (Berries, 600, Placed);
+         Supply (Wood, 30, Placed);
+         Supply (Straw, 60, Placed);
+         Set_Job (3, Forester);
+         Check (Pile = 40 and then Cells = 225 and then Stockyard = Z and then Zone_At (Z).Yard
+                and then Zone_At (Z).Cells = 0 and then Closed_N (Z) = 225 and then Stored (Berries) = 600
+                and then Stockpile_Count = 1,
+                "a stockyard zoned, 15 m by 15 m beside the path: its" & Cells'Image
+                & " places closed until its storehouse stands (what is supplied goes into the stockpile)");
+         declare
+            More : Natural;
+         begin
+            Zone_Stockyard (40.0, 30.0, 56.0, 46.0, More);
+            Check (More = 0 and then Has (Stockyard_Refusal, "placed once"),
+                   "a second is refused: '" & Stockyard_Refusal & "'");
+         end;
+         while Hours < Morning - 0.2 loop
+            Run (60);
+         end loop;
+         if On then
+            Check (Storehouse = 0 and then Storehouse_Note = "",
+                   "before the second morning nothing is asked for");
+         end if;
+         while Hours < Morning + 0.5 loop
+            Run (10);
+         end loop;
+         if not On then
+            Check (Storehouse = 0 and then Storehouse_Note = "",
+                   "with the storehouse off (--no-storehouse) none is asked for, as before");
+         else
+            declare
+               V  : constant House_View := House_At (Storehouse);
+               Mid : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+            begin
+               Check (Storehouse > 0 and then V.Kind = Castle.Buildings.Storehouse and then V.Zone = Z
+                      and then V.Owner = 0 and then Has (Storehouse_Note, "on the stockyard")
+                      and then Storehouse_Note'Length <= Castle.Text.Max_Line   --  (a note is a Line: cut past it)
+                      and then Flat (V.Corner (1), V.Corner (2)) in 9.9 .. 10.1
+                      and then Flat (V.Corner (2), V.Corner (3)) in 4.9 .. 5.1
+                      and then abs (Mid.X - 28.5) <= 1.1 and then abs (Mid.Y - 10.0) <= 0.3,
+                      "on the second morning the storehouse is begun in the middle of the stockyard's front, 10 m"
+                      & " along the path and 5 m deep, 4.5 m of staging before it: '" & Storehouse_Note & "'");
+               Check (Closed_N (Z) = 225 and then Homeless = Members and then V.Phase = Ground,
+                      "the stockyard's places stay closed while it is built; it is nobody's home");
+            end;
+            declare
+               Is_Up : Boolean := False;
+            begin
+               for S in 1 .. 16_000 loop
+                  Run (1);
+                  Is_Up := House_At (Storehouse).Phase = Standing;
+                  exit when Is_Up;
+               end loop;
+               declare
+                  V : constant House_View := House_At (Storehouse);
+               begin
+                  Check (Is_Up and then V.Got (Wood) = V.Takes (Wood) and then V.Got (Straw) = V.Takes (Straw),
+                         "built as a hovel is, from the stores: its floor of plank, frame, walls and roof, then its"
+                         & " yard (" & Img (V.Takes (Wood)) & " logs, " & Img (V.Takes (Straw)) & " sheaves; standing by "
+                         & Img (Float (Hours - Morning) / 24.0, 1) & " days on)");
+               end;
+            end;
+            --  what stands: the floor, a door in each end, the fence and its two gateways, the coverings
+            declare
+               V  : constant House_View := House_At (Storehouse);
+               Mid : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+               X_Lo : constant Integer := B (Float'Min (V.Corner (1).X, V.Corner (3).X) + 0.05);   --  its end walls' columns
+               X_Hi : constant Integer := B (Float'Max (V.Corner (1).X, V.Corner (3).X) - 0.05);
+               Y_Back : constant Integer := B (Float'Min (V.Corner (1).Y, V.Corner (3).Y) + 0.05);  --  its back wall's row
+               Y_Front : constant Integer := B (Float'Max (V.Corner (1).Y, V.Corner (3).Y) - 0.05);
+               Fence_Logs, Cover_Thatch, Floor_Plank, Beaten : Natural := 0;
+               Door_L, Door_R, Gate_L, Gate_R, Lintel : Natural := 0;
+               Front_Shut : Boolean := True;
+            begin
+               for X in B (20.0) .. B (37.0) loop
+                  for Y in B (1.0) .. B (18.0) loop
+                     for Zr in Ground_Row - 1 .. Ground_Row + 12 loop
+                        case Get (X, Y, Zr) is
+                           when Log => Fence_Logs := Fence_Logs + 1;
+                           when Thatch => if Float (Y) * 0.25 < Mid.Y - 2.9 then Cover_Thatch := Cover_Thatch + 1; end if;
+                           when Plank => if Zr = Ground_Row - 1 then Floor_Plank := Floor_Plank + 1; end if;
+                           when Footpath => if Zr = Ground_Row - 1 then Beaten := Beaten + 1; end if;
+                           when others => null;
+                        end case;
+                     end loop;
+                  end loop;
+               end loop;
+               for Y in Y_Back .. Y_Front loop                   --  a door in each end, open from the floor up
+                  if Get (X_Lo, Y, Ground_Row) = Air and then Get (X_Lo, Y, Ground_Row + 7) = Air then
+                     Door_L := Door_L + 1;
+                  end if;
+                  if Get (X_Hi, Y, Ground_Row) = Air and then Get (X_Hi, Y, Ground_Row + 7) = Air then
+                     Door_R := Door_R + 1;
+                  end if;
+               end loop;
+               for X in X_Lo .. X_Hi loop                        --  and none in its front
+                  Front_Shut := Front_Shut and then Get (X, Y_Front, Ground_Row + 1) /= Air;
+               end loop;
+               for D in 1 .. 8 loop                              --  a gateway beside each end, in the line of its back wall
+                  if Get (X_Lo - D, Y_Back, Ground_Row) = Air and then Get (X_Lo - D, Y_Back, Ground_Row + 7) = Air then
+                     Gate_L := Gate_L + 1;
+                  end if;
+                  if Get (X_Hi + D, Y_Back, Ground_Row) = Air and then Get (X_Hi + D, Y_Back, Ground_Row + 7) = Air then
+                     Gate_R := Gate_R + 1;
+                  end if;
+                  if Get (X_Lo - D, Y_Back, Ground_Row + Castle.Buildings.Gate_Post_H_B) = Plank
+                    and then Get (X_Hi + D, Y_Back, Ground_Row + Castle.Buildings.Gate_Post_H_B) = Plank
+                  then
+                     Lintel := Lintel + 1;
+                  end if;
+               end loop;
+               Check (Floor_Plank >= 18 * 38 and then Door_L = 8 and then Door_R = 8 and then Front_Shut,
+                      "a floor of plank (" & Img (Floor_Plank) & " blocks), a door 2 m wide in each end ("
+                      & Img (Door_L) & " and " & Img (Door_R) & " columns open), none in its front");
+               Check (Beaten > 2_400 and then Fence_Logs > 400 and then Cover_Thatch >= 4 * 96,
+                      "the yard's ground beaten (" & Img (Beaten) & "), a fence round the yard behind it ("
+                      & Img (Fence_Logs) & " blocks of timber with the storehouse's frame), coverings of thatch along"
+                      & " the back (" & Img (Cover_Thatch) & ")");
+               Check (Gate_L = 8 and then Gate_R = 8 and then Lintel >= 7       --  (the eave's end is over the first)
+                      and then Get (X_Lo - 9, Y_Back, Ground_Row) = Log and then Get (X_Hi + 9, Y_Back, Ground_Row) = Log,
+                      "a gateway beside each end, from its corner out, in the line of its inside wall (" & Img (Gate_L)
+                      & " and " & Img (Gate_R) & " columns open, a plank across each:" & Lintel'Image
+                      & ", a post at each one's far side: " & Get (X_Lo - 9, Y_Back, Ground_Row)'Image & " "
+                      & Get (X_Hi + 9, Y_Back, Ground_Row)'Image & ")");
+               Check (Castle.Nav."=" (Castle.Nav.Plan (Stake_P, (Mid.X, 4.5, Ground_M)).Result, Castle.Nav.Found)
+                      and then Castle.Nav."=" (Castle.Nav.Plan (Stake_P, (Mid.X, Mid.Y, Ground_M)).Result, Castle.Nav.Found)
+                      and then Castle.Nav."=" (Castle.Nav.Plan ((Mid.X, Mid.Y, Ground_M), (Mid.X, 4.5, Ground_M)).Result,
+                                               Castle.Nav.Found),
+                      "from the stake into the yard through a gateway, into the storehouse by a door, and from inside"
+                      & " it to the yard");
+               --  no way over the fence: the yard is got into by the gateways alone
+               Set (X_Lo - 1, Y_Back, Ground_Row, Log);
+               Set (X_Hi + 1, Y_Back, Ground_Row, Log);
+               for D in 1 .. 8 loop
+                  for Up in 0 .. 3 loop
+                     Set (X_Lo - D, Y_Back, Ground_Row + Up, Log);
+                     Set (X_Hi + D, Y_Back, Ground_Row + Up, Log);
+                  end loop;
+               end loop;
+               Changed_World;
+               Check (not Castle.Nav."=" (Castle.Nav.Plan (Stake_P, (Mid.X, 4.5, Ground_M)).Result, Castle.Nav.Found),
+                      "(with both gateways walled up there is no way into the yard: the fence is whole)");
+               for D in 1 .. 8 loop
+                  for Up in 0 .. 3 loop
+                     Set (X_Lo - D, Y_Back, Ground_Row + Up, Air);
+                     Set (X_Hi + D, Y_Back, Ground_Row + Up, Air);
+                  end loop;
+               end loop;
+               Changed_World;
+            end;
+            --  the stores move in: the stockpile closed, and carried over
+            declare
+               Yard_Open, Pile_Open : Natural := 0;
+            begin
+               for K in 1 .. Cell_Count loop
+                  if not Cell_At (K).Closed then
+                     if Zone_Of_Cell (K) = Z then
+                        Yard_Open := Yard_Open + 1;
+                     else
+                        Pile_Open := Pile_Open + 1;
+                     end if;
+                  end if;
+               end loop;
+               Check (Stores_Moved and then Pile_Open = 0 and then Yard_Open = Zone_At (Z).Cells and then Yard_Open > 60,
+                      "standing, the stores move into the stockyard: the stockpile's places closed," & Yard_Open'Image
+                      & " of the stockyard's open");
+            end;
+            declare
+               Data  : constant Bytes := Save;
+               Ok    : Boolean;
+               V0    : constant House_View := House_At (Storehouse);
+               C0    : constant Natural := Closed_N (Z);
+            begin
+               Load (Data, Ok);
+               declare
+                  Again : constant Bytes := Save;
+                  V1    : constant House_View := House_At (Storehouse);
+               begin
+                  Check (Ok and then Again = Data and then Storehouse_On and then V1.Kind = V0.Kind
+                         and then V1.Corner = V0.Corner and then V1.Phase = Standing and then Closed_N (Z) = C0
+                         and then Zone_At (Z).Yard and then Stockyard = Z,
+                         "saved and loaded: the same bytes, the stockyard, the storehouse and its places as they were");
+               end;
+            end;
+         end if;
+      end;
+   end loop;
+
+   --  with no stockyard the request stands, asked again every game hour: one
+   --  zoned after it takes the storehouse at once
+   Put_Line ("the storehouse asked for with no stockyard:");
+   Set_Up (With_Stockpile => False);
+   declare
+      Cells   : Natural;
+      Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+      function Has (S, Part : String) return Boolean is (Ada.Strings.Fixed.Index (S, Part) > 0);
+   begin
+      Set_Storehouse (True);
+      Zone_Stockpile (21.0, 17.0, 36.0, 2.0, Cells);      --  (a stockpile, however large, takes none)
+      while Hours < Morning + 1.5 loop
+         Run (10);
+      end loop;
+      Check (Cells > 200 and then Zone_Count = 1 and then Storehouse = 0 and then Has (Storehouse_Note, "wants a stockyard")
+             and then Storehouse_Note'Length <= Castle.Text.Max_Line,
+             "a stockpile of 15 m by 15 m takes none, and the request stands: '" & Storehouse_Note & "'");
+      Zone_Stockyard (22.0, 18.0, 36.0, 32.0, Cells);
+      Check (Cells = 0 and then Has (Stockyard_Refusal, "too small"),
+             "a stockyard of 14 m by 14 m is refused: '" & Stockyard_Refusal & "'");
+      Zone_Stockyard (22.0, 18.0, 48.5, 34.0, Cells);
+      Check (Cells = 0 and then Has (Stockyard_Refusal, "too large"),
+             "and one 27 m long: '" & Stockyard_Refusal & "'");
+      Zone_Stockyard (22.0, 30.0, 38.0, 46.0, Cells);
+      Check (Cells = 0 and then Has (Stockyard_Refusal, "path"),
+             "and one off any path: '" & Stockyard_Refusal & "'");
+      Zone_Stockyard (22.0, 18.0, 38.0, 34.0, Cells);
+      Check (Cells = 256 and then Storehouse > 0 and then House_At (Storehouse).Zone = Zone_Count
+             and then Has (Storehouse_Note, "on the stockyard"),
+             "one of 16 m by 16 m zoned after the morning takes the storehouse at once: '" & Storehouse_Note & "'");
+   end;
+
+   --  the stockyard levelled, same as houses, and what stands on it cleared (John, 2026-11-17: "level
+   --  the stockyard, same as houses"; "Fell apple trees in the stockyard"): a hump, a hollow, a bush, a
+   --  boulder and an apple tree on it, the order to spare apple trees standing
+   Put_Line ("the stockyard levelled, and what stands on it cleared:");
+   for Level in reverse Boolean loop
+      Set_Up (With_Stockpile => False, With_Trees => True);
+      declare
+         Cells, Pile, Placed : Natural;
+         Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+         Apple_X : constant Integer := 122;       --  (The_Trees (3): 30.5 m, 15.5 m, in the stockyard's staging)
+         Apple_Y : constant Integer := 62;
+         function Top_Of (X, Y : Integer) return Integer is
+         begin
+            for Z in reverse Ground_Row - 4 .. Ground_Row + 6 loop
+               if Get (X, Y, Z) in Grass | Dirt | Footpath | Boulder | Fieldstone
+                 or else (Get (X, Y, Z) = Plank and then Z < Ground_Row)       --  (the storehouse's floor)
+               then
+                  return Z;
+               end if;
+            end loop;
+            return -1;
+         end Top_Of;
+         --  the stockyard's ground: how many columns are not at the meadow's level, and how many have
+         --  something of a tree, a bush or a boulder on or in them
+         procedure Scan (Uneven, Stood : out Natural) is
+         begin
+            Uneven := 0;
+            Stood := 0;
+            for X in B (21.0) .. B (36.0) - 1 loop
+               for Y in B (2.0) .. B (17.0) - 1 loop
+                  if Top_Of (X, Y) /= Ground_Row - 1 then
+                     Uneven := Uneven + 1;
+                  end if;
+                  for Z in Ground_Row - 2 .. Ground_Row + 30 loop
+                     if Get (X, Y, Z) in Berry_Bush | Bare_Bush | Boulder | Leaves | Apple_Leaves
+                       or else (Get (X, Y, Z) = Log and then X in Apple_X .. Apple_X and then Y in Apple_Y .. Apple_Y)
+                     then
+                        Stood := Stood + 1;
+                     end if;
+                  end loop;
+               end loop;
+            end loop;
+         end Scan;
+         Uneven, Stood_N : Natural;
+         Felled_0 : Natural;
+      begin
+         Set_Storehouse (True);
+         Set_Yard_Level (Level);
+         Set_Demand_Chain (True);
+         Fill (30.0, 4.0, 33.0, 7.0, Ground_Row - 1, Ground_Row, Dirt);        --  a hump half a metre high, turfed
+         Fill (30.0, 4.0, 33.0, 7.0, Ground_Row + 1, Ground_Row + 1, Grass);
+         Fill (24.0, 5.0, 25.0, 6.0, Ground_Row - 1, Ground_Row - 1, Air);     --  a hollow a block deep
+         Fill (24.0, 5.0, 25.0, 6.0, Ground_Row - 2, Ground_Row - 2, Grass);
+         Put_Bush (27.5, 4.5);
+         Fill (33.5, 4.0, 34.5, 5.0, Ground_Row, Ground_Row + 2, Boulder);     --  a boulder a metre across
+         Changed_World;
+         Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Pile);
+         Zone_Stockyard (21.0, 17.0, 36.0, 2.0, Cells);
+         Index_All;
+         Supply (Wood, 60, Placed);
+         Supply (Straw, 80, Placed);
+         Supply (Stone, 40, Placed);
+         Set_Job (3, Forester);
+         Felled_0 := Trees_Felled;
+         if Level then
+            Check (Cells = 225 and then Protect_Apples,
+                   "a stockyard zoned over a hump, a hollow, a bush, a boulder and an apple tree: all" & Cells'Image
+                   & " of its places taken (the apple trees are spared by order)");
+         else
+            Check (Cells in 150 .. 224,
+                   "(with --no-yard-level what stands on it leaves its places out, as a stockpile's:" & Cells'Image & ")");
+         end if;
+         while Hours < Morning + 0.5 loop
+            Run (60);
+         end loop;
+         for S in 1 .. 20_000 loop
+            Run (1);
+            exit when Storehouse > 0 and then House_At (Storehouse).Phase = Standing;
+         end loop;
+         Scan (Uneven, Stood_N);
+         if Level then
+            Check (Storehouse > 0 and then House_At (Storehouse).Phase = Standing and then Uneven = 0 and then Stood_N = 0,
+                   "its storehouse standing, all its ground is at one level (" & Uneven'Image & " columns off it) and"
+                   & " nothing is left of the hump, the hollow, the bush, the boulder or the tree (" & Stood_N'Image
+                   & " blocks)");
+            Check (Trees_Felled = Felled_0 + 1 and then Get (Apple_X, Apple_Y, Ground_Row + 1) /= Log,
+                   "the apple tree on it was felled by its builder, the order to spare apple trees standing ("
+                   & Img (Trees_Felled - Felled_0) & " tree felled in all)");
+            declare
+               V   : constant House_View := House_At (Storehouse);
+               Mid : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+            begin
+               Check (Castle.Nav."=" (Castle.Nav.Plan (Stake_P, (Mid.X, 4.5, Ground_M)).Result, Castle.Nav.Found)
+                      and then Castle.Nav."=" (Castle.Nav.Plan ((31.5, 5.5, Ground_M), Stake_P).Result, Castle.Nav.Found)
+                      and then Castle.Nav."=" (Castle.Nav.Plan ((24.5, 5.5, Ground_M), Stake_P).Result, Castle.Nav.Found),
+                      "a way into the yard, and back to the stake from where the hump and the hollow were");
+            end;
+         else
+            Check (Storehouse > 0 and then House_At (Storehouse).Phase = Standing and then Uneven > 100
+                   and then Stood_N > 50 and then Get (Apple_X, Apple_Y, Ground_Row + 1) = Log,
+                   "(and its storehouse stands in a yard as it lies:" & Uneven'Image & " columns off the level,"
+                   & Stood_N'Image & " blocks of bush, boulder and tree, the apple tree standing)");
+         end if;
+      end;
+   end loop;
+
+   --  beside a path aslant (John: "The newstockyard zone will make it easier to build the storehouse on
+   --  angled paths"): the lot square to the grid, a corner of it by the path, the ground between its
+   --  front and the path its staging
+   Put_Line ("a stockyard beside a path aslant:");
+   Set_Up (With_Stockpile => False, With_Bushes => False);
+   declare
+      Cells, Pile, Placed, Laid : Natural;
+      Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+   begin
+      Set_Storehouse (True);
+      Set_Demand_Chain (True);
+      Lay_Path ((20.0, 40.0, Ground_M), (40.0, 52.0, Ground_M), Laid);      --  (31 degrees off the grid)
+      Build_Paths_Now;
+      Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Pile);
+      Zone_Stockyard (24.0, 41.0, 39.0, 26.0, Cells);
+      Supply (Wood, 60, Placed);
+      Supply (Straw, 80, Placed);
+      Supply (Stone, 40, Placed);
+      Set_Job (3, Forester);
+      Check (Laid > 0 and then Cells = 225 and then abs (Zone_At (Stockyard).Turn) < 0.001
+             and then Zone_On (38.5, 45.0) = Stockyard and then Zone_On (25.0, 45.5) = 0,
+             "zoned with a corner by the path: its lot square to the grid (225 places), the ground between its"
+             & " front and the path its own, none of it across the path");
+      while Hours < Morning + 0.5 loop
+         Run (60);
+      end loop;
+      Check (Storehouse > 0 and then House_At (Storehouse).Way > Castle.Buildings.Store_Yard_B,
+             "the storehouse is begun on it: the way in from the path to the middle of its front is "
+             & (if Storehouse > 0 then Img (Float (House_At (Storehouse).Way) * 0.25, 1) else "?") & " m");
+      for S in 1 .. 24_000 loop
+         Run (1);
+         exit when Storehouse > 0 and then House_At (Storehouse).Phase = Standing;
+      end loop;
+      declare
+         V   : constant House_View := House_At (Storehouse);
+         Mid : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+      begin
+         Check (V.Phase = Standing
+                and then Castle.Nav."=" (Castle.Nav.Plan (Stake_P, (Mid.X, Mid.Y, Ground_M)).Result, Castle.Nav.Found)
+                and then Castle.Nav."=" (Castle.Nav.Plan (Stake_P, (Mid.X, 28.5, Ground_M)).Result, Castle.Nav.Found),
+                "and stands, " & Img (Float (Hours - Morning) / 24.0, 1) & " days on: a way from the stake into it"
+                & " and into its yard");
+      end;
+   end;
+
+   --  and up a hillside, beside a path aslant: its ground is cut and walled, its staging's far corner
+   --  well under the path, and its builder has a way back to the stake all the while.  (This made-up
+   --  hillside does not catch the pit that was found on the reference site on 2026-11-18, where a
+   --  stockyard dug by rows from the path, as a hovel's yard is, left its builder to starve in the
+   --  corner dug first: tools/stockyard_sites.sh runs those two sites and fails on anyone starving.)
+   Put_Line ("a stockyard up a hillside, beside a path aslant:");
+   Reset;
+   Set_Beds (False);
+   Castle.Herds.Set_Scatter (True);
+   Set_Labour (False);
+   Set_Needs (False);
+   Set_Skills (False);
+   Set_Demand_Chain (True);
+   Set_Storehouse (True);
+   Meadow;
+   for X in B (22.0) .. B (48.0) loop                  --  the ground rising eastward, and the more the further north
+      for Y in B (0.0) .. B (63.0) loop                --  (as on the reference site: the yard falls away from its path)
+         declare
+            Up : constant Integer :=
+              Integer'Min (22, Integer (Float (X - B (22.0)) / 14.0 * (1.0 + Float (Integer'Max (0, Y - B (24.0))) / 48.0)));
+         begin
+            for Z in Ground_Row - 1 .. Ground_Row - 2 + Up loop
+               Set (X, Y, Z, Dirt);
+            end loop;
+            if Up > 0 then
+               Set (X, Y, Ground_Row - 1 + Up, Grass);
+            end if;
+         end;
+      end loop;
+   end loop;
+   Hours := 16.0 * 24.0;
+   Place_Stake (Stake_P, 6, 42);
+   declare
+      Cells, Pile, Placed, Laid : Natural;
+      Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+      No_Way, Looked : Natural := 0;
+   begin
+      Lay_Path ((20.5, 17.5, Ground_M), (40.0, 17.5, Ground_M), Laid);
+      Lay_Path ((20.5, 17.5, Ground_M), (20.5, 40.0, Ground_M), Laid);
+      Lay_Path ((20.5, 40.0, Ground_M), (40.0, 52.0, Ground_M + 3.0), Laid);
+      Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Pile);
+      Zone_Stockyard (24.0, 41.0, 39.0, 26.0, Cells);
+      Index_All;
+      Supply (Wood, 80, Placed);
+      Supply (Straw, 80, Placed);
+      Supply (Stone, 200, Placed);
+      Set_Job (3, Forester);
+      Check (Laid > 0 and then Cells = 225, "zoned on ground that falls nearly 3 m across it:" & Cells'Image & " places");
+      while Hours < Morning + 0.5 loop
+         Run (60);
+      end loop;
+      for S in 1 .. 40_000 loop
+         Run (1);
+         exit when Storehouse > 0 and then House_At (Storehouse).Phase = Standing;
+         if S mod 20 = 0 and then Storehouse > 0 and then Site_Of (3) = Storehouse then
+            Looked := Looked + 1;
+            if not Castle.Nav."=" (Castle.Nav.Plan (Where (3), Stake_P).Result, Castle.Nav.Found) then
+               No_Way := No_Way + 1;
+            end if;
+         end if;
+      end loop;
+      Check (Storehouse > 0 and then House_At (Storehouse).Phase = Standing and then No_Way = 0 and then Looked > 100,
+             "its storehouse stands " & Img (Float (Hours - Morning) / 24.0, 1) & " days on, and its builder had a way"
+             & " back to the stake at every look (" & Img (Looked) & " looks," & No_Way'Image & " without one; "
+             & (if Storehouse > 0 then Img (House_At (Storehouse).Got (Stone)) else "?") & " stones of wall)");
+   end;
+
+   --  the largest stockyard's blueprint fits what a blueprint may hold
+   declare
+      G : Castle.Buildings.House := Castle.Buildings.Storehouse_Design;
+      N : Natural := 0;
+      procedure Count (Bx, By, Bz : Integer; M : Material; S : Castle.Buildings.Stage; State : Natural) is
+         pragma Unreferenced (Bx, By, Bz, S, State);
+      begin
+         if M /= Air then
+            N := N + 1;
+         end if;
+      end Count;
+      procedure Draw is new Castle.Buildings.Blueprint (Count);
+      Most : constant Integer := Integer (Stockyard_Most_M) * 4;
+   begin
+      G.Yard_U0 := -(Most - G.W) / 2;
+      G.Yard_U1 := G.Yard_U0 + Most - 1;
+      G.Yard_V0 := -Castle.Buildings.Store_Yard_B;
+      G.Yard_V1 := G.Yard_V0 + Most - 1;
+      G.Covers := Natural'Min (Castle.Buildings.Max_Covers, (Most - 8) / Castle.Buildings.Cover_W_B);
+      for K in 1 .. G.Covers loop
+         G.Cover_U (K) := G.Yard_U0 + 4 + (K - 1) * Castle.Buildings.Cover_W_B;
+      end loop;
+      G.Pad := Ground_Row;
+      Draw (G);
+      Check (N < Max_House_Blocks,
+             "the largest stockyard's blueprint (" & Img (Integer (Stockyard_Most_M)) & " m a side) is" & N'Image
+             & " blocks, within the" & Integer'Image (Max_House_Blocks) & " a blueprint may be");
+   end;
+
+   ------------------------------------------------------------------ the storehouse used
+   --  (the stockpile's third pass: John, 2026-11-17, "When the stockhouse is
+   --  completed, we upgrade a serf to manage the stockhouse ... a carpenter
+   --  will also come about from the builders ... A carpenter will build
+   --  barrels and shelves in the storehouse, the stockman will pack the
+   --  barrels with meat and salt, porters can also begin bringing water to
+   --  stockhouse", and "they can just be stacked in the baskets in the
+   --  storehouse by the stockman")
+   Put_Line ("the storehouse used: its stockman, its carpenter, water:");
+   for On in reverse Boolean loop
+      Set_Up (With_Stockpile => False, With_Porter_Ground => True, With_Curing => True);
+      declare
+         Cells, Placed : Natural;
+         Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+         type Count_Of is array (Fitting) of Natural;
+         function Places return Count_Of is
+            N : Count_Of := [others => 0];
+         begin
+            for K in 1 .. Cell_Count loop
+               if not Cell_At (K).Closed then
+                  N (Cell_At (K).Fit) := N (Cell_At (K).Fit) + 1;
+               end if;
+            end loop;
+            return N;
+         end Places;
+         function Made_N return Natural is
+            N : Natural := 0;
+         begin
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Fit in Shelf | Meat_Barrel | Water_Barrel and then Cell_At (K).Made
+                 and then not Cell_At (K).Closed
+               then
+                  N := N + 1;
+               end if;
+            end loop;
+            return N;
+         end Made_N;
+         --  what lies in places fitted out as F
+         function Held (F : Fitting; K : Item_Kind) return Natural is
+            N : Natural := 0;
+         begin
+            for C in 1 .. Cell_Count loop
+               if Cell_At (C).Fit = F and then Cell_At (C).Kind = K then
+                  N := N + Cell_At (C).Count;
+               end if;
+            end loop;
+            return N;
+         end Held;
+         --  everything in a place it may be in: water only in a water barrel, a
+         --  place fitted out holding only what it is for
+         function All_In_Place return Boolean is
+         begin
+            for C in 1 .. Cell_Count loop
+               declare
+                  V : constant Cell_View := Cell_At (C);
+               begin
+                  if V.Count > 0
+                    and then ((V.Kind = Water and then V.Fit /= Water_Barrel)
+                              or else (V.Fit = Floor and then V.Kind not in Berries | Apples | Vegetables | Grain | Salt)
+                              or else (V.Fit = Shelf and then V.Kind /= Hide)
+                              or else (V.Fit = Meat_Barrel and then V.Kind /= Meat)
+                              or else (V.Fit = Water_Barrel and then V.Kind /= Water)
+                              or else (V.Fit = Cover and then V.Kind not in Wood | Straw | Stone)
+                              or else (V.Fit = Lean and then V.Kind /= Ladder))
+                  then
+                     return False;
+                  end if;
+               end;
+            end loop;
+            return True;
+         end All_In_Place;
+      begin
+         Set_Storehouse (True);
+         Set_Stockman (On);
+         Set_Carpenter (On);
+         Set_Water (On);
+         Set_Demand_Chain (True);
+         Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Cells);       --  (the stockpile, north of the path)
+         Zone_Stockyard (21.0, 17.0, 36.0, 2.0, Cells);        --  (the stockyard, south of it)
+         Supply (Wood, 60, Placed);
+         Supply (Straw, 80, Placed);
+         Set_Job (3, Forester);
+         Set_Job (4, Porter);
+         Set_Job (5, Porter);
+         Set_Skill (5, Portering, 0.9);      --  (the stockman-to-be: the most portering)
+         while Hours < Morning + 0.5 loop
+            Run (60);
+         end loop;
+         for S in 1 .. 12_000 loop
+            Run (1);
+            exit when Storehouse > 0 and then House_At (Storehouse).Phase = Standing;
+         end loop;
+         Run (2);
+         declare
+            P : constant Count_Of := Places;
+         begin
+            Check (Storehouse > 0 and then House_At (Storehouse).Phase = Standing
+                   and then P (Floor) >= 12 and then P (Shelf) = 2 * Shelf_Places
+                   and then P (Meat_Barrel) + P (Water_Barrel) = 8 and then P (Water_Barrel) = Water_Barrels
+                   and then P (Cover) >= 6 and then P (Lean) >= 4 and then Made_N = 0,
+                   "standing, its places fitted out: " & Img (P (Floor)) & " floor, " & Img (P (Shelf)) & " shelves, "
+                   & Img (P (Meat_Barrel)) & " barrels for meat and " & Img (P (Water_Barrel)) & " for water (none made"
+                   & " yet), " & Img (P (Cover)) & " under the coverings, " & Img (P (Lean)) & " against the wall");
+         end;
+         if On then
+            Check (Stockman = 5 and then Trade_Of (5) = As_Stockman and then Carpenter = 3
+                   and then Trade_Of (3) = As_Carpenter and then Site_Of (3) = 0,
+                   "its stockman the porter with the most portering, its carpenter the one forester there is");
+            --  by skill, like the others (John, 2026-11-19): with two foresters free, the better at carpentry
+            declare
+               Snap : Snapshot;
+               Saved_Hours : constant Long_Float := Hours;
+               Data : constant Bytes := Save;
+               Ok   : Boolean;
+            begin
+               Take (Snap);
+               Set_Job (3, Gatherer);              --  (the carpenter leaves the trade: nobody's, for a moment)
+               Run (2);
+               Set_Job (2, Forester);
+               Set_Job (3, Forester);
+               Set_Skill (2, Carpentry, 0.9);
+               Set_Skill (3, Carpentry, 0.2);
+               Run (2);
+               Check (Carpenter = 2 and then Trade_Of (2) = As_Carpenter and then Trade_Of (3) /= As_Carpenter,
+                      "of two foresters free for it the carpenter is the one better at carpentry, not the one who raised"
+                      & " the storehouse (" & Name_Of (Carpenter) & ")");
+               Give_Back (Snap);
+               Hours := Saved_Hours;
+               Load (Data, Ok);
+               Check (Ok and then Carpenter = 3, "(and the colony put back as it was)");
+            end;
+            --  his word of 2026-11-22 ("yes add the cook and the stockman and carpenter"): the three on a
+            --  person's menu for development, and the stockman and the carpenter named by hand
+            declare
+               use Castle.Actions;
+               Snap : Snapshot;
+               Saved_Hours : constant Long_Float := Hours;
+               Data : constant Bytes := Save;
+               Ok   : Boolean;
+               R    : Result;
+               Men  : Menu;
+               function Offers (M : Menu; A : Action) return Boolean is
+                 (for some K in 1 .. M.N => M.Items (K).Todo.What = A);
+               function Offers_Job (M : Menu; J : Job_Kind) return Boolean is
+                 (for some K in 1 .. M.N => M.Items (K).Todo.What = Give_Job and then M.Items (K).Todo.Job = J);
+               function Marked (M : Menu; A : Action) return Boolean is
+                 (for some K in 1 .. M.N => M.Items (K).Todo.What = A and then M.Items (K).Is_Now);
+            begin
+               Take (Snap);
+               Castle.Actions.Dev_Jobs := True;
+               Men := Menu_For (The_Player, (A_Person, 4, (0.0, 0.0, 0.0)));
+               Check (Offers_Job (Men, Cook) and then Offers (Men, Make_Builder) and then Offers (Men, Make_Stockman)
+                      and then Offers (Men, Make_Carpenter) and then not Marked (Men, Make_Stockman)
+                      and then not Marked (Men, Make_Carpenter),
+                      "for development a person's menu offers Cook, Builder, Stockman and Carpenter (John, 2026-11-22)");
+               Men := Menu_For (The_Player, (A_Person, 5, (0.0, 0.0, 0.0)));
+               Check (Marked (Men, Make_Stockman)
+                      and then (for all K in 1 .. Men.N =>
+                                  Men.Items (K).Todo.What /= Give_Job or else not Men.Items (K).Is_Now),
+                      "on the stockman's own menu Stockman is the row marked, not Porter");
+               Perform ((What => Make_Stockman, By => The_Player, Whom => 4, Job => Porter), R);
+               Run (2);
+               Check (R.Done and then Stockman = 4 and then Trade_Of (4) = As_Stockman and then Trade_Of (5) = No_Trade
+                      and then Skill_Of (4, Portering) < Skill_Of (5, Portering),
+                      "named by hand, the porter with the less portering is the stockman, and stays so");
+               Perform ((What => Make_Carpenter, By => The_Player, Whom => 2, Job => Forester), R);
+               Run (2);
+               Check (R.Done and then Job_Of (2) = Forester and then Carpenter = 2 and then Trade_Of (2) = As_Carpenter
+                      and then Trade_Of (3) /= As_Carpenter and then Castle.Views.Job_Label (2) = "Carpenter",
+                      "one named the carpenter is a forester and the carpenter, in the place of the one chosen by skill");
+               Perform ((What => Give_Job, By => The_Player, Whom => 4, Job => Gatherer), R);
+               Run (2);
+               Check (Stockman = 5, "given other work it is the stockman no more: the next is chosen by skill");
+               Castle.Actions.Dev_Jobs := False;
+               Men := Menu_For (The_Player, (A_Person, 4, (0.0, 0.0, 0.0)));
+               Check (not Offers_Job (Men, Cook) and then not Offers (Men, Make_Builder)
+                      and then not Offers (Men, Make_Stockman) and then not Offers (Men, Make_Carpenter)
+                      and then Offers_Job (Men, Unassigned) and then Offers_Job (Men, Gatherer)
+                      and then Offers_Job (Men, Forester) and then Offers_Job (Men, Hunter) and then Offers_Job (Men, Porter),
+                      "with the development entries off the menu gives the opening jobs alone: no Cook");
+               Perform ((What => Give_Job, By => The_Player, Whom => 4, Job => Cook), R);
+               Check (R.Done and then Job_Of (4) = Cook,
+                      "(an order to give the cook's job is carried out all the same: the scripts' way)");
+               Give_Back (Snap);
+               Hours := Saved_Hours;
+               Load (Data, Ok);
+               Check (Ok and then Stockman = 5 and then Carpenter = 3, "(and the colony put back as it was)");
+            end;
+            Check (Castle.Views.Job_Label (5) = "Stockman" and then Castle.Views.Job_Label (3) = "Carpenter"
+                   and then Castle.Views.Job_Label (4) = "Porter" and then Job_Of (5) = Porter and then Job_Of (3) = Forester,
+                   "and the band's list calls them so (their jobs still a porter's and a forester's)");
+            Supply (Berries, 200, Placed);   --  (into the yard: the places inside are fitted out)
+            Supply (Hide, 6, Placed);
+            Supply (Meat, 120, Placed);
+            Supply (Stone, 20, Placed);
+            Supply (Ladder, 2, Placed);
+            declare
+               Wood_0 : constant Natural := Stored (Wood);
+               Salt_0 : constant Natural := Cart.Salt;
+               All_Made_At : Natural := 0;
+            begin
+               for S in 1 .. 6_000 loop
+                  Run (1);
+                  if All_Made_At = 0 and then Made_N = 14 then
+                     All_Made_At := S;
+                  end if;
+                  exit when All_Made_At > 0 and then Cart.Salt = 0 and then Held (Water_Barrel, Water) > 0
+                    and then Held (Meat_Barrel, Meat) > 0 and then Held (Shelf, Hide) > 0
+                    and then Held (Cover, Wood) > 0;
+               end loop;
+               Check (All_Made_At > 0 and then Stored (Wood) <= Wood_0 - 14 + 40,
+                      "the carpenter makes its 6 shelves and 8 barrels, a log each, in"
+                      & Img (Float (All_Made_At) / 60.0, 1) & " game hours");
+               Check (Cart_At_Storehouse and then Cart.Salt = 0 and then Held (Floor, Salt) >= Salt_0,
+                      "the stockman brings the lord's cart to the storehouse's front and carries its"
+                      & Img (Salt_0) & " lb of salt in");
+               Check (Held (Shelf, Hide) > 0 and then Held (Meat_Barrel, Meat) > 0 and then Held (Floor, Berries) > 0
+                      and then Held (Cover, Wood) + Held (Cover, Straw) + Held (Cover, Stone) > 0
+                      and then Held (Lean, Ladder) > 0,
+                      "and sorts the yard: hides on the shelves (" & Img (Held (Shelf, Hide)) & "), meat in the barrels ("
+                      & Img (Held (Meat_Barrel, Meat)) & " lb), berries in their baskets inside ("
+                      & Img (Held (Floor, Berries)) & "), wood, straw and stone under the coverings ("
+                      & Img (Held (Cover, Wood) + Held (Cover, Straw) + Held (Cover, Stone)) & "), ladders against the wall");
+               Check (Held (Water_Barrel, Water) > 0 and then Water_Left > 0,
+                      "porters bring water from the pond to the water barrels (" & Img (Held (Water_Barrel, Water))
+                      & " pails), the pond as it was");
+               Check (All_In_Place, "everything where it may be: water only in its barrels, a place fitted out holding"
+                      & " only what it is for");
+               declare
+                  function In_Pile return Natural is
+                     N : Natural := 0;
+                  begin
+                     for C in 1 .. Cell_Count loop
+                        if Zone_Of_Cell (C) /= Stockyard then
+                           N := N + Cell_At (C).Count;
+                        end if;
+                     end loop;
+                     return N;
+                  end In_Pile;
+               begin
+                  for S in 1 .. 3_000 loop
+                     exit when In_Pile = 0;
+                     Run (1);
+                  end loop;
+                  Check (In_Pile = 0 and then Stores_Moved,
+                         "and what lay in the stockpile has been carried over into the stockyard: nothing is left in it");
+               end;
+            end;
+         else
+            Supply (Hide, 6, Placed);
+            Run (3_000);
+            Check (Stockman = 0 and then Carpenter = 0 and then Made_N = 0 and then Held (Water_Barrel, Water) = 0
+                   and then Held (Floor, Salt) = 0 and then Held (Shelf, Hide) = 0 and then Cart.Salt > 0,
+                   "with --no-stockman --no-carpenter --no-water nobody is either, nothing is made, sorted or fetched"
+                   & " (what lay in the yard's places before they were fitted out lies there still)");
+         end if;
+         declare
+            Data : constant Bytes := Save;
+            Ok   : Boolean;
+         begin
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Stockman_On = On and then Carpenter_On = On and then Water_On = On,
+                   "saved and loaded: the same bytes");
+         end;
+      end;
+   end loop;
+
+   ------------------------------------------------------------------ the playtest round of 2026-11-18
+   --  (John's notes of 2026-11-17: what he found trying the storehouse, each fault made as he met it)
+   Put_Line ("the playtest round: why a hunter lets the deer be:");
+   Set_Up;
+   Set_Job (1, Hunter);
+   Set_Reserve (Meat, 10_000);                       --  (meat is always short: it hunts while it may)
+   declare
+      function Says (I : Positive; Part : String) return Boolean is
+        (Ada.Strings.Fixed.Index (Status (I), Part) > 0);
+      Said : Boolean := False;
+      Near : Natural := 0;
+      Largest : Natural := 0;
+   begin
+      for S in 1 .. 6_000 loop
+         Run (1);
+         if Says (1, "left to breed") then
+            Said := True;
+            exit;
+         end if;
+      end loop;
+      for H in 1 .. Castle.Herds.Herd_Count loop
+         Largest := Natural'Max (Largest, Castle.Herds.In_Herd (H));
+      end loop;
+      for K in 1 .. Castle.Herds.Deer_Slots loop
+         if Castle.Herds.Alive (K) and then Flat (Castle.Herds.Where (K), Stake) <= Castle.Herds.Range_M then
+            Near := Near + 1;
+         end if;
+      end loop;
+      Check (Said and then Largest <= Spare_Last and then Near > 0,
+             "with every herd down to" & Spare_Last'Image & " and" & Near'Image & " deer still in reach it says why: '"
+             & Status (1) & "' (it said 'no deer to hunt in reach')");
+      declare
+         Row : Boolean := False;
+      begin
+         for K in 1 .. Castle.Herds.Deer_Slots loop
+            if Castle.Herds.Alive (K) and then Castle.Herds.Herd_Of (K) > 0 then
+               Row := Row or else Castle.Views.Value_Of (Castle.Views.Deer (K), "Hunted") /= "";
+            end if;
+         end loop;
+         Check (Row, "and a deer of such a herd says so on its sheet: 'Hunted: "
+                & (if Castle.Herds.Deer_Slots > 0 then "not ...'" else "'"));
+      end;
+   end;
+
+   Put_Line ("the playtest round: housing pulled past the end of its path:");
+   Set_Up (With_Stockpile => False, With_Bushes => False);
+   declare
+      Lots : Natural;
+   begin
+      Zone_Housing (30.0, 19.0, 48.0, 19.0, Lots);
+      Check (Zone_On (35.0, 18.6) /= 0 and then Zone_On (41.0, 18.6) /= 0,
+             "it is taken beside the path and for the seven blocks past its end");
+      Check (Zone_On (40.9, 17.85) = 0 and then Zone_On (41.2, 17.6) = 0 and then Zone_On (40.8, 17.3) = 0,
+             "and past the end it begins at the line of the path's edge: none of it round the end of the path");
+   end;
+
+   Put_Line ("the playtest round: grass in the air:");
+   for Top in Boolean loop
+      declare
+         Cells, Laid, Placed : Natural;
+         function Floating return Natural is
+            N : Natural := 0;
+         begin
+            for X in 0 .. W_B - 1 loop
+               for Y in 0 .. W_B - 1 loop
+                  for Z in Ground_Row .. Ground_Row + 4 loop
+                     if Get (X, Y, Z) in Tall_Grass | Wild_Grain | Wild_Vegetables and then Get (X, Y, Z - 1) = Air then
+                        N := N + 1;
+                     end if;
+                  end loop;
+               end loop;
+            end loop;
+            return N;
+         end Floating;
+         After_Zoning, After_Path : Natural;
+      begin
+         Reset;
+         Set_Beds (False);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Top_Cut (Top);
+         Meadow;
+         for X in B (20.0) .. B (42.0) loop          --  long grass two blocks high: where the stockpile and
+            for Y in B (12.0) .. B (30.0) loop       --  the path go, and north of them for the porter
+               if (X + Y) mod 2 = 0 then
+                  Set (X, Y, Ground_Row, Tall_Grass);
+                  Set (X, Y, Ground_Row + 1, Tall_Grass);
+               end if;
+            end loop;
+         end loop;
+         Hours := 16.0 * 24.0;
+         Place_Stake ((16.0, 20.0, Ground_M), 6, 42);
+         Lay_Path ((20.5, 17.5, Ground_M), (40.0, 17.5, Ground_M), Laid);
+         After_Path := Floating;
+         Zone_Stockpile (21.0, 13.0, 31.0, 17.0, Cells);
+         After_Zoning := Floating;
+         Index_All;
+         if Top then
+            Check (Laid > 0 and then After_Path = 0,
+                   "a path laid through long grass two blocks high leaves none of it standing on air");
+            Check (Cells = 40 and then After_Zoning = 0,
+                   "nor does a stockpile zoned on it: its" & Cells'Image & " places are cleared of the whole of each tuft");
+         end if;
+         Set_Job (1, Porter);
+         Set_Reserve (Straw, 30);
+         Supply (Stone, 20, Placed);                 --  (the quota of stone met: straw alone is cut)
+         for S in 1 .. 900 loop
+            Run (1);
+            exit when Stored (Straw) >= 30;
+         end loop;
+         if Top then
+            Check (Stored (Straw) >= 12 and then Floating = 0,
+                   "a porter cuts" & Stored (Straw)'Image & " sheaves of it from the top of each tuft: none left on air");
+         else
+            Check (Stored (Straw) >= 12 and then Floating > 0,
+                   "(with --no-top-cut it cuts the block it found:" & Floating'Image
+                   & " upper blocks left on air, as they were)");
+         end if;
+      end;
+   end loop;
+
+   Put_Line ("the playtest round: a bush takes as many pickers as it has basketfuls:");
+   for Share in Boolean loop
+      declare
+         Most, Taken_Said, Reach_Said : Natural := 0;
+         Ripe_0 : Natural;
+      begin
+         Reset;
+         Set_Beds (False);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Bush_Sharing (Share);
+         Meadow;
+         for X in B (27.0) .. B (27.0) + 7 loop      --  one bush, of some hundred and fifty handfuls
+            for Y in B (24.0) .. B (24.0) + 7 loop
+               for Z in Ground_Row .. Ground_Row + 2 loop
+                  if (X + Y + Z) mod 5 /= 0 then
+                     Set (X, Y, Z, Berry_Bush);
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+         Hours := 16.0 * 24.0;
+         Place_Stake (Stake_P, 6, 42);
+         declare
+            Laid, Cells : Natural;
+         begin
+            Lay_Path ((20.5, 17.5, Ground_M), (40.0, 17.5, Ground_M), Laid);
+            Zone_Stockpile (21.0, 15.0, 25.0, 17.0, Cells);
+         end;
+         Index_All;
+         Ripe_0 := Berries_Left;
+         for I in 1 .. 6 loop
+            Set_Job (I, Gatherer);
+         end loop;
+         for S in 1 .. 240 loop
+            Run (1);
+            declare
+               N : Natural := 0;
+            begin
+               for I in 1 .. Members loop
+                  if Doing (I) = Picking then
+                     N := N + 1;
+                  end if;
+                  if S > 20 and then Status (I) = "the bushes near are being picked by others" then
+                     Taken_Said := Taken_Said + 1;
+                  elsif S > 20 and then Status (I) = "nothing to gather in reach" and then Berries_Left > 0 then
+                     Reach_Said := Reach_Said + 1;
+                  end if;
+               end loop;
+               Most := Natural'Max (Most, N);
+            end;
+         end loop;
+         if Share then
+            Check (Ripe_0 >= 120 and then Most >= 3 and then Most <= (Ripe_0 + 29) / 30,
+                   "six gatherers and one bush of" & Ripe_0'Image & " handfuls: as many as" & Most'Image
+                   & " pick at it at once (a basket is 30)");
+            Check (Reach_Said = 0, "and none says 'nothing to gather in reach' while it bears");
+         else
+            Check (Most = 1 and then Taken_Said > 0 and then Reach_Said = 0,
+                   "(with --one-to-a-bush one picks there, as before, and the rest now say why: 'the bushes near are"
+                   & " being picked by others')");
+         end if;
+      end;
+   end loop;
+
+   Put_Line ("the playtest round: the stockpile's last places kept:");
+   for Kept in Boolean loop
+      declare
+         Cells, Placed, More : Natural;
+         function Empty return Natural is
+            N : Natural := 0;
+         begin
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Count = 0 then
+                  N := N + 1;
+               end if;
+            end loop;
+            return N;
+         end Empty;
+         function Holding return Natural is
+            N : Natural := 0;
+         begin
+            for I in 1 .. Members loop
+               if Carried (I) > 0 and then Doing (I) in Standing | Walking
+                 and then Ada.Strings.Fixed.Index (Status (I), "nowhere to put") > 0
+               then
+                  N := N + 1;
+               end if;
+            end loop;
+            return N;
+         end Holding;
+         function Saying return Natural is
+            N : Natural := 0;
+         begin
+            for I in 1 .. Members loop
+               if Status (I) = "the stockpile is nearly full: nothing more brought in" then
+                  N := N + 1;
+               end if;
+            end loop;
+            return N;
+         end Saying;
+         Stored_0 : Natural;
+      begin
+         Set_Up (With_Stockpile => False, With_Field => True);
+         Set_Last_Places ((if Kept then Last_Places else 0));
+         Zone_Stockpile (21.0, 14.0, 31.0, 17.0, Cells);          --  thirty places: three of them kept (a tenth)
+         Supply (Stone, 40 * 26, Placed);                         --  twenty-six full of stone: four empty
+         for I in 1 .. 6 loop
+            Set_Job (I, Gatherer);
+         end loop;
+         Run (1_500);
+         if Kept then
+            Check (Cells = 30 and then Placed = 40 * 26 and then Empty = 3 and then Stored (Berries) = 120,
+                   "thirty places, four of them empty: one is filled (" & Stored (Berries)'Image
+                   & " berries), and the last three are left empty");
+            Check (Saying = 6 and then Holding = 0 and then (for all I in 1 .. Members => Carried (I) = 0),
+                   "all six say so ('" & Status (1) & "') and none stands with a load in its arms");
+            declare
+               Data : constant Bytes := Save;
+               Ok   : Boolean;
+            begin
+               Load (Data, Ok);
+               Check (Ok and then Save = Data and then Last_Places_Kept = Last_Places,
+                      "saved and loaded: the same bytes");
+            end;
+            Stored_0 := Stored (Berries);
+            Zone_Stockpile (21.0, 18.0, 31.0, 22.0, More);        --  room made: they go back to it
+            Run (600);
+            Check (More > 0 and then Stored (Berries) > Stored_0 and then Saying = 0,
+                   "with more room zoned they pick again (" & Stored (Berries)'Image & " berries after ten game hours)");
+         else
+            Check (Empty = 0 and then Holding > 0,
+                   "(with --last-places 0 every place is filled and" & Holding'Image
+                   & " stand with a basketful and nowhere to put it, as before)");
+         end if;
+      end;
+   end loop;
+   --  a stockpile too small to keep ten of: none kept, and the band works on
+   Set_Up (With_Field => True);                                   --  (its eight places)
+   Set_Last_Places (Last_Places);
+   for I in 1 .. 6 loop
+      Set_Job (I, Gatherer);
+   end loop;
+   Run (300);
+   Check (Stored (Berries) > 0, "a stockpile of eight places keeps none (a tenth at most): the band brings in"
+          & Stored (Berries)'Image & " berries");
+
+   Put_Line ("the playtest round: the stockpile placed once, ten metres square:");
+   Set_Up (With_Stockpile => False);
+   Set_One_Stockpile (True);
+   declare
+      use Castle.Actions;
+      R : Result;
+      M : Menu := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (30.3, 21.0, Ground_M)));
+      One, Two : Natural := 0;
+   begin
+      for K in 1 .. M.N loop
+         if M.Items (K).Todo.What = Place_Stockpile and then not M.Items (K).Two_Point then
+            One := One + 1;
+         elsif M.Items (K).Todo.What = Zone_Stockpile then
+            Two := Two + 1;
+         end if;
+      end loop;
+      Check (One = 1 and then Two = 0 and then Plan_Stockpile_At (30.3, 21.0).Ok,
+             "the ground's menu offers it with one click, and no stockpile corner to corner");
+      Perform ((What => Place_Stockpile, By => The_Player, Pile_At => (2.0, 50.0, Ground_M), Pile_Way => 0), R);
+      Check (not R.Done and then Zone_Count = 0, "away from any path it is refused: " & Why_Not
+             ((What => Place_Stockpile, By => The_Player, Pile_At => (2.0, 50.0, Ground_M), Pile_Way => 0), R));
+      Perform ((What => Place_Stockpile, By => The_Player, Pile_At => (30.3, 21.0, Ground_M), Pile_Way => 0), R);
+      Check (R.Done and then R.Count = 100 and then Zone_Count = 1
+             and then abs (Zone_At (1).Along - 10.0) < 0.3 and then Zone_At (1).Across >= 10.0
+             and then Zone_At (1).Across <= 11.1
+             and then Zone_On (25.5, 18.5) = 1 and then Zone_On (34.5, 27.5) = 1 and then Zone_On (36.5, 20.0) = 0
+             and then Zone_On (30.0, 29.5) = 0,
+             "placed beside the path: a hundred places, ten metres along it and ten back from its edge ("
+             & Img (Zone_At (1).Along, 1) & " by " & Img (Zone_At (1).Across, 1) & " m of ground)");
+      Perform ((What => Place_Stockpile, By => The_Player, Pile_At => (30.3, 14.0, Ground_M), Pile_Way => 0), R);
+      M := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (30.3, 14.0, Ground_M)));
+      Check (not R.Done and then Zone_Count = 1 and then not Plan_Stockpile_At (30.3, 14.0).Ok
+             and then (for all K in 1 .. M.N => M.Items (K).Todo.What not in Place_Stockpile | Zone_Stockpile),
+             "a second is refused ('" & Stockpile_Refusal & "'), and the menu offers none");
+   end;
+
+   ------------------------------------------------------------------ the next pass of his notes, 2026-11-19
+   --  someone standing where a builder's next block goes (John, 2026-11-17: "need make sure serfs have a
+   --  way to continue their work if they meet obstacles"): one of the band stood on the corner of a
+   --  hovel's frame for a game day
+   Put_Line ("the next pass: one standing where a block is to go:");
+   for Way in Boolean loop
+      Set_Up (With_Bushes => False);
+      Set_Make_Way (Way);
+      declare
+         Laid, Lots, Placed : Natural;
+         Corner : Vec3 := (0.0, 0.0, 0.0);
+         Placed_Mid, Placed_End : Natural := 0;
+      begin
+         Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+         Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+         Supply (Wood, 20, Placed);
+         Supply (Straw, 20, Placed);
+         Set_Job (3, Forester);
+         for S in 1 .. 6_000 loop
+            Run (1);
+            exit when House_Count > 0 and then House_At (1).Phase = Flooring;
+         end loop;
+         declare
+            V  : constant House_View := House_At (1);
+            A  : constant Vec3 := V.Corner (2) - V.Corner (1);
+            C  : constant Vec3 := V.Corner (4) - V.Corner (1);
+         begin
+            Corner := V.Corner (1) + A * (0.125 / Flat (V.Corner (1), V.Corner (2)))
+              + C * (0.125 / Flat (V.Corner (1), V.Corner (4)));
+            Hold_Still (6, Corner, 1_440.0);          --  on its first post's place, a game day
+         end;
+         if Way then
+            Check (Castle.Views.Job_Label (3) = "Builder" and then Job_Of (3) = Forester
+                   and then Castle.Views.Job_Label (6) = "No job",
+                   "(the band's list calls the forester at a hovel 'Builder': a trade is shown where a job was)");
+         end if;
+         for S in 1 .. 1_400 loop
+            Run (1);
+            if S = 700 then
+               Placed_Mid := House_At (1).Placed;
+            end if;
+         end loop;
+         Placed_End := House_At (1).Placed;
+         if Way then
+            Check (House_At (1).Phase not in Ground | Flooring and then Placed_End > Placed_Mid
+                   and then Flat (Where (6), Corner) in 0.2 .. 2.5 and then Builders_Blocked_S < 60.0
+                   and then Stepped_Aside >= 1
+                   and then Get (B (Corner.X), B (Corner.Y), Ground_Row) = Log,
+                   "it steps aside (" & Img (Flat (Where (6), Corner), 2) & " m) and the post is raised where it stood:"
+                   & " the builder waited " & Img (Builders_Blocked_S, 0) & " s");
+         else
+            Check (House_At (1).Phase = Framing and then Placed_End = Placed_Mid and then Flat (Where (6), Corner) < 0.05
+                   and then Builders_Blocked_S > 600.0 and then Get (B (Corner.X), B (Corner.Y), Ground_Row) /= Log,
+                   "(with --no-make-way the builder waits for as long as it stands there: " & Img (Builders_Blocked_S / 60.0, 1)
+                   & " game hours, nothing laid)");
+         end if;
+      end;
+   end loop;
+
+   --  the thatcher on its ladder (John: "Fix thatching animation so serfs don't pop on and off the ladder
+   --  between smoothing sections"): looked at every tick of a roof's thatching
+   Put_Line ("the next pass: the thatcher stays up its ladder between bouts:");
+   for Stay in Boolean loop
+      Set_Up (With_Bushes => False);
+      Set_Ladders (True);
+      Set_Ladder_Stay (Stay);
+      declare
+         Laid, Lots, Placed : Natural;
+         Downs, Ups : Natural := 0;        --  times it was shown come down and back up within two seconds, at the ladder
+         Trim_Ups, Trim_Downs : Natural := 0;   --  and of those, while the roof was being trimmed (nothing lies there then)
+         Was_Up : Boolean := False;
+         Down_For : Natural := 0;          --  ticks since it was last shown up (while still at its ladder)
+      begin
+         Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+         Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+         Supply (Wood, 30, Placed);
+         Supply (Straw, 80, Placed);
+         Supply (Ladder, 1, Placed);
+         Set_Job (3, Forester);
+         for S in 1 .. 12_000 loop
+            Run (1);
+            exit when House_Count > 0 and then House_At (1).Phase in Roofing | Trimming and then Aloft (3);
+         end loop;
+         for T in 1 .. 20 * 1_200 loop                 --  twenty game hours of it at the most, a tick at a time
+            Hours := Hours + 0.05 / 3_600.0;
+            Advance (0.05, Hours);
+            exit when House_At (1).Phase = Standing;
+            if Aloft (3) then
+               Ups := Ups + 1;
+               if House_At (1).Phase = Trimming then
+                  Trim_Ups := Trim_Ups + 1;
+               end if;
+               if not Was_Up and then Down_For in 1 .. 40 then
+                  Downs := Downs + 1;
+                  if House_At (1).Phase = Trimming then
+                     Trim_Downs := Trim_Downs + 1;
+                  end if;
+               end if;
+               Was_Up := True;
+               Down_For := 0;
+            else
+               Was_Up := False;
+               Down_For := Down_For + 1;
+            end if;
+         end loop;
+         if Stay then
+            Check (Ups > 1_000 and then Downs <= Ups / 2_000,
+                   "shown up its ladder for" & Ups'Image & " ticks, and down and up again within two seconds"
+                   & Downs'Image & " times (when it carries its ladder round, or fetches straw, it comes down)");
+            Check (Trim_Ups > 300 and then Trim_Downs = 0,
+                   "and while it trims the roof (""between smoothing sections""):" & Trim_Ups'Image & " ticks up,"
+                   & Trim_Downs'Image & " times down and up again");
+         else
+            Check (Ups > 1_000 and then Downs > 20,
+                   "(as it was drawn: down and up again within two seconds" & Downs'Image & " times in" & Ups'Image
+                   & " ticks up)");
+         end if;
+      end;
+   end loop;
+
+   --  paths levelled (John: "paths still need to be leveled as well to elimiate small bumps and holes in
+   --  the road, some holes get filled, others don't"): a path laid over a bump, a ditch that runs on to
+   --  either side (so no closed hollow), a stair of the land, a bank a metre high, and ground a block
+   --  higher under one half of it
+   Put_Line ("the next pass: a path levelled as it is laid:");
+   for Level in Boolean loop
+      Set_Up (With_Bushes => False, With_Labour => True);
+      Set_Path_Level (Level);
+      declare
+         Laid : Natural;
+         function Top_Path (Bx, By : Integer) return Integer is
+         begin
+            for Z in reverse 8 .. 26 loop
+               if Get (Bx, By, Z) = Footpath then
+                  return Z;
+               elsif Get (Bx, By, Z) /= Air then
+                  return -1;                   --  (its top is not path)
+               end if;
+            end loop;
+            return -1;
+         end Top_Path;
+         --  every column of the path's four in lines By0 .. By1 has its path at row Z
+         function All_At (By0, By1, Z : Integer) return Boolean is
+           (for all Bx in 174 .. 177 => (for all By in By0 .. By1 => Top_Path (Bx, By) = Z));
+         Stair_Ok : Boolean := True;
+      begin
+         Fill (38.0, 26.0, 50.0, 26.5, 16, 16, Grass);                 --  a bump, two columns of the path's length
+         Fill (38.0, 30.0, 50.0, 30.75, 15, 15, Air);                  --  a ditch across it, three columns
+         for K in 0 .. 3 loop                                          --  a stair up a metre, a step every half metre
+            Fill (38.0, 36.0 + 0.5 * Float (K), 50.0, 44.0 - 0.5 * Float (K), 16, 16 + K, Dirt);
+         end loop;
+         Fill (38.0, 48.0, 50.0, 48.5, 16, 19, Dirt);                  --  a bank a metre high
+         Fill (38.0, 52.0, 44.0, 56.0, 16, 16, Grass);                 --  one half of the path's width a block higher
+         Fill (38.0, 23.0, 50.0, 23.5, 14, 15, Air);                   --  a ditch two blocks deep with a block of water in it
+         Fill (38.0, 23.0, 50.0, 23.5, 14, 14, Water);
+         Changed_World;
+         Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+         Build_Paths_Now;
+         for K in 0 .. 3 loop
+            Stair_Ok := Stair_Ok and then All_At (144 + 2 * K, 145 + 2 * K, 16 + K)
+              and then All_At (174 - 2 * K, 175 - 2 * K, 16 + K);
+         end loop;
+         Stair_Ok := Stair_Ok and then All_At (152, 167, 19) and then All_At (136, 143, 15) and then All_At (176, 183, 15);
+         if Level then
+            Check (All_At (100, 110, 15) and then Count_In (174, 104, 177, 105, 16, 16, Air) = 8,
+                   "a bump a block high is cut down: the path runs level over where it was");
+            Check (All_At (116, 126, 15), "a ditch across it, open at both ends, is filled to the path's line");
+            Check (Count_In (152, 92, 199, 93, 14, 14, Water) = 96 and then Count_In (174, 92, 177, 93, 14, 15, Footpath) = 0,
+                   "a ditch that holds water is left as it lies: not dammed");
+            Check (Stair_Ok, "a stair of the land keeps every step, up and down again");
+            Check (All_At (192, 193, 19) and then All_At (186, 191, 15) and then All_At (194, 199, 15),
+                   "a bank a metre high is left: the path goes over it as it did");
+            Check (All_At (208, 223, 15) and then Count_In (174, 208, 175, 223, 16, 16, Air) = 32,
+                   "ground a block higher under one half of it is cut: the path lies level across its width");
+         else
+            Check (All_At (104, 105, 16) and then All_At (120, 122, 14) and then Stair_Ok and then All_At (192, 193, 19)
+                   and then (for all By in 208 .. 223 => Top_Path (174, By) = 16 and then Top_Path (177, By) = 15),
+                   "(with --no-path-level the path lies on the bump, in the ditch and on the slant, as it did)");
+         end if;
+      end;
+   end loop;
+
+   --  what a house is made of (John: "Fix floating timber for windows on houses, make the timber extend the
+   --  length of the timber columns it sit's inside. Change the color of the first fraction of blocks around
+   --  the window, like planks as trim" and "Add timber truss the the ends of the houses and cross member
+   --  support to the sides of the houses perpendicular to the door, add trusses, ridge beam, and cross
+   --  member support for the storehouse"): four hundred hovels and the storehouse, each drawn as it was
+   --  and with its timbers, and the two compared block by block
+   Put_Line ("the next pass: a window's timber, the roof's timbers:");
+   declare
+      package CB renames Castle.Buildings;
+      type Cell is record
+         M  : Material := Air;
+         S  : CB.Stage := CB.Site;
+         On : Boolean := False;
+      end record;
+      type Grid is array (0 .. 63, 0 .. 47, 0 .. 47) of Cell;
+      type Grid_Access is access Grid;
+      Was, Now : constant Grid_Access := new Grid;
+      Into : Grid_Access := Was;
+      Straw_Seen, Timber_First, In_Order, Twice : Boolean;
+      Last_S : CB.Stage;
+      N_Timber : Natural;
+      procedure Put (Bx, By, Bz : Integer; M : Material; S : CB.Stage; State : Natural) is
+         pragma Unreferenced (State);
+         use type CB.Stage;
+      begin
+         In_Order := In_Order and then S >= Last_S;
+         Last_S := S;
+         if S >= CB.Dress then
+            return;                                --  (the roof trimmed: the same blocks again; and a storehouse's yard)
+         end if;
+         if M in Thatch | Daub then
+            Straw_Seen := True;
+         elsif M in Log | Plank then
+            Timber_First := Timber_First and then not Straw_Seen;
+            N_Timber := N_Timber + 1;
+         end if;
+         if Bx in Grid'Range (1) and then By in Grid'Range (2) and then Bz in Grid'Range (3) then
+            Twice := Twice or else Into (Bx, By, Bz).On;
+            Into (Bx, By, Bz) := (M, S, True);
+         end if;                                   --  (else: of a storehouse's yard, out past what is compared)
+      end Put;
+      procedure Draw is new CB.Blueprint (Put);
+      procedure Draw_Both (H : in out CB.House; Timber_Was, Timber_Now : out Natural) is
+      begin
+         H.Fx := 4;  H.Fy := 4;  H.Pad := 4;
+         H.Ux := 1;  H.Uy := 0;  H.Vx := 0;  H.Vy := 1;
+         for Pass in Boolean loop
+            Into := (if Pass then Now else Was);
+            Into.all := [others => [others => [others => <>]]];
+            H.Truss := Pass;
+            H.Sill := Pass;
+            Straw_Seen := False;
+            Last_S := CB.Site;
+            N_Timber := 0;
+            Draw (H);
+            if Pass then
+               Timber_Now := N_Timber;
+            else
+               Timber_Was := N_Timber;
+            end if;
+         end loop;
+      end Draw_Both;
+      Same_But, Inside_Only, Sills_Reach, Jambs, Kings, Ties : Boolean := True;
+      More_Lo : Natural := Natural'Last;
+      More_Hi, Logs_Hi, Windows : Natural := 0;
+      T_Was, T_Now : Natural;
+   begin
+      Timber_First := True;
+      In_Order := True;
+      Twice := False;
+      for Seed in 1 .. 400 loop
+         declare
+            H    : CB.House := CB.Design (Castle.Hash.Mix (Castle.Hash.U64 (Seed)));
+            Base : constant Integer := 4;
+            Top  : constant Integer := Base + H.Wall_H;
+            Span : constant Integer := (if H.Ridge_Along_U then H.D else H.W);
+            Len  : constant Integer := (if H.Ridge_Along_U then H.W else H.D);
+            Mid  : constant Integer := (Span - 1) / 2;
+            Bays : constant Integer := Integer'Max (1, (Len - 1 + CB.Tie_B / 2) / CB.Tie_B);
+            Tie_Cells : Natural := 0;
+         begin
+            Draw_Both (H, T_Was, T_Now);
+            More_Lo := Natural'Min (More_Lo, T_Now - T_Was);
+            More_Hi := Natural'Max (More_Hi, T_Now - T_Was);
+            Logs_Hi := Natural'Max (Logs_Hi, (T_Now + Planks_Per_Log - 1) / Planks_Per_Log);
+            for X in Grid'Range (1) loop
+               for Y in Grid'Range (2) loop
+                  for Z in Grid'Range (3) loop
+                     declare
+                        A : Cell renames Was (X, Y, Z);
+                        B : Cell renames Now (X, Y, Z);
+                        U : constant Integer := X - 4;
+                        V : constant Integer := Y - 4;
+                     begin
+                        if A.On then
+                           --  (what was there is there: the same, or a panel of daub now timber)
+                           Same_But := Same_But and then B.On
+                             and then (B.M = A.M or else (A.M = Daub and then B.M in Log | Plank));
+                        elsif B.On then
+                           --  (what is new is timber inside the walls, at their beam's row or over it)
+                           Inside_Only := Inside_Only and then B.M = Log and then U in 1 .. H.W - 2 and then V in 1 .. H.D - 2
+                             and then Z >= Top - 1;
+                           if Z = Top - 1 then
+                              Tie_Cells := Tie_Cells + 1;
+                           end if;
+                        end if;
+                     end;
+                  end loop;
+               end loop;
+            end loop;
+            Ties := Ties and then Tie_Cells = (Bays - 1) * (Span - 2) and then Bays >= 3;
+            --  a king post in each gable, from its beam up
+            if H.Ridge_Along_U then
+               Kings := Kings and then Now (4, 4 + Mid, Top).M = Log and then Now (4 + H.W - 1, 4 + Mid, Top).M = Log;
+            else
+               Kings := Kings and then Now (4 + Mid, 4, Top).M = Log and then Now (4 + Mid, 4 + H.D - 1, Top).M = Log;
+            end if;
+            --  each window: its sill and its lintel run to a post either way, its jambs are plank or a post
+            for K in 2 .. H.Open_N loop
+               declare
+                  O : CB.Opening renames H.Openings (K);
+                  function At_Wall (Along, Z : Integer) return Material is
+                    (case O.Side is
+                        when CB.Front => Now (4 + Along, 4, Z).M,
+                        when CB.Back  => Now (4 + Along, 4 + H.D - 1, Z).M,
+                        when CB.Left  => Now (4, 4 + Along, Z).M,
+                        when CB.Right => Now (4 + H.W - 1, 4 + Along, Z).M);
+                  procedure Walk (Row, From, Dir : Integer) is
+                     A : Integer := From;
+                  begin
+                     loop
+                        Sills_Reach := Sills_Reach and then At_Wall (A, Row) = Log;
+                        exit when At_Wall (A, Base) = Log or else At_Wall (A, Row) /= Log;   --  (a post: raised from the floor)
+                        A := A + Dir;
+                     end loop;
+                  end Walk;
+               begin
+                  Windows := Windows + 1;
+                  for Row in Base + O.Bottom - 1 .. Base + O.Bottom + O.Height loop
+                     if Row = Base + O.Bottom - 1 or else Row = Base + O.Bottom + O.Height then
+                        Walk (Row, O.Offset - 1, -1);
+                        Walk (Row, O.Offset + O.Width, 1);
+                        for A in O.Offset .. O.Offset + O.Width - 1 loop
+                           Sills_Reach := Sills_Reach and then At_Wall (A, Row) = Log;
+                        end loop;
+                     else
+                        Jambs := Jambs and then At_Wall (O.Offset - 1, Row) in Plank | Log
+                          and then At_Wall (O.Offset + O.Width, Row) in Plank | Log
+                          and then At_Wall (O.Offset, Row) = Air;
+                     end if;
+                  end loop;
+               end;
+            end loop;
+         end;
+      end loop;
+      Check (In_Order and then Timber_First and then not Twice,
+             "four hundred hovels with their timbers: in the order of building still, all the timber before anything of"
+             & " straw, no block laid twice");
+      Check (Same_But and then Inside_Only,
+             "block for block the hovel it was: daub turned to timber here and there, and new timber only inside the"
+             & " walls under the roof (its thatch, its walls' line and its floor as they were)");
+      Check (Sills_Reach and then Jambs and then Windows > 400,
+             "every window (" & Img (Windows) & " of them): its sill and a lintel run to a post either way, plank or a post"
+             & " to either side of the opening");
+      Check (Kings and then Ties,
+             "a king post in each gable end, and two tie beams or more across from eave wall to eave wall");
+      Check (More_Lo >= 60 and then More_Hi <= 200 and then Logs_Hi <= 6,
+             "it takes " & Img (More_Lo) & " to " & Img (More_Hi) & " blocks of timber more (a log is"
+             & Integer'Image (Planks_Per_Log) & "): " & Img (Logs_Hi) & " logs at the most");
+      declare
+         G    : CB.House := CB.Storehouse_Design;
+         Top  : constant Integer := 4 + G.Wall_H;
+         Mid  : constant Integer := (G.D - 1) / 2;
+         Ridge_Row : constant Integer := Top + Integer'Min (Mid + 1, G.D - Mid) - 3;
+         Ridge, Posts : Boolean := True;
+         N_Ties : Natural := 0;
+      begin
+         G.Yard_U0 := -8;  G.Yard_U1 := G.W + 7;  G.Yard_V0 := -4;  G.Yard_V1 := G.D + 12;   --  (a small yard round it)
+         Draw_Both (G, T_Was, T_Now);
+         for U in 1 .. G.W - 2 loop
+            Ridge := Ridge and then Now (4 + U, 4 + Mid, Ridge_Row).M = Log and then not Was (4 + U, 4 + Mid, Ridge_Row).On;
+            if Now (4 + U, 4 + 1, Top - 1).M = Log then
+               N_Ties := N_Ties + 1;
+               for Z in Top .. Ridge_Row - 1 loop
+                  Posts := Posts and then Now (4 + U, 4 + Mid, Z).M = Log;
+               end loop;
+            end if;
+         end loop;
+         Check (Ridge and then Posts and then N_Ties = 4 and then Now (4, 4 + Mid, Top).M = Log
+                and then Now (4 + G.W - 1, 4 + Mid, Top).M = Log and then T_Now - T_Was in 200 .. 400,
+                "the storehouse: a truss in each gable end, " & Img (N_Ties) & " tie beams each with a king post up to a"
+                & " ridge beam that runs from gable to gable (" & Img (T_Now - T_Was) & " blocks of timber more)");
+      end;
+   end;
+
+   --  ground taken out of the housing, and the mark (John: "Add away to delete parts of a zone, and if a
+   --  structure exists, mark a structure for razing")
+   Put_Line ("the next pass: housing taken out again, a hovel marked:");
+   Set_Up (With_Bushes => True, With_Labour => True);
+   declare
+      use Castle.Views;
+      Laid, Lots, Placed, Columns, Marked : Natural;
+      Hz, Zones_Were, Blocks_Were, Lots_Were : Natural;
+      Mid : Vec3;
+   begin
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 56.0, Lots);
+      Hz := Zone_Count;
+      Supply (Wood, 20, Placed);
+      Supply (Straw, 40, Placed);
+      Set_Job (3, Forester);
+      Set_Job (2, Gatherer);
+      for S in 1 .. 6_000 loop
+         Run (1);
+         exit when House_Count > 0 and then House_At (1).Phase = Framing;
+      end loop;
+      Mid := (House_At (1).Corner (1) + House_At (1).Corner (3)) * 0.5;
+      Zones_Were := Zone_Count;
+      Blocks_Were := Zone_At (Hz).Blocks;
+      Lots_Were := Lot_Count;
+      --  the far end of it, where no house is begun
+      Unzone_Housing (44.0, 46.0, 60.0, 60.0, Columns, Marked);
+      Check (House_Count = 1 and then Mid.Y < 40.0 and then Columns > 500 and then Marked = 0
+             and then Zone_At (Hz).Blocks = Blocks_Were - Columns and then Zone_On (50.0, 50.0) = 0
+             and then Zone_On (50.0, 43.0) = Hz and then Lot_Count < Lots_Were and then Zone_Count = Zones_Were
+             and then not House_At (1).Marked,
+             "the far end of a housing zone taken out:" & Columns'Image & " block columns are no zone's, and the lots still"
+             & " to begin are laid out anew (" & Img (Lots_Were) & " before, " & Img (Lot_Count) & " after)");
+      --  and the rest, the begun hovel's lot with it
+      Unzone_Housing (40.0, 20.0, 60.0, 47.0, Columns, Marked);
+      Check (Marked = 1 and then House_At (1).Marked and then Hovel_At (Mid.X, Mid.Y) = 1
+             and then Zone_On (Mid.X, Mid.Y) = Hz and then Zone_At (Hz).Blocks >= 28 * 28 - 60
+             and then Zone_At (Hz).Blocks <= 30 * 34 and then Lot_Count = 0
+             and then Value_Of (House (1), "Marked") = "for razing",
+             "the rest taken out with a hovel begun on it: the hovel is marked for razing and keeps its lot ("
+             & Img (Zone_At (Hz).Blocks) & " block columns), and its sheet says so");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then House_At (1).Marked and then Zone_At (Hz).Blocks >= 28 * 28 - 60,
+                "saved and loaded with a gatherer at its work: the same bytes, the mark kept");
+      end;
+      declare
+         Placed_Was : constant Natural := House_At (1).Placed;
+         Taking, Way : Boolean := False;
+         function Says (I : Positive; Part : String) return Boolean is
+           (Ada.Strings.Fixed.Index (Status (I), Part) > 0);
+      begin
+         Way := True;
+         for S in 1 .. 20_000 loop
+            Run (1);
+            exit when House_Count = 0;
+            Taking := Taking or else Says (3, "taking down a hovel");
+            Way := Way and then Castle.Nav."=" (Castle.Nav.Plan (Where (3), Stake).Result, Castle.Nav.Found);
+         end loop;
+         Check (House_Count = 0 and then Razed = 1 and then Taking and then Way and then Placed_Was > 100
+                and then Site_Of (3) = 0 and then Zone_At (Hz).Blocks = 0 and then Zone_On (Mid.X, Mid.Y) = 0
+                and then Count_In (B (Mid.X) - 16, B (Mid.Y) - 16, B (Mid.X) + 16, B (Mid.Y) + 16, Ground_Row, Ground_Row + 24, Log) = 0
+                and then Count_In (B (Mid.X) - 16, B (Mid.Y) - 16, B (Mid.X) + 16, B (Mid.Y) + 16, Ground_Row, Ground_Row + 24, Daub) = 0,
+                "marked, with nobody its owner, it is taken down by its builder (" & Img (Placed_Was) & " blocks): no timber"
+                & " or daub of it stands, the hovel is gone from the list, its lot from the zone, and "
+                & Img (Razed_Came_Back (Wood)) & " logs and " & Img (Razed_Came_Back (Straw)) & " sheaves came back");
+      end;
+   end;
+   --  the mark lifted half way down; one lived in is never marked
+   Set_Up (With_Bushes => False, With_Labour => True);
+   declare
+      Laid, Lots, Placed, Columns, Marked : Natural;
+      Low : Natural := Natural'Last;
+   begin
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+      Supply (Wood, 20, Placed);
+      Supply (Straw, 60, Placed);
+      Set_Job (3, Forester);
+      for S in 1 .. 30_000 loop
+         Run (1);
+         exit when House_Count > 0 and then House_At (1).Phase = Roofing;
+      end loop;
+      Mark_Hovel (1, True);
+      for S in 1 .. 600 loop
+         Run (1);
+         Low := Natural'Min (Low, House_At (1).Placed);
+         exit when House_At (1).Phase = Framing;
+      end loop;
+      Mark_Hovel (1, False);
+      for S in 1 .. 30_000 loop
+         Run (1);
+         exit when House_At (1).Phase = Standing and then House_At (1).Owner > 0;
+      end loop;
+      Check (House_At (1).Phase = Standing and then House_At (1).Owner > 0 and then Razed = 0
+             and then Low < House_At (1).Blocks / 2,
+             "the mark lifted with the hovel half down (" & Img (Low) & " of " & Img (House_At (1).Blocks)
+             & " blocks left): it is built up again from what lies there, and is somebody's");
+      Mark_Hovel (1, True);
+      Unzone_Housing (40.0, 18.0, 60.0, 60.0, Columns, Marked);
+      Check (not House_At (1).Marked and then Unzone_Lived_In = 1
+             and then House_At (1).Phase = Standing and then Zone_On (House_At (1).Bed.X, House_At (1).Bed.Y) > 0,
+             "a hovel lived in is never marked, by the menu's order or by the box: it stands, and keeps its lot");
+   end;
+   --  the case his answer names: a hovel that stands and is nobody's (here its owner has died, and nobody
+   --  is without a home to draw it), marked and taken down from its roof to nothing
+   Set_Up (With_Bushes => False, With_Labour => True);
+   declare
+      Laid, Lots, Placed : Natural;
+      Mid : Vec3 := (0.0, 0.0, 0.0);
+      Empty, Gone : Natural := 0;
+      Blocks_Were : Natural := 0;
+      Line_Said : Boolean := False;
+      Same : Boolean := False;
+      C1, C3 : Vec3 := (0.0, 0.0, 0.0);                  --  (its walls' corners: what is counted is over its own ground)
+      function Left_Of (M : Material) return Natural is
+        (Count_In (B (Float'Min (C1.X, C3.X)) - 1, B (Float'Min (C1.Y, C3.Y)) - 1, B (Float'Max (C1.X, C3.X)) + 1,
+                   B (Float'Max (C1.Y, C3.Y)) + 1, Ground_Row, Ground_Row + 30, M));
+   begin
+      for I in 1 .. Members loop                          --  (two of the band left: as many as there will be hovels)
+         if I not in 3 | 4 then
+            Strike_Down (I);
+         end if;
+      end loop;
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 56.0, Lots);
+      Supply (Wood, 40, Placed);
+      Supply (Straw, 120, Placed);
+      Set_Job (3, Forester);
+      Set_Job (4, Forester);
+      for S in 1 .. 60_000 loop
+         Run (1);
+         exit when House_Count = 2 and then House_At (1).Phase = Standing and then House_At (2).Phase = Standing
+           and then House_At (1).Owner > 0 and then House_At (2).Owner > 0;
+      end loop;
+      Empty := (if House_At (1).Owner = 4 then 1 else 2);       --  (the hovel of the one who dies)
+      C1 := House_At (Empty).Corner (1);
+      C3 := House_At (Empty).Corner (3);
+      Mid := (C1 + C3) * 0.5;
+      Blocks_Were := House_At (Empty).Blocks;
+      Strike_Down (4);
+      Run (120);
+      Check (House_Count = 2 and then House_At (Empty).Phase = Standing and then House_At (Empty).Owner = 0
+             and then Left_Of (Thatch) > 500,
+             "a hovel stands and is nobody's: its owner dead, and nobody without a home to draw it");
+      Mark_Hovel (Empty, True);
+      Check (House_At (Empty).Marked and then House_At (Empty).Phase /= Standing and then House_At (Empty).Owner = 0
+             and then House_At (Empty).Placed = Blocks_Were and then House_At (3 - Empty).Phase = Standing,
+             "marked, it stands no longer as a home (every block of it still to come off), and the other is untouched");
+      for S in 1 .. 60_000 loop
+         Run (1);
+         Line_Said := Line_Said or else Ada.Strings.Fixed.Index (Castle.Scenario.Housing_Line, "1 being taken down") > 0;
+         if S = 300 then
+            declare
+               Data : constant Bytes := Save;
+               Ok   : Boolean;
+            begin
+               Load (Data, Ok);
+               Same := Ok and then Save = Data;
+               Gone := 0;
+            end;
+         end if;
+         Gone := Natural'Max (Gone, Razed);
+         exit when House_Count = 1;
+      end loop;
+      Check (House_Count = 1 and then Gone = 1 and then House_At (1).Phase = Standing and then House_At (1).Owner = 3
+             and then Left_Of (Thatch) = 0 and then Left_Of (Daub) = 0 and then Left_Of (Log) = 0
+             and then Left_Of (Plank) = 0 and then Zone_On (Mid.X, Mid.Y) = 0 and then Site_Of (3) = 0,
+             "it is taken down from its roof to nothing (" & Img (Blocks_Were) & " blocks): no thatch, daub, timber or"
+             & " plank of it left, its lot out of the zone, the other hovel standing and its owner's; "
+             & Img (Razed_Came_Back (Wood)) & " logs and " & Img (Razed_Came_Back (Straw)) & " sheaves came back");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Same and then Ok and then Save = Data and then Line_Said,
+                "saved half way down and after, each loads back to the same bytes; the log's housing line said"
+                & " '1 being taken down' meanwhile");
+      end;
+   end;
+
+   --  the list renumbered: two hovels raised by two builders with ladders, the first marked and taken down
+   Set_Up (With_Bushes => False, With_Labour => True);
+   Set_Ladders (True);
+   declare
+      Laid, Lots, Placed : Natural;
+      Second_Door : Vec3 := (0.0, 0.0, 0.0);
+      B2 : Natural := 0;
+      Ladders_Ok, Same : Boolean := True;
+      Gone : Boolean := False;              --  (Razed is a measure a load begins again)
+   begin
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 56.0, Lots);
+      Supply (Wood, 40, Placed);
+      Supply (Straw, 120, Placed);
+      Set_Job (3, Forester);
+      Set_Job (4, Forester);
+      for S in 1 .. 30_000 loop
+         Run (1);
+         exit when House_Count >= 2 and then House_At (1).Phase = Roofing and then House_At (2).Builder > 0
+           and then House_At (2).Phase in Walling | Roofing;
+      end loop;
+      Second_Door := House_At (2).Door;
+      B2 := House_At (2).Builder;
+      Mark_Hovel (1, True);
+      for S in 1 .. 30_000 loop
+         Run (1);
+         Ladders_Ok := Ladders_Ok and then Ladders_Add_Up;
+         Gone := Gone or else Razed = 1;
+         if S = 400 then
+            declare
+               Data : constant Bytes := Save;
+               Ok   : Boolean;
+            begin
+               Load (Data, Ok);
+               Same := Ok and then Save = Data;      --  (a hovel half down, its builder at it)
+            end;
+         end if;
+         exit when Gone and then House_At (1).Phase = Standing;
+      end loop;
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Same := Same and then Ok and then Save = Data;
+      end;
+      Check (Gone and then B2 > 0 and then House_At (1).Phase = Standing
+             and then Flat (House_At (1).Door, Second_Door) < 0.01 and then House_At (1).Owner > 0,
+             "two hovels being raised and the first marked: it is taken down, and the second is the first in the list"
+             & " now, raised to standing by its own builder and somebody's");
+      Check (Ladders_Ok and then Same,
+             "the ladders add up all the while (" & Img (Ladders_Made) & " made), and a save half way down and one"
+             & " after load back to the same bytes");
+   end;
+
+   Set_Up (With_Bushes => False, With_Labour => True);
+   declare
+      Laid, Lots, Placed, Columns, Marked : Natural;
+   begin
+      --  the strip by the path taken out under a hovel just begun: its front yard and its door's way
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+      Supply (Wood, 20, Placed);
+      Supply (Straw, 60, Placed);
+      Set_Job (3, Forester);
+      for S in 1 .. 2_000 loop
+         Run (1);
+         exit when House_Count > 0;
+      end loop;
+      Unzone_Housing (44.0, 20.0, 45.0, 60.0, Columns, Marked);
+      Mark_Hovel (1, False);                              --  (kept after all)
+      for S in 1 .. 30_000 loop
+         Run (1);
+         exit when House_At (1).Phase = Standing;
+      end loop;
+      Check (Marked = 1 and then House_At (1).Phase = Standing and then House_At (1).Owner > 0
+             and then Castle.Nav."=" (Castle.Nav.Plan (House_At (1).Door, Stake).Result, Castle.Nav.Found)
+             and then Castle.Nav."=" (Castle.Nav.Plan (House_At (1).Bed, Stake).Result, Castle.Nav.Found),
+             "the strip by the path taken out under a hovel just begun (" & Img (Columns) & " block columns), and"
+             & " the mark lifted: it is built to standing, a way from its bed and its door to the stake");
+   end;
+   Set_Up (With_Bushes => False, With_Labour => True);
+   declare
+      Laid, Lots, Columns, Marked, Zones_Were, Hz : Natural;
+   begin
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 56.0, Lots);
+      Hz := Zone_Count;
+      Zones_Were := Zone_Count;
+      Unzone_Housing (40.0, 18.0, 60.0, 60.0, Columns, Marked);
+      Check (Zone_At (Hz).Blocks = 0 and then Lot_Count = 0 and then Marked = 0 and then Zone_Count = Zones_Were
+             and then Zone_On (50.0, 30.0) = 0,
+             "a housing zone with nothing begun on it, all taken out: no ground, no lots (the zone's place in the list"
+             & " stays)");
+      Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+      Check (Lots > 0 and then Zone_Count = Zones_Were and then Zone_On (50.0, 30.0) = Hz and then Housing_Refusal = "",
+             "and the next housing zoned takes that place: room for" & Lots'Image & " hovels");
+   end;
+
+   --  his answers of 2026-11-19: a forester set to building, a hovel's ridge beam, daub beside the windows
+   Put_Line ("his answers of 2026-11-19: Builder on the list, a ridge beam, the windows:");
+   Set_Up (With_Bushes => False, With_Skills => True);
+   declare
+      use Castle.Actions;
+      R : Result;
+      Laid, Lots, Placed : Natural;
+      Men : Menu;
+      Low, High : Natural := 0;
+   begin
+      Castle.Actions.Dev_Jobs := True;
+      Set_Job (3, Forester);
+      Set_Job (4, Forester);
+      --  the worse of the two at building is set to it
+      Low := (if Skill_Of (3, Building) <= Skill_Of (4, Building) then 3 else 4);
+      High := 7 - Low;
+      Men := Menu_For (The_Player, (A_Person, Low, (0.0, 0.0, 0.0)));
+      Check ((for some K in 1 .. Men.N => Men.Items (K).Todo.What = Make_Builder and then not Men.Items (K).Is_Now),
+             "a person's menu offers Builder after the opening jobs (for development: Castle.Actions.Dev_Jobs)");
+      Perform ((What => Make_Builder, By => The_Player, Whom => Low, Job => Forester), R);
+      Men := Menu_For (The_Player, (A_Person, Low, (0.0, 0.0, 0.0)));
+      Check (R.Done and then Is_Builder (Low) and then Job_Of (Low) = Forester
+             and then Castle.Views.Job_Label (Low) = "Builder" and then Castle.Views.Job_Label (High) = "Forester"
+             and then (for all K in 1 .. Men.N =>
+                         Men.Items (K).Is_Now = (Men.Items (K).Todo.What = Make_Builder)
+                         or else Men.Items (K).Todo.What = Follow),
+             "set to building it is a forester still, called Builder in the lists, and Builder is the row marked");
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+      Supply (Wood, 20, Placed);
+      Supply (Straw, 20, Placed);
+      for S in 1 .. 3_000 loop
+         Run (1);
+         exit when House_Count > 0 and then House_At (1).Builder > 0;
+      end loop;
+      Check (House_Count > 0 and then House_At (1).Builder = Low
+             and then Skill_Of (Low, Building) <= Skill_Of (High, Building),
+             "it takes the first hovel, before the forester better at building ("
+             & Img (Integer (100.0 * Skill_Of (Low, Building))) & " % against "
+             & Img (Integer (100.0 * Skill_Of (High, Building))) & " %)");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then Is_Builder (Low) and then not Is_Builder (High),
+                "saved and loaded to the same bytes, set to building still");
+      end;
+      Perform ((What => Give_Job, By => The_Player, Whom => Low, Job => Gatherer), R);
+      Check (not Is_Builder (Low) and then Castle.Views.Job_Label (Low) = "Gatherer",
+             "and any job given lifts it");
+      --  the stockman and the carpenter named before any storehouse stands (2026-11-22)
+      Perform ((What => Make_Stockman, By => The_Player, Whom => Low, Job => Porter), R);
+      Perform ((What => Make_Carpenter, By => The_Player, Whom => High, Job => Forester), R);
+      Run (40);
+      Men := Menu_For (The_Player, (A_Person, Low, (0.0, 0.0, 0.0)));
+      Check (R.Done and then Job_Of (Low) = Porter and then Job_Of (High) = Forester and then Storehouse = 0
+             and then Stockman = 0 and then Carpenter = 0 and then Trade_Of (Low) = No_Trade
+             and then Trade_Of (High) /= As_Carpenter and then Castle.Views.Job_Label (Low) = "Porter"
+             and then Stockman_Named (Low) and then Carpenter_Named (High)
+             and then (for some K in 1 .. Men.N =>
+                         Men.Items (K).Todo.What = Make_Stockman and then Men.Items (K).Is_Now),
+             "named before a storehouse stands, the stockman is a porter and the carpenter a forester like any other"
+             & " (nobody's trade yet); the menu marks who is to be");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then Stockman_Named (Low) and then Carpenter_Named (High),
+                "saved and loaded to the same bytes, named still");
+      end;
+      Castle.Actions.Dev_Jobs := False;
+   end;
+   declare
+      package CB renames Castle.Buildings;
+      Ridge_Cells, Planks, Daub_Jambs : Natural := 0;
+      Want_Ridge : Natural := 0;
+      Timber_First, Straw_Seen : Boolean;
+      Now_H : CB.House;
+      procedure Put (Bx, By, Bz : Integer; M : Material; S : CB.Stage; State : Natural) is
+         pragma Unreferenced (State);
+         use type CB.Stage;
+         Top    : constant Integer := 4 + Now_H.Wall_H;
+         Span   : constant Integer := (if Now_H.Ridge_Along_U then Now_H.D else Now_H.W);
+         Mid    : constant Integer := (Span - 1) / 2;
+         Across : constant Integer := (if Now_H.Ridge_Along_U then By - 4 else Bx - 4);
+         Along  : constant Integer := (if Now_H.Ridge_Along_U then Bx - 4 else By - 4);
+         Len    : constant Integer := (if Now_H.Ridge_Along_U then Now_H.W else Now_H.D);
+      begin
+         if S >= CB.Dress then
+            return;
+         end if;
+         if M in Thatch | Daub then
+            Straw_Seen := True;
+         elsif M in Log | Plank then
+            Timber_First := Timber_First and then not Straw_Seen;
+         end if;
+         if M = Plank then
+            Planks := Planks + 1;
+         end if;
+         if M = Log and then Across = Mid and then Along in 1 .. Len - 2
+           and then Bz = Top + Integer'Min (Mid + 1, Span - Mid) - 3
+         then
+            Ridge_Cells := Ridge_Cells + 1;
+         end if;
+         --  (the wall beside a window: a block either side of each opening, at its rows)
+         for K in 2 .. Now_H.Open_N loop
+            declare
+               O : CB.Opening renames Now_H.Openings (K);
+               A : constant Integer := (case O.Side is when CB.Front | CB.Back => Bx - 4, when others => By - 4);
+               On_Wall : constant Boolean :=
+                 (case O.Side is
+                     when CB.Front => By = 4, when CB.Back => By = 4 + Now_H.D - 1,
+                     when CB.Left => Bx = 4, when CB.Right => Bx = 4 + Now_H.W - 1);
+            begin
+               if On_Wall and then M = Daub and then (A = O.Offset - 1 or else A = O.Offset + O.Width)
+                 and then Bz - 4 in O.Bottom .. O.Bottom + O.Height - 1
+               then
+                  Daub_Jambs := Daub_Jambs + 1;
+               end if;
+            end;
+         end loop;
+      end Put;
+      procedure Draw is new CB.Blueprint (Put);
+   begin
+      Timber_First := True;
+      for Seed in 1 .. 400 loop
+         Now_H := CB.Design (Castle.Hash.Mix (Castle.Hash.U64 (Seed)));
+         Now_H.Fx := 4;  Now_H.Fy := 4;  Now_H.Pad := 4;
+         Now_H.Ux := 1;  Now_H.Uy := 0;  Now_H.Vx := 0;  Now_H.Vy := 1;
+         Now_H.Truss := True;
+         Now_H.Sill := True;
+         Now_H.Jambs := False;
+         Now_H.Ridge := True;
+         Straw_Seen := False;
+         Want_Ridge := Want_Ridge + (if Now_H.Ridge_Along_U then Now_H.W else Now_H.D) - 2;
+         Draw (Now_H);
+      end loop;
+      Check (Ridge_Cells = Want_Ridge and then Timber_First,
+             "four hundred hovels as they are begun now: a ridge beam from gable to gable in each ("
+             & Img (Ridge_Cells) & " blocks), raised with the frame");
+      Check (Planks = 0 and then Daub_Jambs > 1_000,
+             "and daub beside their windows again, no plank (the trim round a window is drawn)");
+   end;
+
+   --  a colony saved by the build before this pass (blob 30) is still read: what this pass added to the
+   --  blob is its last four bytes (and two with each house, of which this one has none)
+   Put_Line ("the next pass: a blob of 30 is still read:");
+   Set_Up (With_Bushes => False);
+   declare
+      Whole : constant Bytes := Save;
+      --  (46 added a byte a zone and 45 a byte and one a house, all at the end: without them it is the
+      --  blob as 44 had it but for its number)
+      Full : constant Bytes := Whole (Whole'First .. Whole'Last - (Zone_Count + 1 + House_Count));
+      --  (44 added two bytes with a storehouse, its walls: this colony has none, so its blob of 43 is
+      --  this one but for its number)
+      B43  : Bytes := Full;
+      --  (43 added one byte, the last; 42 a byte and one a zone before it: none of this colony's zones
+      --  was put down whole)
+      B42  : Bytes := Full (Full'First .. Full'Last - 1);
+      T42  : constant Natural := 1 + Zone_Count + 1;
+      B41  : Bytes := Full (Full'First .. Full'Last - T42);
+      --  (41 added two bytes before those, and 40 one before them: what is left is the blob as 39 had it)
+      B40  : Bytes := Full (Full'First .. Full'Last - T42 - 2);
+      Data : constant Bytes := Full (Full'First .. Full'Last - T42 - 3);
+      B39  : Bytes := Data;
+      --  (33 added seven bytes with nobody's tree out of reach, after 32's byte a member, after 31's four;
+      --  34 four more among them, before the last two, and 35 eight more there)
+      --  (and 36 one more there, 37 two more: twenty-two in all; and 38 three after them all, at the end;
+      --  and 39 one after those, the last)
+      Old  : Bytes := Data (Data'First .. Data'Last - 26 - 4 - Members);
+      Mid  : Bytes := Data (Data'First .. Data'Last - 26 - Members);
+      Late : Bytes := Data (Data'First .. Data'Last - 26);
+      Last : Bytes := Data (Data'First .. Data'Last - 21) & Data (Data'Last - 5 .. Data'Last - 4);
+      --  (a blob of 36: without 37's two bytes; no lot is laid out here, and no house stands)
+      B36  : Bytes := Data (Data'First .. Data'Last - 8) & Data (Data'Last - 5 .. Data'Last - 4);
+      --  (and one of 37: without 38's three at the end)
+      B37  : Bytes := Data (Data'First .. Data'Last - 4);
+      --  (and one of 38: without 39's one; no storehouse stands here, which has eight more with it)
+      B38  : Bytes := Data (Data'First .. Data'Last - 1);
+      Ok   : Boolean;
+   begin
+      B43 (B43'First) := 43;
+      Load (B43, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Natural (Save (0)) = 46,
+             "the same colony as blob 43 loads (a storehouse of such a blob is 40 by 20: this one has none), and"
+             & " saves as this build's (46)");
+      B42 (B42'First) := 42;
+      Load (B42, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then not Camp_Is_Square,
+             "the same colony as blob 42 loads: its stake and its camp apart, as they were");
+      B41 (B41'First) := 41;
+      Set_Box_Place (False);
+      Load (B41, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Box_Place
+             and then (for all Z in 1 .. Zone_Count => not Zone_At (Z).Placed),
+             "the same colony as blob 41 loads: no zone of it was put down whole, and the player's stockpile is from"
+             & " now on");
+      Set_Box_Place (False);
+      B40 (B40'First) := 40;
+      Set_Smooth_Covers (False);
+      Set_Fence_Pieces (False);
+      Load (B40, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Smooth_Covers and then Fence_Pieces,
+             "the same colony as blob 40 loads: what 41 added is as a colony founded now has it");
+      B39 (B39'First) := 39;
+      Set_Hovel_Walk (False);
+      Load (B39, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Hovel_Walk,
+             "the same colony as blob 39 loads: what 40 added is as a colony founded now has it");
+      B38 (B38'First) := 38;
+      Set_Yard_Turn (False);
+      Load (B38, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Yard_Turn,
+             "the same colony as blob 38 loads: what 39 added is as a colony founded now has it");
+      B37 (B37'First) := 37;
+      Set_Ways_Told (False);
+      Load (B37, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Ways_Told,
+             "the same colony as blob 37 loads: what 38 added is as a colony founded now has it");
+      B36 (B36'First) := 36;
+      Set_Turn_Ground (False);
+      Set_Keep_Off (False);
+      Load (B36, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Turn_Ground and then Keep_Off,
+             "the same colony as blob 36 loads: what 37 added is as a colony founded now has it");
+      Set_Turn_Ground (True);
+      Set_Keep_Off (True);
+      Last (Last'First) := 33;
+      Set_One_Stockpile (True);
+      Set_Stores_Move (True);
+      Load (Last, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then not One_Stockpile and then not Stores_Move,
+             "the same colony as blob 33 loads, and goes on by today's rules: a stockpile of any size as often as zoned,"
+             & " open beside the stockyard");
+      Late (Late'First) := 32;
+      Set_Wood_Reach (False);
+      Load (Late, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then Wood_Reach_On
+             and then Fell_Reach_M = Work_Radius_M,
+             "the same colony as blob 32 loads: its foresters look further when they have to, as a colony's founded now");
+      Mid (Mid'First) := 31;
+      Load (Mid, Ok);
+      Check (Ok and then House_Count = 0 and then Members = 6 and then not Is_Builder (3),
+             "the same colony as blob 31 loads: nobody in it is set to building");
+      Old (Old'First) := 30;
+      Set_Make_Way (False);
+      Load (Old, Ok);
+      Check (Ok and then Natural (Full (Full'First)) = 46 and then House_Count = 0 and then Members = 6
+             and then Make_Way_On and then Path_Level and then Roof_Timbers and then Window_Timber,
+             "the same colony as blob 30 loads: its people as saved, and what this pass added as a colony founded now"
+             & " has it (a house it held would stay as it was begun)");
+      Old (Old'First) := 29;
+      Load (Old, Ok);
+      Check (not Ok, "(and one of 29 is refused, as before)");
+   end;
+
+   --  Paths straight or at 45 degrees (John, 2026-11-19: "I think we need
+   --  to lock the paths to straight and 45 degree angles, slighty being off
+   --  doesn't really work in a voxel world").
+   Put_Line ("a path's line, straight or at 45 degrees:");
+   declare
+      use Castle.Actions;
+      Laid : Natural;
+      R    : Result;
+      function Corner (V : Float) return Boolean is (V * 4.0 = Float'Rounding (V * 4.0));
+      function One_Of_Eight (A, B : Vec3) return Boolean is
+        (Corner (A.X) and then Corner (A.Y) and then Corner (B.X) and then Corner (B.Y)
+         and then (A.X = B.X or else A.Y = B.Y or else abs (B.X - A.X) = abs (B.Y - A.Y)));
+      --  footpath blocks in column Bx (Along_X) or row By of the meadow
+      function Across (N : Integer; Along_X : Boolean; From : Natural := 0) return Natural is
+         C : Natural := 0;
+      begin
+         for K in From .. W_B - 1 loop
+            if Get ((if Along_X then N else K), (if Along_X then K else N), Ground_Row - 1) = Footpath then
+               C := C + 1;
+            end if;
+         end loop;
+         return C;
+      end Across;
+      All_Eight, Same_Again, Near_Enough : Boolean := True;
+      use Interfaces;
+      Seed : Unsigned_64 := 12_345;
+      function Next return Float is
+      begin
+         Seed := Seed * 6_364_136_223_846_793_005 + 1_442_695_040_888_963_407;
+         return Float (Shift_Right (Seed, 40)) / Float (2 ** 24);
+      end Next;
+   begin
+      Reset;
+      Set_Labour (False);
+      Meadow;
+      Hours := 16.0 * 24.0;
+      Place_Stake (Stake_P, 6, 42);
+      Index_All;
+      --  two thousand lines at any angle
+      for K in 1 .. 2_000 loop
+         declare
+            F0 : constant Vec3 := (8.0 + 48.0 * Next, 8.0 + 48.0 * Next, Ground_M);
+            P  : constant Vec3 := (8.0 + 48.0 * Next, 8.0 + 48.0 * Next, Ground_M);
+            F  : constant Vec3 := Path_Line_Start (F0);
+            E  : constant Vec3 := Path_Line_End (F, P);
+            L  : constant Float := Flat (F, P);
+         begin
+            All_Eight := All_Eight and then One_Of_Eight (F, E) and then Flat (F0, F) <= 0.18;
+            Same_Again := Same_Again and then Path_Line_Start (F) = F and then Path_Line_End (F, E) = E;
+            --  (no further from where it was pointed than the turn to the nearest of eight ways takes it, and half a step)
+            Near_Enough := Near_Enough and then (if L < Path_Line_Least_M then E = F else Flat (E, P) <= L * 0.3827 + 0.19);
+         end;
+      end loop;
+      Check (All_Eight, "two thousand lines pointed any way: each begins and ends on a corner of blocks and lies east, north"
+             & " east, north ... or south east, exactly");
+      Check (Same_Again, "and each, given again, is given back as it is (the line shown is the line ordered)");
+      Check (Near_Enough, "and ends as near where it was pointed as its way allows");
+      --  ordered through the action: a line a little off straight, and one a little off the diagonal
+      Path_Snap := True;
+      Perform ((What => Lay_Path, By => The_Player, From => (10.1, 10.07, Ground_M), To => (40.2, 12.4, Ground_M)), R);
+      Check (R.Done and then Path_Count = 1 and then Path_End (1, False).X = 10.0 and then Path_End (1, False).Y = 10.0
+             and then Path_End (1, True).X = 40.25 and then Path_End (1, True).Y = 10.0,
+             "a path ordered from 10.1 10.07 to 40.2 12.4 is laid from 10 10 to 40.25 10: "
+             & Img (Path_End (1, True).X, 2) & " " & Img (Path_End (1, True).Y, 2));
+      declare
+         Four : Boolean := True;
+      begin
+         for X in B (11.0) .. B (39.0) loop
+            Four := Four and then Across (X, True) = 4;
+         end loop;
+         Check (Four and then Get (B (20.0), B (10.0) - 2, Ground_Row - 1) = Footpath
+                and then Get (B (20.0), B (10.0) + 1, Ground_Row - 1) = Footpath
+                and then Get (B (20.0), B (10.0) - 3, Ground_Row - 1) /= Footpath
+                and then Get (B (20.0), B (10.0) + 2, Ground_Row - 1) /= Footpath,
+                "it is four blocks across all along, two either side of its middle line");
+      end;
+      Perform ((What => Lay_Path, By => The_Player, From => (12.0, 20.0, Ground_M), To => (41.7, 48.2, Ground_M)), R);
+      Check (R.Done and then Path_Count = 2
+             and then abs (Path_End (2, True).X - Path_End (2, False).X) = abs (Path_End (2, True).Y - Path_End (2, False).Y)
+             and then One_Of_Eight (Path_End (2, False), Path_End (2, True)),
+             "a path ordered from 12 20 to 41.7 48.2 is laid at 45 degrees, to "
+             & Img (Path_End (2, True).X, 2) & " " & Img (Path_End (2, True).Y, 2));
+      declare
+         Five, Stepped : Boolean := True;
+      begin
+         for X in B (14.0) .. B (38.0) loop
+            Five := Five and then Across (X, True, From => B (15.0)) = 5;
+            --  (a block along is a block up: the path's lowest block in a column, and in the next)
+            for Y in B (15.0) .. W_B - 3 loop
+               if Get (X, Y, Ground_Row - 1) /= Footpath and then Get (X, Y + 1, Ground_Row - 1) = Footpath then
+                  Stepped := Stepped and then Get (X + 1, Y + 1, Ground_Row - 1) /= Footpath
+                    and then Get (X + 1, Y + 2, Ground_Row - 1) = Footpath;
+               end if;
+            end loop;
+         end loop;
+         Check (Five and then Stepped, "it is five blocks across all along, its edge a step a block");
+      end;
+      --  begun on a path, and drawn up to one
+      Check (Path_Line_Start ((20.1, 10.3, Ground_M)) = (20.0, 10.0, Ground_M)
+             and then Path_Line_Start ((40.6, 10.2, Ground_M)) = (40.25, 10.0, Ground_M)
+             and then Path_Line_Start ((16.1, 23.8, Ground_M)) = (16.0, 24.0, Ground_M),
+             "a line begun on a path begins on its middle line, and one begun by a path's end at that end");
+      Check (Path_Line_End ((30.0, 30.0, Ground_M), (29.8, 10.6, Ground_M)) = (30.0, 10.0, Ground_M)
+             and then Path_Line_End ((36.0, 20.0, Ground_M), (27.2, 28.6, Ground_M)).X
+                      + Path_Line_End ((36.0, 20.0, Ground_M), (27.2, 28.6, Ground_M)).Y = 56.0,
+             "a line drawn up to a path ends on that path's middle line (straight on to it, and aslant across one aslant)");
+      Check (Path_Line_End ((30.0, 30.0, Ground_M), (30.2, 30.3, Ground_M)) = (30.0, 30.0, Ground_M),
+             "a line pointed at where it begins is no line (a click twice on one spot lays no stub)");
+      --  and with the rule off, a path as it is given
+      Path_Snap := False;
+      Perform ((What => Lay_Path, By => The_Player, From => (10.1, 50.07, Ground_M), To => (40.2, 52.4, Ground_M)), R);
+      Check (R.Done and then Path_End (Path_Count, False).X = 10.1 and then Path_End (Path_Count, True).Y = 52.4,
+             "with --no-path-snap a path is laid along the line as it is given, as before");
+      Lay_Path ((10.1, 56.07, Ground_M), (40.2, 58.4, Ground_M), Laid);
+      Check (Laid > 0 and then Path_End (Path_Count, True).Y = 58.4, "(and Lay_Path itself lays whatever line it is given)");
+   end;
+
+   --  A hovel beside a path at 45 degrees is turned to it (John, 2026-11-19; the third step of the
+   --  turned building: the house carries its turn).
+   Put_Line ("a hovel turned to a path at 45 degrees:");
+   declare
+      Cx : constant Float := 32.0;
+      Cy : constant Float := 36.0;
+      Laid, L1 : Natural;
+      Along, Square, Off_None, Kept : Boolean := True;
+      Lots_Seen : Natural := 0;
+   begin
+      for Pass in 1 .. 2 loop                 --  (turned, and with the rule off)
+         for Step in 0 .. 7 loop
+            for Side in 1 .. 2 loop
+               declare
+                  Th : constant Float := Float (Step) * Ada.Numerics.Pi / 4.0;
+                  Tx : constant Float := Cos (Th);
+                  Ty : constant Float := Sin (Th);
+                  Sg : constant Float := (if Side = 1 then 1.0 else -1.0);
+               begin
+                  Reset;
+                  Set_Beds (False);
+                  Castle.Herds.Set_Scatter (True);
+                  Set_Labour (True);
+                  Set_Needs (False);
+                  Set_Skills (False);
+                  Set_Demand_Chain (False);
+                  Set_House_Turn (Pass = 1);
+                  Meadow;
+                  Hours := 16.0 * 24.0;
+                  Place_Stake ((4.0, 4.0, Ground_M), 12, 42);
+                  Lay_Path ((Cx - 14.0 * Tx, Cy - 14.0 * Ty, Ground_M), (Cx + 14.0 * Tx, Cy + 14.0 * Ty, Ground_M), Laid);
+                  Build_Paths_Now;
+                  Index_All;
+                  Zone_Housing (Cx - 14.0 * Tx - Sg * Ty, Cy - 14.0 * Ty + Sg * Tx, Cx + 14.0 * Tx, Cy + 14.0 * Ty, L1);
+                  for K in 1 .. Lot_Count loop
+                     declare
+                        C  : constant Lot_Corners := Lot_At (K);
+                        Fx : constant Float := C (2).X - C (1).X;         --  (its front, left to right)
+                        Fy : constant Float := C (2).Y - C (1).Y;
+                        T  : constant Integer := Lot_Turn (K);
+                        A  : constant Float := Float (T) * Ada.Numerics.Pi / 4.0;
+                        Rx : constant Float := Cos (A) * Fx - Sin (A) * Fy;   --  (and as it is drawn)
+                        Ry : constant Float := Sin (A) * Fx + Cos (A) * Fy;
+                     begin
+                        if Pass = 2 then
+                           Off_None := Off_None and then T = 0;
+                        elsif Step mod 2 = 1 then
+                           Lots_Seen := Lots_Seen + 1;
+                           Along := Along and then T /= 0 and then abs (Rx * Ty - Ry * Tx) < 0.01 * Sqrt (Fx * Fx + Fy * Fy);
+                        else
+                           Square := Square and then T = 0;
+                        end if;
+                     end;
+                  end loop;
+                  if Pass = 1 and then Step = 1 and then Side = 1 then     --  (kept with the house, and saved)
+                     Set_Job (1, Forester);
+                     Run (20);
+                     declare
+                        Data : constant Bytes := Save;
+                        Was  : constant Float := (if House_Count > 0 then House_At (1).Turn else 0.0);
+                        Ok   : Boolean;
+                     begin
+                        Load (Data, Ok);
+                        Kept := Ok and then Save = Data and then House_Count > 0 and then Was /= 0.0
+                          and then House_At (1).Turn = Was and then House_Turn_On;
+                     end;
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end loop;
+      Check (Lots_Seen >= 8 and then Along,
+             "beside a path at 45 degrees, either way and on either side, every hovel is turned an eighth of a turn, the"
+             & " way that lays its front along the path (" & Img (Lots_Seen) & " lots)");
+      Check (Square, "beside a path that runs straight none is turned");
+      Check (Kept, "a hovel begun there keeps its turn through a save and a load, the same bytes");
+      Check (Off_None, "with --no-house-turn none is turned, beside any path");
+   end;
+
+   --  The ground of a hovel drawn turned (the rest of the third step: its ground made where it is
+   --  drawn, its floor laid there, and who walks keeping off it).
+   Put_Line ("the ground of a hovel drawn turned:");
+   declare
+      type Tally is record
+         Houses, Turned, Off, Floor_Missing, Floor_Left, Touch, Through, Probed, Not_Kept : Natural := 0;
+         Spots, Pits, Steps, Bare, Kept : Natural := 0;
+         Ways : Boolean := True;
+      end record;
+      function Yard_Of (K : Positive) return Integer is (B (House_At (K).Bed.Z + 0.01) - 1);
+      --  a point of house H as it stands, where it is drawn
+      function Drawn (H : Positive; P : Vec3) return Vec3 is
+         V  : constant House_View := House_At (H);
+         D  : constant Doorway_View := Doorway_At (H, 1);
+         Pv : constant Vec3 := D.Foot + D.Along * (D.Width / 2.0);
+         C  : constant Float := Cos (V.Turn);
+         S  : constant Float := Sin (V.Turn);
+      begin
+         return (Pv.X + C * (P.X - Pv.X) - S * (P.Y - Pv.Y), Pv.Y + S * (P.X - Pv.X) + C * (P.Y - Pv.Y), P.Z);
+      end Drawn;
+      procedure Look (T : in out Tally) is
+      begin
+         T.Houses := T.Houses + House_Count;
+         T.Kept := T.Kept + Castle.Nav.Kept_Count;
+         for H in 1 .. House_Count loop
+            declare
+               V    : constant House_View := House_At (H);
+               Yard : constant Integer := Yard_Of (H);
+               Mid  : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+               X0   : constant Integer := B (Mid.X - 12.0);
+               Y0   : constant Integer := B (Mid.Y - 12.0);
+               St, Br : Natural;
+            begin
+               T.Ways := T.Ways and then V.Phase = Standing
+                 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, V.Bed).Result, Castle.Nav.Found);
+               Count_Pits (H, T.Spots, T.Pits, About => 6.0);
+               Count_Steps (H, St, Br, About_B => 24);
+               T.Steps := T.Steps + St;
+               T.Bare := T.Bare + Br;
+               if V.Turn /= 0.0 and then V.Turn_Ground then
+                  T.Turned := T.Turned + 1;
+                  T.Off := T.Off + House_Drawn_Ground (H).Off;
+                  for X in X0 .. X0 + 96 loop
+                     for Y in Y0 .. Y0 + 96 loop
+                        declare
+                           Px : constant Float := (Float (X) + 0.5) * 0.25;
+                           Py : constant Float := (Float (Y) + 0.5) * 0.25;
+                        begin
+                           --  its floor: under it as drawn, a block in from its walls' outer faces; none
+                           --  left under its walls as they stand where it is not drawn
+                           if House_Drawn_On (H, Px, Py, -0.26) and then Get (X, Y, Yard) /= Footpath then
+                              T.Floor_Missing := T.Floor_Missing + 1;
+                           end if;
+                           if House_Walls_On (H, Px, Py) and then not House_Drawn_On (H, Px, Py, 0.13)
+                             and then Get (X, Y, Yard) = Footpath
+                           then
+                              T.Floor_Left := T.Floor_Left + 1;
+                           end if;
+                           --  nobody else's walls, as they stand or as drawn, on the ground it is drawn on
+                           if House_Drawn_On (H, Px, Py, 0.25) then
+                              for K in 1 .. House_Count loop
+                                 if K /= H and then (House_Walls_On (K, Px, Py) or else House_Drawn_On (K, Px, Py, 0.25)) then
+                                    T.Touch := T.Touch + 1;
+                                 end if;
+                              end loop;
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+                  --  the corner of it drawn furthest from where it stands, half a metre in: kept off
+                  declare
+                     Far_C : Vec3 := Drawn (H, V.Corner (1));
+                     Dm    : constant Vec3 := Drawn (H, Mid);
+                     Along : constant Vec3 := (Drawn (H, V.Corner (2)) - Drawn (H, V.Corner (1)))
+                                              * (1.0 / Flat (V.Corner (1), V.Corner (2)));
+                  begin
+                     for C of V.Corner loop
+                        if Flat (Drawn (H, C), Mid) > Flat (Far_C, Mid) then
+                           Far_C := Drawn (H, C);
+                        end if;
+                     end loop;
+                     Far_C := Far_C + (Dm - Far_C) * (0.7 / Flat (Dm, Far_C));
+                     if not Castle.Nav.Kept_At (Far_C.X, Far_C.Y) then
+                        T.Not_Kept := T.Not_Kept + 1;
+                     end if;
+                     --  from past one end of it as drawn to past the other, the straight line through
+                     --  it: the way planned keeps off it
+                     declare
+                        A  : Vec3 := Dm + Along * (Flat (V.Corner (1), V.Corner (2)) / 2.0 + 1.5);
+                        E  : Vec3 := Dm - Along * (Flat (V.Corner (1), V.Corner (2)) / 2.0 + 1.5);
+                     begin
+                        A.Z := Castle.Nav.Surface_Z (A.X, A.Y);
+                        E.Z := Castle.Nav.Surface_Z (E.X, E.Y);
+                        if A.Z >= 0.0 and then E.Z >= 0.0 and then not Castle.Nav.Kept_At (A.X, A.Y)
+                          and then not Castle.Nav.Kept_At (E.X, E.Y)
+                        then
+                           declare
+                              R : constant Castle.Nav.Route := Castle.Nav.Plan (A, E);
+                           begin
+                              T.Probed := T.Probed + 1;
+                              for K in 1 .. R.N - 1 loop
+                                 for J in 0 .. 20 loop
+                                    declare
+                                       Q : constant Vec3 := R.Pts (K).P + (R.Pts (K + 1).P - R.Pts (K).P) * (Float (J) / 20.0);
+                                    begin
+                                       if Castle.Nav.Kept_At (Q.X, Q.Y) and then House_Drawn_On (H, Q.X, Q.Y, -0.3) then
+                                          T.Through := T.Through + 1;
+                                       end if;
+                                    end;
+                                 end loop;
+                              end loop;
+                           end;
+                        end if;
+                     end;
+                  end;
+               end if;
+            end;
+         end loop;
+      end Look;
+      --  (Walk: the hovels placed are walked where they are drawn, as they are by default since 2026-11-20;
+      --  the checks before that were of the keeping off, which is for those walked as they stand)
+      procedure Street (Step : Natural; Hill : Boolean; Rise_M : Float := 2.0; Fall_Rule : Boolean := False;
+                        Walk : Boolean := False) is
+         Th : constant Float := Float (Step) * Ada.Numerics.Pi / 4.0;
+         Tx : constant Float := Cos (Th);
+         Ty : constant Float := Sin (Th);
+         Cx : constant Float := (if Hill then 46.0 else 32.0);
+         Cy : constant Float := (if Hill then 40.0 else 36.0);
+         function Hill_Z (X : Float) return Float is
+           (if not Hill or else X < 30.0 + Rise_M then Ground_M else Ground_M + 0.25 * Float'Floor ((X - 30.0) / Rise_M));
+         Laid, L1, L2 : Natural;
+      begin
+         Reset;
+         Set_House_Turn (True);
+         Set_Hovel_Walk (Walk);
+         Set_Beds (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (True);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Meadow;
+         Set_Turn_Fall (Fall_Rule);
+         if Hill then          --  (the ground rises to the east from x = 30, a block every Rise_M)
+            for K in 1 .. Integer (Float'Floor (33.0 / Rise_M)) loop
+               Fill (30.0 + Rise_M * Float (K), 14.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+               Fill (30.0 + Rise_M * Float (K), 14.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+            end loop;
+            Changed_World;
+         end if;
+         Hours := 16.0 * 24.0;
+         Place_Stake ((if Hill then Stake_P else (4.0, 4.0, Ground_M)), 12, 42);
+         Lay_Path ((Cx - 14.0 * Tx, Cy - 14.0 * Ty, Hill_Z (Cx - 14.0 * Tx)),
+                   (Cx + 14.0 * Tx, Cy + 14.0 * Ty, Hill_Z (Cx + 14.0 * Tx)), Laid);
+         Build_Paths_Now;
+         Index_All;
+         Zone_Housing (Cx - 14.0 * Tx - Ty, Cy - 14.0 * Ty + Tx, Cx + 14.0 * Tx, Cy + 14.0 * Ty, L1);
+         Zone_Housing (Cx - 14.0 * Tx + Ty, Cy - 14.0 * Ty - Tx, Cx + 14.0 * Tx, Cy + 14.0 * Ty, L2);
+         Build_Homes_Now;
+         Run (2);
+      end Street;
+      Flat_T, Hill_T, Off_T, Steep_T, Ruled_T : Tally;
+      Same, Old_Ok : Boolean := True;
+   begin
+      for Step in 1 .. 2 loop                --  (north-east, north-west)
+         Street (2 * Step - 1, Hill => False);
+         Look (Flat_T);
+         if Step = 1 then
+            declare
+               Data : constant Bytes := Save;
+               N    : constant Natural := Castle.Nav.Kept_Count;
+               Ok   : Boolean;
+            begin
+               Reset;
+               Meadow;
+               Load (Data, Ok);
+               Same := Ok and then Save = Data and then N > 0;
+               Run (1);
+               Same := Same and then Castle.Nav.Kept_Count = N
+                 and then (for all H in 1 .. House_Count => House_At (H).Turn_Ground);
+            end;
+         end if;
+      end loop;
+      Check (Flat_T.Turned >= 6 and then Flat_T.Turned = Flat_T.Houses and then Flat_T.Touch = 0,
+             "beside a path at 45 degrees, either way, " & Img (Flat_T.Turned) & " hovels stand on both sides of it, each"
+             & " with its ground made where it is drawn: no other's walls, as they stand or as drawn, on that ground ("
+             & Img (Flat_T.Touch) & " columns)");
+      Check (Flat_T.Floor_Missing = 0 and then Flat_T.Floor_Left = 0,
+             "its floor of beaten earth lies under it as it is drawn (" & Img (Flat_T.Floor_Missing) & " columns of it"
+             & " without), and none is left under its walls as they stand where it is not drawn ("
+             & Img (Flat_T.Floor_Left) & ")");
+      Check (Flat_T.Kept = Flat_T.Turned and then Flat_T.Not_Kept = 0 and then Flat_T.Probed >= 4 and then Flat_T.Through = 0
+             and then Flat_T.Ways,
+             "the walking map keeps off each: from past one end of it as drawn to past the other, the way planned goes"
+             & " round (" & Img (Flat_T.Probed) & " ways, " & Img (Flat_T.Through) & " points of them on it); and there"
+             & " is a way from the stake to every bed");
+      Check (Same, "saved and loaded: the same bytes, the houses' ground as it was, and the walking map told again");
+      for Step in 1 .. 2 loop
+         Street (2 * Step - 1, Hill => True);
+         Look (Hill_T);
+      end loop;
+      Check (Hill_T.Turned >= 4 and then Hill_T.Off = 0 and then Hill_T.Touch = 0 and then Hill_T.Floor_Missing = 0,
+             "on ground that rises a block every two metres, " & Img (Hill_T.Turned) & " turned hovels either side of a"
+             & " path at 45 degrees across it: under each as it is drawn, and a block round, the ground is at its pad's"
+             & " level (" & Img (Hill_T.Off) & " columns are not)");
+      Check (Hill_T.Steps > 100 and then Hill_T.Bare = 0 and then Hill_T.Spots > 1_000 and then Hill_T.Pits = 0
+             and then Hill_T.Ways and then Hill_T.Through = 0,
+             "round them the ground steps more than a block in " & Img (Hill_T.Steps) & " places, each a wall of stone ("
+             & Img (Hill_T.Bare) & " bare); from every spot in and round them a serf can get to (" & Img (Hill_T.Spots)
+             & ") there is a way back to the stake (" & Img (Hill_T.Pits) & " pits), and a way to every bed");
+      --  steeper, a block every metre (John, 2026-11-19: "we don't want to limit the player they
+      --  need to be able to place diagonals on hillsides if they want to"): a turned hovel is placed
+      --  wherever a square one would be, and its ground made however far the land falls under it as drawn
+      for Step in 1 .. 2 loop
+         Street (2 * Step - 1, Hill => True, Rise_M => 1.0);
+         Look (Steep_T);
+         Street (2 * Step - 1, Hill => True, Rise_M => 1.0, Fall_Rule => True);
+         Ruled_T.Houses := Ruled_T.Houses + House_Count;
+      end loop;
+      --  (on a hillside all of one slope the two rules part only between 25 and 30 %; that the rule
+      --  off lets a hovel stand where none did is tools/turned_streets.sh's third site)
+      Check (Steep_T.Turned >= 3 and then Steep_T.Turned >= Ruled_T.Houses and then Steep_T.Off = 0
+             and then Steep_T.Floor_Missing = 0 and then Steep_T.Touch = 0,
+             "on ground that rises a block every metre, " & Img (Steep_T.Turned) & " turned hovels stand (with"
+             & " the fall taken under their walls as drawn too, --turn-fall, " & Img (Ruled_T.Houses) & "): under each as"
+             & " drawn the ground is at its pad's level (" & Img (Steep_T.Off) & " columns are not)");
+      Check (Steep_T.Steps > 100 and then Steep_T.Bare = 0 and then Steep_T.Spots > 1_000 and then Steep_T.Pits = 0
+             and then Steep_T.Ways,
+             "and round them every step of more than a block is a wall of stone (" & Img (Steep_T.Steps) & ", "
+             & Img (Steep_T.Bare) & " bare), no spot is a pit (" & Img (Steep_T.Spots) & " spots, " & Img (Steep_T.Pits)
+             & "), and there is a way to every bed");
+      --  with the switch off: turned, on the square ground, its floor under its walls as they stand
+      Set_Turn_Ground (False);
+      declare
+         Under_Walls, Turned : Natural := 0;
+      begin
+         Reset;
+         Set_House_Turn (True);
+         Set_Turn_Ground (False);
+         Set_Beds (False);
+         Set_Labour (True);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Meadow;
+         Hours := 16.0 * 24.0;
+         Place_Stake ((4.0, 4.0, Ground_M), 12, 42);
+         declare
+            Laid, L1 : Natural;
+         begin
+            Lay_Path ((22.0, 26.0, Ground_M), (42.0, 46.0, Ground_M), Laid);
+            Build_Paths_Now;
+            Index_All;
+            Zone_Housing (22.0 - 0.7, 26.0 + 0.7, 42.0, 46.0, L1);
+            Build_Homes_Now;
+            Run (2);
+         end;
+         for H in 1 .. House_Count loop
+            declare
+               V : constant House_View := House_At (H);
+               M : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+            begin
+               if V.Turn /= 0.0 and then not V.Turn_Ground then
+                  Turned := Turned + 1;
+               end if;
+               if Get (B (M.X), B (M.Y), Yard_Of (H)) = Footpath then
+                  Under_Walls := Under_Walls + 1;
+               end if;
+            end;
+         end loop;
+         Off_T.Kept := Castle.Nav.Kept_Count;
+         Check (Turned >= 2 and then Turned = House_Count and then Under_Walls = House_Count and then Off_T.Kept = 0,
+                "with --no-turn-ground a turned hovel has the square ground it stands on, its floor under its walls as"
+                & " they stand, and nothing is kept off (" & Img (Turned) & " hovels)");
+         --  such a colony as a blob of 36 (no lot is left laid out: the last two bytes but the trees' count go;
+         --  and 43's byte, the last of all, 42's byte and one a zone, 41's two, 40's one and 39's)
+         declare
+            Full : constant Bytes := Save;
+            --  (and 46's byte a zone, 45's byte and one a house, which lie after them all)
+            Data : constant Bytes := Full (Full'First .. Full'Last - (Zone_Count + 1 + House_Count) - 3 - (1 + Zone_Count) - 1);
+            B36  : Bytes := Data (Data'First .. Data'Last - 8) & Data (Data'Last - 5 .. Data'Last - 4);
+            N    : constant Natural := House_Count;
+            Ok   : Boolean;
+         begin
+            B36 (B36'First) := 36;
+            Old_Ok := Lot_Count = 0;
+            Reset;
+            Meadow;
+            Load (B36, Ok);
+            Old_Ok := Old_Ok and then Ok and then House_Count = N
+              and then (for all H in 1 .. House_Count => House_At (H).Turn /= 0.0 and then not House_At (H).Turn_Ground);
+            Run (2);
+            Check (Old_Ok and then Castle.Nav.Kept_Count = 0,
+                   "a colony saved as blob 36 with turned hovels standing loads: they stand turned on the square ground"
+                   & " they have, and nothing is kept off");
+         end;
+      end;
+      Set_Turn_Ground (True);
+      --  with the keep-off off: the ground made, nothing kept off
+      Set_Keep_Off (False);
+      Street (1, Hill => False);
+      Set_Keep_Off (False);
+      Run (2);
+      Check (House_Count >= 3 and then Castle.Nav.Kept_Count = 0
+             and then (for all H in 1 .. House_Count => House_At (H).Turn_Ground),
+             "with --no-keep-off their ground is made where they are drawn and nothing is kept off");
+      Set_Keep_Off (True);
+
+      --  Walked where it is drawn (John, 2026-11-20, of the storehouse's way offered for the turned
+      --  hovels: "Let's do that"): its walls as drawn are walls, its doorway as drawn the way in, the
+      --  square its blocks stand on turf to the feet as to the eye, and its bed in it as drawn.
+      declare
+         type Walk_Tally is record
+            Houses, Walked, Listed, Kept : Natural := 0;
+            Wall_Pts, Wall_Floors        : Natural := 0;   --  points along its walls as drawn; of them walked faster
+            Sq_Cells, Sq_Level           : Natural := 0;   --  cells wholly where its blocks stand; of them at its pad
+            Beds_In, Probed, Through     : Natural := 0;
+            Owners, Home_In, Home_Out    : Natural := 0;
+            Spots, Pits, Steps, Bare     : Natural := 0;
+            Ways                         : Boolean := True;
+         end record;
+         procedure Look_Walked (T : in out Walk_Tally) is
+         begin
+            T.Houses := T.Houses + House_Count;
+            T.Kept := T.Kept + Castle.Nav.Kept_Count;
+            T.Listed := T.Listed + Castle.Nav.Drawn_Count;
+            for H in 1 .. House_Count loop
+               declare
+                  V   : constant House_View := House_At (H);
+                  Pad : constant Float := V.Corner (1).Z;
+                  Mid : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+               begin
+                  if V.Walked_Drawn and then V.Walk then
+                     T.Walked := T.Walked + 1;
+                  end if;
+                  declare
+                     St, Br : Natural;
+                  begin
+                     Count_Pits (H, T.Spots, T.Pits, About => 6.0);
+                     Count_Steps (H, St, Br, About_B => 24);
+                     T.Steps := T.Steps + St;
+                     T.Bare := T.Bare + Br;
+                  end;
+                  if House_Place (H, V.Bed.X, V.Bed.Y) = Within_It then
+                     T.Beds_In := T.Beds_In + 1;
+                  end if;
+                  T.Ways := T.Ways and then Castle.Nav."=" (Castle.Nav.Plan (Stake, V.Bed).Result, Castle.Nav.Found);
+                  --  its walls as drawn, along their middles (a block thick: half a block in from the drawn
+                  --  outline), a point every 5 cm: a wall's slow floor (Castle.Nav.Wall_Speed), but in a
+                  --  doorway
+                  for C in 1 .. 4 loop
+                     declare
+                        A  : constant Vec3 := V.Drawn (C);
+                        E  : constant Vec3 := V.Drawn (C mod 4 + 1);
+                        Ln : constant Float := Flat (A, E);
+                        Al : constant Vec3 := (E - A) * (1.0 / Ln);
+                        In_V : constant Vec3 := (-Al.Y, Al.X, 0.0);        --  (inward: the outline goes round to the left)
+                        Q  : Vec3;
+                     begin
+                        for J in 0 .. Integer (Ln / 0.05) loop
+                           Q := A + Al * (0.05 * Float (J)) + In_V * 0.125;
+                           if House_Place (H, Q.X, Q.Y) = In_Its_Wall then
+                              T.Wall_Pts := T.Wall_Pts + 1;
+                              declare
+                                 N  : Natural;
+                                 Fl : Castle.Nav.Floor_List;
+                              begin
+                                 Castle.Nav.Floors_At (Integer (Float'Floor (Q.X * 2.0)), Integer (Float'Floor (Q.Y * 2.0)),
+                                                       N, Fl);
+                                 if (for some I in 1 .. N => Fl (I).Speed > Castle.Nav.Wall_Speed) then
+                                    T.Wall_Floors := T.Wall_Floors + 1;
+                                 end if;
+                              end;
+                           end if;
+                        end loop;
+                     end;
+                  end loop;
+                  --  the cells of the walking map wholly where its blocks stand, and clear of its walls as
+                  --  drawn by more than the ground made round them and half a cell's diagonal (at a corner, a
+                  --  little more): walked at its pad
+                  for Cx in Integer (Float'Floor ((Mid.X - 6.0) * 2.0)) .. Integer (Float'Floor ((Mid.X + 6.0) * 2.0)) loop
+                     for Cy in Integer (Float'Floor ((Mid.Y - 6.0) * 2.0)) .. Integer (Float'Floor ((Mid.Y + 6.0) * 2.0)) loop
+                        declare
+                           X0 : constant Float := Float (Cx) * 0.5;
+                           Y0 : constant Float := Float (Cy) * 0.5;
+                           function Sq (X, Y : Float) return Boolean is
+                             (House_Place (H, X, Y) = Where_Its_Blocks_Stand);
+                           function Off_Outline (X, Y : Float) return Float is
+                              Best : Float := Float'Last;
+                           begin
+                              for C in 1 .. 4 loop
+                                 declare
+                                    A : constant Vec3 := V.Drawn (C);
+                                    E : constant Vec3 := V.Drawn (C mod 4 + 1);
+                                    L2 : constant Float := (E.X - A.X) ** 2 + (E.Y - A.Y) ** 2;
+                                    T  : constant Float := Float'Max (0.0, Float'Min (1.0,
+                                           ((X - A.X) * (E.X - A.X) + (Y - A.Y) * (E.Y - A.Y)) / L2));
+                                 begin
+                                    Best := Float'Min (Best, Sqrt ((X - A.X - T * (E.X - A.X)) ** 2
+                                                                   + (Y - A.Y - T * (E.Y - A.Y)) ** 2));
+                                 end;
+                              end loop;
+                              return Best;
+                           end Off_Outline;
+                        begin
+                           if Sq (X0, Y0) and then Sq (X0 + 0.5, Y0) and then Sq (X0, Y0 + 0.5)
+                             and then Sq (X0 + 0.5, Y0 + 0.5) and then Sq (X0 + 0.25, Y0 + 0.25)
+                             and then Off_Outline (X0 + 0.25, Y0 + 0.25) > 1.1
+                           then
+                              T.Sq_Cells := T.Sq_Cells + 1;
+                              if abs (Castle.Nav.Surface_Z (X0 + 0.25, Y0 + 0.25) - Pad) < 0.01 then
+                                 T.Sq_Level := T.Sq_Level + 1;
+                              end if;
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+                  --  from past one end of it as drawn to past the other: no point of the way planned is in
+                  --  a wall of it as drawn
+                  declare
+                     Al : constant Vec3 := (V.Drawn (2) - V.Drawn (1)) * (1.0 / Flat (V.Drawn (1), V.Drawn (2)));
+                     Dm : constant Vec3 := (V.Drawn (1) + V.Drawn (3)) * 0.5;
+                     Hw : constant Float := Flat (V.Drawn (1), V.Drawn (2)) / 2.0 + 1.5;
+                     A  : Vec3 := Dm + Al * Hw;
+                     E  : Vec3 := Dm - Al * Hw;
+                  begin
+                     A.Z := Castle.Nav.Surface_Z (A.X, A.Y);
+                     E.Z := Castle.Nav.Surface_Z (E.X, E.Y);
+                     if A.Z >= 0.0 and then E.Z >= 0.0 then
+                        declare
+                           R : constant Castle.Nav.Route := Castle.Nav.Plan (A, E);
+                        begin
+                           T.Probed := T.Probed + 1;
+                           for K in 1 .. R.N - 1 loop
+                              for J in 0 .. 20 loop
+                                 declare
+                                    Q : constant Vec3 :=
+                                      R.Pts (K).P + (R.Pts (K + 1).P - R.Pts (K).P) * (Float (J) / 20.0);
+                                 begin
+                                    if House_Place (H, Q.X, Q.Y) = In_Its_Wall then
+                                       T.Through := T.Through + 1;
+                                    end if;
+                                 end;
+                              end loop;
+                           end loop;
+                        end;
+                     end if;
+                  end;
+               end;
+            end loop;
+            --  two hours after midnight: whoever has a home is in it as it is drawn (the band sleeping)
+            Set_Needs (True);
+            Run (120);
+            for I in 1 .. Members loop
+               if Home_Of (I) > 0 then
+                  T.Owners := T.Owners + 1;
+                  if At_Home (I) then
+                     if House_Place (Home_Of (I), Where (I).X, Where (I).Y) = Within_It then
+                        T.Home_In := T.Home_In + 1;
+                     else
+                        T.Home_Out := T.Home_Out + 1;
+                     end if;
+                  end if;
+               end if;
+            end loop;
+         end Look_Walked;
+         Flat_W, Hill_W : Walk_Tally;
+         Same : Boolean := True;
+      begin
+         for Step in 1 .. 2 loop             --  (north-east, north-west)
+            Street (2 * Step - 1, Hill => False, Walk => True);
+            Look_Walked (Flat_W);
+            if Step = 1 then
+               declare
+                  Data : constant Bytes := Save;
+                  N    : constant Natural := Castle.Nav.Drawn_Count;
+                  Ok   : Boolean;
+               begin
+                  Reset;
+                  Meadow;
+                  Load (Data, Ok);
+                  Same := Ok and then Save = Data and then N = House_Count and then Castle.Nav.Drawn_Count = N
+                    and then (for all H in 1 .. House_Count => House_At (H).Walk and then House_At (H).Walked_Drawn);
+                  Run (1);
+                  Same := Same and then Castle.Nav.Drawn_Count = N and then Castle.Nav.Kept_Count = 0;
+               end;
+            end if;
+         end loop;
+         for Step in 1 .. 2 loop             --  (rising a block every two metres, and every metre)
+            Street (2 * Step - 1, Hill => True, Walk => True);
+            Look_Walked (Hill_W);
+            Street (2 * Step - 1, Hill => True, Rise_M => 1.0, Walk => True);
+            Look_Walked (Hill_W);
+         end loop;
+         Check (Flat_W.Walked >= 6 and then Flat_W.Walked = Flat_W.Houses and then Hill_W.Walked >= 4
+                and then Hill_W.Walked = Hill_W.Houses and then Flat_W.Listed = Flat_W.Walked
+                and then Hill_W.Listed = Hill_W.Walked and then Flat_W.Kept + Hill_W.Kept = 0,
+                "placed beside a path at 45 degrees (on the flat, either way, and on ground rising a block every two"
+                & " metres and every metre), " & Img (Flat_W.Walked + Hill_W.Walked) & " turned hovels stand and are walked where they"
+                & " are drawn, the walking map told of each; nothing is kept off");
+         Check (Flat_W.Wall_Pts + Hill_W.Wall_Pts > 2_000 and then Flat_W.Wall_Floors + Hill_W.Wall_Floors = 0
+                and then Flat_W.Probed + Hill_W.Probed >= 8 and then Flat_W.Through + Hill_W.Through = 0,
+                "their walls as drawn are slow to the feet (a metre of them as dear as 100 m of turf): all of "
+                & Img (Flat_W.Wall_Pts + Hill_W.Wall_Pts) & " points along them (" & Img (Flat_W.Wall_Floors + Hill_W.Wall_Floors)
+                & " faster), and from past one end"
+                & " of each to past the other the way planned keeps out of them (" & Img (Flat_W.Probed + Hill_W.Probed)
+                & " ways, " & Img (Flat_W.Through + Hill_W.Through) & " points in a wall)");
+         Check (Flat_W.Sq_Cells + Hill_W.Sq_Cells > 100 and then Flat_W.Sq_Level + Hill_W.Sq_Level = Flat_W.Sq_Cells + Hill_W.Sq_Cells,
+                "the square where their blocks stand is walked as the turf it looks: all "
+                & Img (Flat_W.Sq_Cells + Hill_W.Sq_Cells) & " cells wholly on it have a floor at the pad ("
+                & Img (Flat_W.Sq_Level + Hill_W.Sq_Level) & ")");
+         Check (Flat_W.Beds_In = Flat_W.Houses and then Hill_W.Beds_In = Hill_W.Houses and then Flat_W.Ways and then Hill_W.Ways
+                and then Flat_W.Owners + Hill_W.Owners >= 10 and then Flat_W.Home_In + Hill_W.Home_In >= 10
+                and then Flat_W.Home_Out + Hill_W.Home_Out = 0,
+                "each bed is in its hovel as drawn, with a way to it from the stake; two hours after midnight "
+                & Img (Flat_W.Home_In + Hill_W.Home_In) & " of " & Img (Flat_W.Owners + Hill_W.Owners)
+                & " owners are at home, all in it as drawn (" & Img (Flat_W.Home_Out + Hill_W.Home_Out) & " not)");
+         Check (Hill_W.Steps > 100 and then Hill_W.Bare = 0 and then Flat_W.Spots + Hill_W.Spots > 2_000
+                and then Flat_W.Pits + Hill_W.Pits = 0,
+                "on the hillside every step of more than a block round them is a wall of stone (" & Img (Hill_W.Steps)
+                & ", " & Img (Hill_W.Bare) & " bare), and from every spot in and round them a serf can get to ("
+                & Img (Flat_W.Spots + Hill_W.Spots) & ") there is a way back to the stake (" & Img (Flat_W.Pits + Hill_W.Pits)
+                & " pits)");
+         Check (Same, "saved and loaded: the same bytes, each hovel walked where it is drawn, the walking map told again");
+      end;
+   end;
+
+   --  What one of the band finds there is no way to, the others are told (2026-11-20; the rest of
+   --  John's "Let workers go 250m for resources", for the gatherers and the porters).
+   Put_Line ("ways that are not there, told to the band:");
+   declare
+      procedure Field_Walled (Told_On : Boolean) is
+      begin
+         --  a field of sixty-six bushes north of the path, all of it walled in; one bush free, further off
+         Set_Up (With_Field => True, With_Bushes => False, Bush_X => 50.0, Bush_Y => 10.0);
+         Set_Wood_Reach (True);
+         Set_Ways_Told (Told_On);
+         Fill (3.0, 28.0, 59.0, 28.25, Ground_Row, Ground_Row + 11, Plank);
+         Fill (3.0, 57.5, 59.0, 57.75, Ground_Row, Ground_Row + 11, Plank);
+         Fill (3.0, 28.0, 3.25, 57.75, Ground_Row, Ground_Row + 11, Plank);
+         Fill (58.75, 28.0, 59.0, 57.75, Ground_Row, Ground_Row + 11, Plank);
+         Set_Job (1, Gatherer);
+      end Field_Walled;
+      Got_Off, Got_On, Told_N : Natural;
+      Said_Off : Boolean;
+      Same : Boolean;
+   begin
+      Field_Walled (Told_On => False);
+      Run (900);
+      Got_Off := Stored (Berries) + Carried (1);
+      Said_Off := Status (1) = "can't get there";
+      Field_Walled (Told_On => True);
+      Run (900);
+      Got_On := Stored (Berries) + Carried (1);
+      Told_N := Ways_Told_Now;
+      Check (Got_Off = 0 and then Said_Off,
+             "as it was (--no-ways-told): a gatherer whose nearest bushes are walled in goes round them for fifteen"
+             & " minutes and picks nothing; it says 'can't get there', with a bush it could get to 30 m off");
+      Check (Got_On > 0 and then Told_N >= 9,
+             "told of the ways: in the same fifteen minutes it has picked from the bush it can get to ("
+             & Img (Got_On) & " berries), and " & Img (Told_N) & " bushes are nobody's to try just now");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Same := Ok and then Save = Data and then Ways_Told_Now = Told_N and then Ways_Told;
+         Check (Same, "saved and loaded: the same bytes, and what was told is told still");
+      end;
+   end;
+
+   --  A stockyard beside a path at 45 degrees is laid out along the path (John, 2026-11-20, of three
+   --  ways put to him: "go on with the second way for the stockyard"): its lot, its places, its ground,
+   --  its fence, its gateways and its coverings made for real along the path, block by block; its
+   --  storehouse's own blocks square to the grid and drawn turned; and, once its walls and roof are
+   --  up, the feet going by the storehouse as it is drawn.
+   Put_Line ("a stockyard laid out along a path at 45 degrees:");
+   declare
+      C45 : constant Float := 0.707_106_78;
+      type Fits is array (Fitting) of Natural;
+      --  The band on the meadow (Rise_M > 0: rising to the east from x = 30, a block every so far), a
+      --  path through the middle of it (Step 0: east, straight; 1: north-east; 3: north-west), the
+      --  second morning come, and a stockyard Len by Deep metres zoned on one side of the path, its
+      --  front on the path's edge: its storehouse is begun at once.
+      --  (the two corners that zone it: opposite corners of the lot, a hair inside each)
+      procedure Corners (Step : Natural; Side : Integer; Len, Deep : Positive; Px, Py : Float; X0, Y0, X1, Y1 : out Float) is
+         Sd : constant Float := Float (Side);
+      begin
+         if Step = 0 then
+            X0 := Px - Float (Len / 2) + 0.3;
+            Y0 := Py + Sd * 1.3;
+            X1 := Px - Float (Len / 2) + Float (Len) - 0.3;
+            Y1 := Py + Sd * (1.0 + Float (Deep) - 0.3);
+         else
+            declare
+               --  along and across the way a lot at 45 degrees lies: whole metres of these
+               A_P : constant Float := (Px + Py) * C45;
+               B_P : constant Float := (Py - Px) * C45;
+               A0, A1, B0, B1 : Float;
+            begin
+               if Step = 1 then             --  (the path runs along a)
+                  declare
+                     Edge  : constant Float := B_P + Sd * 0.5;
+                     Front : constant Float := (if Side > 0 then Float'Ceiling (Edge - 0.001) else Float'Floor (Edge + 0.001));
+                     From  : constant Float := Float'Rounding (A_P) - Float (Len / 2);
+                  begin
+                     A0 := From + 0.3;
+                     A1 := From + Float (Len) - 0.3;
+                     B0 := Front + Sd * 0.3;
+                     B1 := Front + Sd * (Float (Deep) - 0.3);
+                  end;
+               else                         --  (along b)
+                  declare
+                     Edge  : constant Float := A_P + Sd * 0.5;
+                     Front : constant Float := (if Side > 0 then Float'Ceiling (Edge - 0.001) else Float'Floor (Edge + 0.001));
+                     From  : constant Float := Float'Rounding (B_P) - Float (Len / 2);
+                  begin
+                     B0 := From + 0.3;
+                     B1 := From + Float (Len) - 0.3;
+                     A0 := Front + Sd * 0.3;
+                     A1 := Front + Sd * (Float (Deep) - 0.3);
+                  end;
+               end if;
+               X0 := (A0 - B0) * C45;
+               Y0 := (A0 + B0) * C45;
+               X1 := (A1 - B1) * C45;
+               Y1 := (A1 + B1) * C45;
+            end;
+         end if;
+      end Corners;
+      procedure Yard (Step : Natural; Side : Integer; Len, Deep : Positive; Cells : out Natural;
+                      Rise_M : Float := 0.0; Along_Path : Boolean := True; Zone : Boolean := True;
+                      Pieces : Boolean := True) is
+         Px : constant Float := (if Rise_M > 0.0 then 40.0 else 32.0);
+         Py : constant Float := (if Rise_M > 0.0 then 36.0 else 30.0);
+         Tx : constant Float := (case Step is when 0 => 1.0, when 1 => C45, when others => -C45);
+         Ty : constant Float := (if Step = 0 then 0.0 else C45);
+         function Hill_Z (X : Float) return Float is
+           (if Rise_M = 0.0 or else X < 30.0 + Rise_M then Ground_M else Ground_M + 0.25 * Float'Floor ((X - 30.0) / Rise_M));
+         Laid : Natural;
+         X0, Y0, X1, Y1 : Float;
+      begin
+         Cells := 0;
+         Reset;
+         Set_Yard_Turn (Along_Path);
+         Set_Smooth_Covers (Pieces);      --  (its coverings smoothed and its fence in pieces, as by default)
+         Set_Fence_Pieces (Pieces);
+         Set_Storehouse (True);
+         Set_Beds (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (True);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Meadow;
+         if Rise_M > 0.0 then
+            for K in 1 .. Integer (Float'Floor (33.0 / Rise_M)) loop
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+            end loop;
+            Changed_World;
+         end if;
+         Hours := 16.0 * 24.0;
+         Place_Stake ((4.0, 4.0, Ground_M), 12, 42);
+         Lay_Path ((Px - 18.0 * Tx, Py - 18.0 * Ty, Hill_Z (Px - 18.0 * Tx)),
+                   (Px + 18.0 * Tx, Py + 18.0 * Ty, Hill_Z (Px + 18.0 * Tx)), Laid);
+         Build_Paths_Now;
+         Index_All;
+         Run (1);
+         Hours := 17.0 * 24.0 + 8.0;           --  (the second morning: the storehouse is asked for)
+         Run (1);
+         if not Zone then
+            null;
+         elsif Step /= 0 and then not Along_Path then
+            --  (a box square to the grid, a corner of it at the path: as one was zoned before)
+            Zone_Stockyard (Px + 1.0, Py - 0.4, Px + 1.0 + Float (Len), Py - 0.4 - Float (Deep), Cells);
+         else
+            Corners (Step, Side, Len, Deep, Px, Py, X0, Y0, X1, Y1);
+            Zone_Stockyard (X0, Y0, X1, Y1, Cells);
+         end if;
+      end Yard;
+      function Tally return Fits is
+         T : Fits := [others => 0];
+      begin
+         for K in 1 .. Cell_Count loop
+            if Stockyard > 0 and then Zone_Of_Cell (K) = Stockyard then
+               T (Cell_At (K).Fit) := T (Cell_At (K).Fit) + 1;
+            end if;
+         end loop;
+         return T;
+      end Tally;
+      --  the first place of the yard fitted so (its middle)
+      function Place_Of (F : Fitting) return Vec3 is
+      begin
+         for K in 1 .. Cell_Count loop
+            if Zone_Of_Cell (K) = Stockyard and then Cell_At (K).Fit = F then
+               return Cell_At (K).Centre;
+            end if;
+         end loop;
+         return (0.0, 0.0, -1.0);
+      end Place_Of;
+      --  the top of the ground at a block column, whatever stands on it
+      function Earth_Top (X, Y, From : Integer) return Integer is
+      begin
+         for Z in reverse From - 40 .. From + 16 loop
+            if Get (X, Y, Z) in Grass | Dirt | Footpath | Fieldstone or else (Get (X, Y, Z) = Plank and then Z < From) then
+               return Z;
+            end if;
+         end loop;
+         return -1;
+      end Earth_Top;
+      type Seen is record
+         Yards, Turned, Walked : Natural := 0;       --  stockyards set up; their storehouses drawn turned; walked as drawn
+         Off, Grown, Columns : Natural := 0;         --  of their ground: columns not at their level, grown over, in all
+         Steps, Bare : Natural := 0;                 --  steps of more than a block in and round them, and those not of stone
+         Spots, Pits : Natural := 0;
+         In_Wall, Ways, No_Way : Natural := 0;       --  points of the ways planned that lie in a wall as drawn; ways found, and not
+         By_Door : Natural := 0;                     --  ways in that pass a doorway as drawn
+         Shut_In : Natural := 0;                     --  with both gateways shut: yards whose back is shut in
+         Each : Natural := 0;                        --  with one doorway, or one gateway, shut: the way found by the other
+         Over_Blocks : Natural := 0;                 --  spots where its blocks stand, off it as drawn, walked at its pad's level
+         Along : Boolean := True;                    --  each drawn with its front along its path
+         Same : Boolean := True;                     --  saved and loaded: the same bytes, the same turn
+      end record;
+      procedure Look (T : in out Seen; Tx, Ty : Float) is
+         S : constant Natural := Storehouse;
+      begin
+         T.Yards := T.Yards + 1;
+         if S = 0 then
+            return;
+         end if;
+         Build_Homes_Now;
+         Run (2);
+         declare
+            V   : constant House_View := House_At (S);
+            G   : constant Drawn_Ground := Yard_Ground (S);
+            Pad : constant Integer := B (V.Corner (1).Z + 0.01);
+            Z   : constant Zone_View := Zone_At (Stockyard);
+            Fx  : constant Float := V.Drawn (2).X - V.Drawn (1).X;
+            Fy  : constant Float := V.Drawn (2).Y - V.Drawn (1).Y;
+         begin
+            if V.Yard_Turned then
+               T.Turned := T.Turned + 1;
+            end if;
+            if V.Walked_Drawn and then Castle.Nav.Drawn_Count = 1 then
+               T.Walked := T.Walked + 1;
+            end if;
+            T.Along := T.Along and then abs (Fx * Ty - Fy * Tx) < 0.01 * Sqrt (Fx * Fx + Fy * Fy)
+              and then Sqrt (Fx * Fx + Fy * Fy) in 9.9 .. 10.1;
+            T.Off := T.Off + G.Off;
+            T.Grown := T.Grown + G.Grown;
+            T.Columns := T.Columns + G.Columns;
+            --  every step of more than a block, in the yard or along its edge, is a wall of stone
+            for X in B (Z.Lo.X) - 2 .. B (Z.Hi.X) + 2 loop
+               for Y in B (Z.Lo.Y) - 2 .. B (Z.Hi.Y) + 2 loop
+                  if Zone_On ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25) = Stockyard then
+                     for D in 1 .. 4 loop
+                        declare
+                           Nx : constant Integer := X + (case D is when 1 => 1, when 2 => -1, when others => 0);
+                           Ny : constant Integer := Y + (case D is when 3 => 1, when 4 => -1, when others => 0);
+                           Th : constant Integer := Earth_Top (X, Y, Pad);
+                           Tn : constant Integer := Earth_Top (Nx, Ny, Pad);
+                        begin
+                           if Th - Tn > 1 and then Tn > 0 then
+                              T.Steps := T.Steps + 1;
+                              if (for some Zz in Tn + 2 .. Th => Get (X, Y, Zz) /= Fieldstone) then
+                                 T.Bare := T.Bare + 1;
+                              end if;
+                           end if;
+                        end;
+                     end loop;
+                  end if;
+               end loop;
+            end loop;
+            Count_Pits (S, T.Spots, T.Pits, About => 14.0);
+            --  the ways: from the stake to a place inside it, to one under a covering, to one of the
+            --  yard behind it; no point of any in a wall as drawn, and the way in by a doorway as drawn
+            for F in Fitting loop
+               if F in Floor | Cover | Ground | Meat_Barrel then
+                  declare
+                     P : constant Vec3 := Place_Of (F);
+                  begin
+                     if P.Z >= 0.0 then
+                        declare
+                           R : constant Castle.Nav.Route := Castle.Nav.Plan (Stake, P);
+                           Door : Boolean := False;
+                        begin
+                           if Castle.Nav."=" (R.Result, Castle.Nav.Found) then
+                              T.Ways := T.Ways + 1;
+                           else
+                              T.No_Way := T.No_Way + 1;
+                           end if;
+                           for K in 1 .. R.N - 1 loop
+                              for J in 0 .. 40 loop
+                                 declare
+                                    Q : constant Vec3 := R.Pts (K).P + (R.Pts (K + 1).P - R.Pts (K).P) * (Float (J) / 40.0);
+                                 begin
+                                    if House_Place (S, Q.X, Q.Y) = In_Its_Wall then
+                                       T.In_Wall := T.In_Wall + 1;
+                                    end if;
+                                    for N in 1 .. Doorway_Count (S) loop
+                                       declare
+                                          Dw : constant Doorway_View := Doorway_At (S, N);
+                                          Md : constant Vec3 := Dw.Foot + Dw.Along * (Dw.Width / 2.0);
+                                          --  (where that doorway is drawn: about what the house is turned about)
+                                          Cs : constant Float := Cos (V.Turn);
+                                          Sn : constant Float := Sin (V.Turn);
+                                          Dd : constant Vec3 :=
+                                            (V.Pivot.X + Cs * (Md.X - V.Pivot.X) - Sn * (Md.Y - V.Pivot.Y),
+                                             V.Pivot.Y + Sn * (Md.X - V.Pivot.X) + Cs * (Md.Y - V.Pivot.Y), Md.Z);
+                                       begin
+                                          Door := Door or else Flat (Q, Dd) < 0.9;
+                                       end;
+                                    end loop;
+                                 end;
+                              end loop;
+                           end loop;
+                           if F in Floor | Meat_Barrel and then Door then
+                              T.By_Door := T.By_Door + 1;
+                           end if;
+                        end;
+                     end if;
+                  end;
+               end if;
+            end loop;
+            --  where its own blocks stand, off it as drawn: walked, at its pad's level
+            for X in B (Float'Min (V.Corner (1).X, V.Corner (3).X)) - 2 .. B (Float'Max (V.Corner (1).X, V.Corner (3).X)) + 2 loop
+               for Y in B (Float'Min (V.Corner (1).Y, V.Corner (3).Y)) - 2 .. B (Float'Max (V.Corner (1).Y, V.Corner (3).Y)) + 2 loop
+                  declare
+                     Qx : constant Float := (Float (X) + 0.5) * 0.25;
+                     Qy : constant Float := (Float (Y) + 0.5) * 0.25;
+                  begin
+                     if House_Walls_On (S, Qx, Qy) and then House_Place (S, Qx, Qy) = Where_Its_Blocks_Stand
+                       and then not House_Drawn_On (S, Qx, Qy, 0.5)
+                       and then Castle.Nav.Surface_Z (Qx, Qy) = V.Corner (1).Z
+                     then
+                        T.Over_Blocks := T.Over_Blocks + 1;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+            --  each doorway as drawn, and each gateway, is a way by itself: with planks stood across
+            --  the one, the way is found by the other.  Then both gateways shut: the yard behind it has
+            --  no way out (its fence, stepped along the path, and the storehouse's back wall as drawn
+            --  let nobody through)
+            declare
+               Back : constant Vec3 := Place_Of (Ground);
+               Room : constant Vec3 := Place_Of (Floor);
+               Cs   : constant Float := Cos (V.Turn);
+               Sn   : constant Float := Sin (V.Turn);
+               function As_Drawn (P : Vec3) return Vec3 is
+                 ((V.Pivot.X + Cs * (P.X - V.Pivot.X) - Sn * (P.Y - V.Pivot.Y),
+                   V.Pivot.Y + Sn * (P.X - V.Pivot.X) + Cs * (P.Y - V.Pivot.Y), P.Z));
+               procedure Shut (Foot, Along : Vec3; Width : Float; M : Material) is
+                  W : Float := -0.375;
+               begin
+                  while W <= Width + 0.375 loop
+                     Fill (Foot.X + Along.X * W - 0.2, Foot.Y + Along.Y * W - 0.2,
+                           Foot.X + Along.X * W + 0.2, Foot.Y + Along.Y * W + 0.2, Pad, Pad + 7, M);
+                     W := W + 0.125;
+                  end loop;
+                  Changed_World;
+               end Shut;
+            begin
+               for N in 1 .. Doorway_Count (S) loop
+                  declare
+                     Dw : constant Doorway_View := Doorway_At (S, N);
+                     Al : constant Vec3 := (Cs * Dw.Along.X - Sn * Dw.Along.Y, Sn * Dw.Along.X + Cs * Dw.Along.Y, 0.0);
+                  begin
+                     Shut (As_Drawn (Dw.Foot), Al, Dw.Width, Plank);
+                     if Room.Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, Room).Result, Castle.Nav.Found) then
+                        T.Each := T.Each + 1;
+                     end if;
+                     Shut (As_Drawn (Dw.Foot), Al, Dw.Width, Air);
+                  end;
+               end loop;
+               for N in 1 .. Gateway_Count (S) loop
+                  declare
+                     Gw : constant Doorway_View := Gateway_At (S, N);
+                  begin
+                     Shut (Gw.Foot, Gw.Along, Gw.Width, Plank);
+                     if Back.Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, Back).Result, Castle.Nav.Found) then
+                        T.Each := T.Each + 1;
+                     end if;
+                     Shut (Gw.Foot, Gw.Along, Gw.Width, Air);
+                  end;
+               end loop;
+               for N in 1 .. Gateway_Count (S) loop
+                  Shut (Gateway_At (S, N).Foot, Gateway_At (S, N).Along, Gateway_At (S, N).Width, Plank);
+               end loop;
+               if Back.Z >= 0.0 and then Gateway_Count (S) = 2
+                 and then not Castle.Nav."=" (Castle.Nav.Plan (Back, Stake).Result, Castle.Nav.Found)
+                 and then not Castle.Nav."=" (Castle.Nav.Plan (Stake, Back).Result, Castle.Nav.Found)
+               then
+                  T.Shut_In := T.Shut_In + 1;
+               end if;
+            end;
+         end;
+      end Look;
+      Flat_T, Hill_T : Seen;
+      Cells : Natural;
+      Turned_Fits, Square_Fits : Fits;
+      Zoned : Boolean := True;
+   begin
+      --  on the flat: either way the path runs, on either side of it
+      for Step in 1 .. 2 loop
+         for Side in 1 .. 2 loop
+            Yard (2 * Step - 1, 2 * Side - 3, 16, 16, Cells);
+            Zoned := Zoned and then Cells = 256 and then Storehouse > 0 and then abs Zone_At (Stockyard).Turn > 0.7;
+            if Step = 1 and then Side = 1 then
+               --  (as it is begun: saved and loaded)
+               declare
+                  Data : constant Bytes := Save;
+                  Was  : constant House_View := House_At (Storehouse);
+                  Ok   : Boolean;
+               begin
+                  Load (Data, Ok);
+                  Flat_T.Same := Ok and then Save = Data and then Storehouse > 0
+                    and then House_At (Storehouse).Yard_Turned and then House_At (Storehouse).Pivot = Was.Pivot
+                    and then House_At (Storehouse).Drawn = Was.Drawn and then Yard_Turn;
+               end;
+            end if;
+            Look (Flat_T, (if Step = 1 then C45 else -C45), C45);
+            if Step = 1 and then Side = 1 then
+               Turned_Fits := Tally;
+               --  (as it stands: saved and loaded, the walking map told again)
+               declare
+                  Data : constant Bytes := Save;
+                  Ok   : Boolean;
+               begin
+                  Reset;
+                  Meadow;
+                  Load (Data, Ok);
+                  Flat_T.Same := Flat_T.Same and then Ok and then Save = Data and then Castle.Nav.Drawn_Count = 1
+                    and then House_At (Storehouse).Walked_Drawn;
+               end;
+            end if;
+         end loop;
+      end loop;
+      Check (Zoned,
+             "beside a path at 45 degrees, either way and on either side, a stockyard of 16 m by 16 m is zoned along"
+             & " the path, all 256 of its places, and takes the storehouse");
+      Check (Flat_T.Turned = 4 and then Flat_T.Along,
+             "its storehouse is drawn turned an eighth, its front along the path (" & Img (Flat_T.Turned) & " of "
+             & Img (Flat_T.Yards) & ")");
+      Check (Flat_T.Columns > 4 * 4_000 and then Flat_T.Off = 0 and then Flat_T.Grown = 0,
+             "built: every block column of its ground as it is laid out along the path is at its level ("
+             & Img (Flat_T.Off) & " of " & Img (Flat_T.Columns) & " are not)");
+      Check (Flat_T.Walked = 4 and then Flat_T.Ways = 16 and then Flat_T.No_Way = 0 and then Flat_T.In_Wall = 0
+             and then Flat_T.By_Door = 8,
+             "the feet go by the storehouse as it is drawn: from the stake there is a way to a place inside it, to a"
+             & " barrel's, to one under a covering and to one of the yard behind (" & Img (Flat_T.Ways) & " ways, "
+             & Img (Flat_T.No_Way) & " not found), in by a doorway as drawn (" & Img (Flat_T.By_Door) & "), and no point"
+             & " of any in a wall as drawn (" & Img (Flat_T.In_Wall) & ")");
+      Check (Flat_T.Over_Blocks > 4 * 100,
+             "where its own blocks stand, off it as it is drawn, is walked at its pad's level (" & Img (Flat_T.Over_Blocks)
+             & " columns)");
+      Check (Flat_T.Each = 16,
+             "each of its two doorways as drawn is a way in by itself, and each of its two gateways a way to the yard"
+             & " behind: with planks stood across the one, the way is found by the other (" & Img (Flat_T.Each) & " of 16)");
+      Check (Flat_T.Shut_In = 4,
+             "with both its gateways shut the yard behind it has no way in or out: its fence, stepped along the path,"
+             & " and the storehouse's back wall as drawn let nobody through (" & Img (Flat_T.Shut_In) & " of 4)");
+      Check (Flat_T.Spots > 4 * 2_000 and then Flat_T.Pits = 0,
+             "and no spot in or round it is a pit (" & Img (Flat_T.Spots) & " spots, " & Img (Flat_T.Pits) & ")");
+      Check (Flat_T.Same,
+             "saved and loaded, as it is begun and as it stands: the same bytes, turned about the same point, and the"
+             & " walking map told again");
+      --  fitted out as a square one of its size beside a straight path is
+      Yard (0, 1, 16, 16, Cells);
+      Build_Homes_Now;
+      Run (2);
+      Square_Fits := Tally;
+      Check (Cells = 256 and then Square_Fits = Turned_Fits and then Turned_Fits (Floor) = 18 and then Turned_Fits (Shelf) = 6
+             and then Turned_Fits (Meat_Barrel) = 6 and then Turned_Fits (Water_Barrel) = 2 and then Turned_Fits (Cover) > 0
+             and then Castle.Nav.Drawn_Count = 0 and then not House_At (Storehouse).Yard_Turned,
+             "its places are fitted out as those of a square stockyard of its size beside a straight path:"
+             & Turned_Fits (Floor)'Image & " of floor," & Turned_Fits (Shelf)'Image & " of shelf,"
+             & Turned_Fits (Meat_Barrel)'Image & " and" & Turned_Fits (Water_Barrel)'Image & " barrels,"
+             & Turned_Fits (Cover)'Image & " under the coverings," & Turned_Fits (Lean)'Image & " against the wall,"
+             & Turned_Fits (Ground)'Image & " of the yard (and the square one's storehouse is not turned, nor walked"
+             & " otherwise than as it stands; the square one's:" & Square_Fits (Floor)'Image & Square_Fits (Shelf)'Image
+             & Square_Fits (Meat_Barrel)'Image & Square_Fits (Water_Barrel)'Image & Square_Fits (Cover)'Image
+             & Square_Fits (Lean)'Image & Square_Fits (Ground)'Image & Square_Fits (Kept_Clear)'Image & " and"
+             & Turned_Fits (Kept_Clear)'Image & " kept clear)");
+      --  on ground that rises a block every two and a half metres
+      for Step in 1 .. 2 loop
+         for Side in 1 .. 2 loop
+            Yard (2 * Step - 1, 2 * Side - 3, 16, 16, Cells, Rise_M => 2.5);
+            Look (Hill_T, (if Step = 1 then C45 else -C45), C45);
+         end loop;
+      end loop;
+      Check (Hill_T.Turned >= 3 and then Hill_T.Off = 0 and then Hill_T.Grown = 0 and then Hill_T.Walked = Hill_T.Turned,
+             "on ground that rises a block every two and a half metres " & Img (Hill_T.Turned) & " of " & Img (Hill_T.Yards)
+             & " take the storehouse: every column of their ground at its level (" & Img (Hill_T.Off) & " are not)");
+      Check (Hill_T.Steps > 100 and then Hill_T.Bare = 0 and then Hill_T.Spots > 3 * 2_000 and then Hill_T.Pits = 0
+             and then Hill_T.No_Way = 0 and then Hill_T.In_Wall = 0 and then Hill_T.Shut_In = Hill_T.Turned
+             and then Hill_T.Each = 4 * Hill_T.Turned,
+             "there the ground steps more than a block in " & Img (Hill_T.Steps) & " places, each a wall of stone ("
+             & Img (Hill_T.Bare) & " bare); no spot is a pit (" & Img (Hill_T.Spots) & " spots, " & Img (Hill_T.Pits)
+             & "); every way is found, none through a wall as drawn; and the fence is whole");
+      --  every size there is
+      declare
+         Taken, Tried : Natural := 0;
+      begin
+         for Len in 15 .. 25 loop
+            for Deep in 15 .. 25 loop
+               if (Len + Deep) mod 3 = 0 or else Len = Deep or else Len = 15 or else Deep = 25 then
+                  Tried := Tried + 1;
+                  Yard (1 + 2 * ((Len + Deep) mod 2), (if Len mod 2 = 0 then 1 else -1), Len, Deep, Cells);
+                  if Cells = Len * Deep and then Storehouse > 0 and then House_At (Storehouse).Yard_Turned then
+                     Taken := Taken + 1;
+                  end if;
+               end if;
+            end loop;
+         end loop;
+         --  (it is taken only if nothing of its fence, its gateways or its coverings would stand among the
+         --  storehouse's own blocks: Castle.Buildings.Yard_Clashes)
+         Check (Tried > 50 and then Taken = Tried,
+                "of every size from 15 m to 25 m each way (" & Img (Tried) & " tried) it is taken, its storehouse's own"
+                & " blocks clear of its fence, its gateways and its coverings (" & Img (Taken) & ")");
+      end;
+      --  the player's two corners (the tool says "click two corners"), as the interface orders them:
+      --  opposite corners of the lot zone it; two that lie straight along the path's way, or straight
+      --  across it, span a strip a metre wide and are refused as too small
+      declare
+         use Castle.Actions;
+         X0, Y0, X1, Y1 : Float;
+         Good, Along, Across : Lot_Plan;
+         Along_Small, Across_Small : Boolean;
+         R : Result;
+         function Has (S, Part : String) return Boolean is (Ada.Strings.Fixed.Index (S, Part) > 0);
+      begin
+         Yard (1, 1, 16, 16, Cells, Zone => False);
+         Corners (1, 1, 16, 16, 32.0, 30.0, X0, Y0, X1, Y1);
+         Good := Plan_Stockyard (X0, Y0, X1, Y1);
+         --  (from the first corner, the second straight along the path's way: north-east)
+         Along := Plan_Stockyard (X0, Y0, X0 + 15.4 * C45, Y0 + 15.4 * C45);
+         Along_Small := Has (Stockyard_Refusal, "too small");
+         --  (and straight across it: north-west)
+         Across := Plan_Stockyard (X0, Y0, X0 - 15.4 * C45, Y0 + 15.4 * C45);
+         Across_Small := Has (Stockyard_Refusal, "too small");
+         Perform ((What => Zone_Stockyard, By => The_Player, X0 => X0, Y0 => Y0, X1 => X1, Y1 => Y1), R);
+         Check (Good.Ok and then Good.Cells = 256 and then abs Good.Turn > 0.7
+                and then not Along.Ok and then Along_Small and then not Across.Ok and then Across_Small
+                and then R.Done and then R.Count = 256 and then Storehouse > 0 and then House_At (Storehouse).Yard_Turned,
+                "the player's two corners: opposite corners of the lot plan it along the path, 256 places, and ordered"
+                & " so it is zoned and takes its storehouse; a second corner straight along the path's way, or straight"
+                & " across it, spans a strip a metre wide: 'it is too small'");
+      end;
+      --  with the switch off: square to the grid beside a path at 45 degrees, as before
+      Yard (1, -1, 16, 16, Cells, Along_Path => False);
+      Check (not Yard_Turn and then Cells > 0 and then Stockyard > 0 and then abs Zone_At (Stockyard).Turn < 0.01
+             and then Storehouse > 0 and then not House_At (Storehouse).Yard_Turned and then House_At (Storehouse).Turn = 0.0,
+             "with --no-yard-turn a stockyard beside a path at 45 degrees is square to the grid, a corner of it at the"
+             & " path, its storehouse as it stands, as before (" & Img (Cells) & " places)");
+      Set_Yard_Turn (True);
+
+      --  The pieces (2026-11-20; John: "The outdoor roof covering needs a smoothing pass", "what do you
+      --  think about turning the fence too?"): a covering's roof smoothed, a row at a time, its blocks laid
+      --  again as pieces; the rails and gateway planks of a yard along the path laid as pieces, drawn
+      --  straight.  (Every check above was made with both on, as they are by default: the feet meet the
+      --  blocks as ever.)
+      declare
+         type Piece_Count is record
+            Thatch, Log_P, Plank_P, Thatch_Plain : Natural := 0;   --  blocks laid as pieces; and thatch not, low
+            Rails, Planks, Roofs, Smoothed, Rows : Natural := 0;   --  what is drawn of them
+            Blocks : Natural := 0;                                 --  its blueprint's blocks
+         end record;
+         function Count return Piece_Count is
+            C  : Piece_Count;
+            P  : constant Yard_Pieces_View := Yard_Pieces (Storehouse);
+            Pad : constant Integer := Integer (Float'Floor (House_At (Storehouse).Corner (1).Z * 4.0 + 0.01));
+         begin
+            for X in 0 .. 255 loop
+               for Y in 0 .. 255 loop
+                  for Z in Pad - 8 .. Pad + 12 loop
+                     declare
+                        Bk : constant Block := Block_At (X, Y, Z);
+                     begin
+                        if Interfaces."=" (Bk.State, Piece) then
+                           case Bk.Mat is
+                              when Thatch => C.Thatch := C.Thatch + 1;
+                              when Log    => C.Log_P := C.Log_P + 1;
+                              when Plank  => C.Plank_P := C.Plank_P + 1;
+                              when others => null;
+                           end case;
+                        elsif Bk.Mat = Thatch and then Interfaces."=" (Bk.State, 0) then
+                           C.Thatch_Plain := C.Thatch_Plain + 1;
+                        end if;
+                     end;
+                  end loop;
+               end loop;
+            end loop;
+            for R in 1 .. P.N_Rails loop
+               if P.Rails (R).Plank then
+                  C.Planks := C.Planks + 1;
+               else
+                  C.Rails := C.Rails + 1;
+               end if;
+            end loop;
+            C.Roofs := P.N_Roofs;
+            for R in 1 .. P.N_Roofs loop
+               C.Smoothed := C.Smoothed + P.Roofs (R).Smoothed;
+               C.Rows := C.Rows + P.Roofs (R).Rows;
+            end loop;
+            C.Blocks := House_At (Storehouse).Blocks;
+            return C;
+         end Count;
+         On, Off, Sq, Sq_Off, Loaded : Piece_Count;
+         Same : Boolean;
+      begin
+         Yard (1, 1, 16, 16, Cells);
+         Build_Homes_Now;
+         Run (2);
+         On := Count;
+         declare
+            Data : constant Bytes := Save;
+            Ok   : Boolean;
+         begin
+            Reset;
+            Meadow;
+            Load (Data, Ok);
+            Same := Ok and then Save = Data;
+            Loaded := Count;
+            Same := Same and then Loaded.Rails = On.Rails and then Loaded.Planks = On.Planks
+              and then Loaded.Roofs = On.Roofs and then Loaded.Smoothed = On.Smoothed;
+         end;
+         Yard (1, 1, 16, 16, Cells, Pieces => False);
+         Build_Homes_Now;
+         Run (2);
+         Off := Count;
+         Yard (0, 1, 16, 16, Cells);
+         Build_Homes_Now;
+         Run (2);
+         Sq := Count;
+         Yard (0, 1, 16, 16, Cells, Pieces => False);
+         Build_Homes_Now;
+         Run (2);
+         Sq_Off := Count;
+         Check (On.Roofs > 0 and then On.Smoothed = On.Rows and then On.Thatch > 0
+                and then On.Thatch_Plain + On.Thatch = Off.Thatch_Plain
+                and then On.Blocks = Off.Blocks + On.Thatch and then Off.Thatch = 0 and then Off.Roofs = 0,
+                "its coverings' roofs smoothed: every row of each, " & Img (On.Smoothed) & " of " & Img (On.Rows)
+                & ", its thatch laid again as pieces (" & Img (On.Thatch) & " blocks, none of a covering's left stepped); the"
+                & " smoothing is that many blocks more of the blueprint, after the rest; with --no-smooth-covers"
+                & " none (" & Img (Off.Blocks) & " and " & Img (On.Blocks) & ")");
+         Check (On.Rails >= 16 and then On.Rails mod 2 = 0 and then On.Planks = 2 and then On.Log_P > On.Rails
+                and then On.Plank_P > 0 and then Off.Log_P = 0 and then Off.Plank_P = 0 and then Off.Rails = 0,
+                "along the path its fence is drawn as " & Img (On.Rails) & " rails, two to each stretch from post to"
+                & " post, and two planks over its gateways, of " & Img (On.Log_P) & " and " & Img (On.Plank_P)
+                & " blocks laid as pieces; with --no-fence-pieces none, the fence stepped as before");
+         Check (Sq.Roofs > 0 and then Sq.Smoothed = Sq.Rows and then Sq.Thatch > 0
+                and then Sq.Thatch_Plain + Sq.Thatch = Sq_Off.Thatch_Plain and then Sq.Blocks = Sq_Off.Blocks + Sq.Thatch
+                and then Sq.Log_P = 0 and then Sq.Plank_P = 0 and then Sq.Rails = 0,
+                "a square stockyard's coverings' roofs are smoothed too (" & Img (Sq.Roofs) & ", " & Img (Sq.Smoothed)
+                & " rows), its fence as it was, square to the grid");
+         Check (Same, "saved and loaded: the same bytes, and the same pieces drawn");
+      end;
+      Set_Smooth_Covers (True);
+      Set_Fence_Pieces (True);
+   end;
+
+   ------------------------------------------------------------------ zones put down whole, 2026-11-20
+   --  (John: "let's lock the size of the stockpile, if the player places it, it will be a square box, lets fix
+   --  the path artifcats by including the path in front of the stockpile, the player can rotate the placement.
+   --  Since the paths are now snapped to specific directions, they can either align it with an existing path,
+   --  rotate and snap it to the end of or if they orientate it at an angle to the middle of a path it will snap
+   --  at that angle to the path.  Along with a warning for overlap")
+   Put_Line ("zones put down whole, with their paths:");
+   declare
+      Ways : constant array (Way_Index) of String (1 .. 2) := ["E ", "NE", "N ", "NW", "W ", "SW", "S ", "SE"];
+      function Same (A, C : Placement) return Boolean is
+        (A.Ok = C.Ok and then A.Way = C.Way and then A.Along_B = C.Along_B and then Flat (A.From, C.From) < 0.001
+         and then Flat (A.To, C.To) < 0.001 and then Flat (A.Front, C.Front) < 0.001);
+      function On_Corner (P : Vec3) return Boolean is
+        (abs (P.X * 4.0 - Float'Rounding (P.X * 4.0)) < 0.001 and then abs (P.Y * 4.0 - Float'Rounding (P.Y * 4.0)) < 0.001);
+      procedure Fresh is
+      begin
+         Set_Up (With_Stockpile => False, With_Bushes => False);    --  (the meadow, the path along y = 17.5 from 20.5 to 40)
+         Set_Box_Place (True);
+      end Fresh;
+   begin
+      --  held on open ground, every way it can be turned
+      for W in Way_Index loop
+         Fresh;
+         declare
+            Mid  : constant Vec3 := (40.1, 42.3, Ground_M);
+            P    : constant Placement := Box_At (Stockpile_Box, Mid, W);
+            Plan : constant Box_Plan := Plan_Box (Stockpile_Box, Mid, W);
+            Paths_0 : constant Natural := Path_Count;
+            Long : constant Float := (if W mod 2 = 0 then 10.0 else 29.0 * 0.25 * Sqrt (2.0));
+            Half_Way : constant Vec3 := (P.From + P.To) * 0.5;
+            Cells : Natural;
+            C     : Box_Count;
+         begin
+            Place_Box (Stockpile_Box, Mid, W, Cells);
+            if Zone_Count = 1 then
+               C := Box_Counts (1);
+            end if;
+            Check (P.Ok and then P.Snap = Free and then Plan.Lot.Ok and then Plan.Lot.Cells = 100 and then Cells = 100
+                   and then Zone_Count = 1 and then Zone_At (1).Placed and then Zone_At (1).Way = W
+                   and then Zone_At (1).Along_B = (if W mod 2 = 0 then 40 else 29)
+                   and then Flat (Zone_At (1).From, P.Front) < 0.001
+                   and then Path_Count = Paths_0 + 1 and then On_Corner (P.From) and then On_Corner (P.To)
+                   and then abs (Flat (P.From, P.To) - Long) < 0.01 and then abs (Plan.New_Path_M - Long) < 0.01
+                   and then Get (B (Half_Way.X + 0.01), B (Half_Way.Y + 0.01), Ground_Row - 1) = Footpath
+                   and then C.Box > 1_590 and then C.Its_Own = C.Box and then C.Bare = 0 and then C.Path = 0
+                   and then C.Other = 0
+                   and then Same (Box_At (Stockpile_Box, Box_Middle (P), W), P) and then Flat (Box_Middle (P), Mid) < 0.2,
+                   "turned " & Ways (W) & " on open ground: a hundred places; its path " & Img (Flat (P.From, P.To), 2)
+                   & " m, from a corner of blocks to one; all" & C.Box'Image & " block columns of its box its ground ("
+                   & Img (C.Bare) & " nobody's, " & Img (C.Path) & " a path's); held by its own middle it lies as it lay");
+         end;
+      end loop;
+
+      --  drawn to the path that is there
+      Fresh;
+      declare
+         P : Placement;
+         Q : Box_Plan;
+      begin
+         P := Box_At (Stockpile_Box, (30.3, 17.5 + 5.5 + 1.2, Ground_M), 0);
+         Q := Plan_Box (Stockpile_Box, (30.3, 17.5 + 5.5 + 1.2, Ground_M), 0);
+         Check (P.Snap = Along_Path and then abs (P.From.Y - 17.5) < 0.001 and then abs (P.Front.X - 25.25) < 0.001
+                and then Flat (P.From, P.Front) < 0.001 and then Q.Lot.Ok and then Q.New_Path_M = 0.0
+                and then Q.Lot.Cells = 100 and then Same (Box_At (Stockpile_Box, Box_Middle (P), 0), P),
+                "turned the way a path runs and held 1.2 m off beside it: its front is that path's line, nothing"
+                & " new to lay (" & Img (Q.New_Path_M, 2) & " m), a hundred places");
+         P := Box_At (Stockpile_Box, (30.3, 17.5 - 5.5 - 3.0, Ground_M), 4);
+         Q := Plan_Box (Stockpile_Box, (30.3, 17.5 - 5.5 - 3.0, Ground_M), 4);
+         Check (P.Snap = Along_Path and then abs (P.From.Y - 17.5) < 0.001 and then abs (P.Front.X - 35.25) < 0.001
+                and then Q.Lot.Ok and then Q.New_Path_M = 0.0 and then Zone_Count = 0,
+                "turned straight back along it, on its other side, 3 m off: the same (nothing is changed by looking)");
+         P := Box_At (Stockpile_Box, (30.3, 17.5 + 5.5 + 6.5, Ground_M), 0);
+         Check (P.Snap = Free and then abs (P.From.Y - 17.5) > 5.0,
+                "held further off than half its depth and half a path, it lies where it is held");
+         P := Box_At (Stockpile_Box, (26.4, 23.4, Ground_M), 0);
+         Check (P.Snap = Along_Path and then abs (P.Front.X - 20.5) < 0.001 and then abs (P.From.Y - 17.5) < 0.001,
+                "its front's beginning 0.9 m from that path's end: flush with the end (" & Img (P.Front.X, 2) & ")");
+         P := Box_At (Stockpile_Box, (45.6, 23.4, Ground_M), 0);
+         Q := Plan_Box (Stockpile_Box, (45.6, 23.4, Ground_M), 0);
+         Check (P.Snap = Along_Path and then abs (P.Front.X - 40.0) < 0.001 and then Q.Lot.Ok
+                and then abs (Q.New_Path_M - 10.0) < 0.01,
+                "held 0.6 m past that path's end: its path goes on from the end, ten metres of it new");
+         --  turned another way: a corner at the end, a branch at the middle
+         P := Box_At (Stockpile_Box, (34.8, 22.9, Ground_M), 2);
+         Q := Plan_Box (Stockpile_Box, (34.8, 22.9, Ground_M), 2);
+         Check (P.Snap = At_End and then Flat (P.From, (40.0, 17.5, 0.0)) < 0.001
+                and then Flat (P.Front, (40.0, 18.0, 0.0)) < 0.001 and then Flat (P.To, (40.0, 28.0, 0.0)) < 0.001
+                and then Q.Lot.Ok and then Q.Lot.Cells = 100 and then abs (Q.New_Path_M - 10.5) < 0.01
+                and then Same (Box_At (Stockpile_Box, Box_Middle (P), 2), P),
+                "turned north by that path's end: its path begins at the end, and the box two blocks on, clear of"
+                & " that path (its path " & Img (Flat (P.From, P.To), 2) & " m)");
+         P := Box_At (Stockpile_Box, (30.8, 22.9, Ground_M), 2);
+         Q := Plan_Box (Stockpile_Box, (30.8, 22.9, Ground_M), 2);
+         Check (P.Snap = At_Middle and then Flat (P.From, (36.25, 17.5, 0.0)) < 0.001
+                and then Flat (P.Front, (36.25, 18.0, 0.0)) < 0.001 and then Q.Lot.Ok and then Q.Lot.Cells = 100
+                and then Same (Box_At (Stockpile_Box, Box_Middle (P), 2), P),
+                "turned north by that path's middle: its path meets the path's line squarely, a branch");
+         P := Box_At (Stockpile_Box, (30.04, 25.31, Ground_M), 1);
+         Q := Plan_Box (Stockpile_Box, (30.04, 25.31, Ground_M), 1);
+         Check (P.Snap = At_Middle and then abs (P.From.Y - 17.5) < 0.001 and then On_Corner (P.From)
+                and then Flat (P.From, P.Front) in 0.3 .. 0.4 and then Q.Lot.Ok and then Q.Lot.Cells = 100
+                and then Same (Box_At (Stockpile_Box, Box_Middle (P), 1), P),
+                "turned north-east by its middle: a branch at 45 degrees, the box one block on ("
+                & Img (Flat (P.From, P.Front), 2) & " m), a hundred places");
+         P := Box_At (Stockpile_Box, (22.8, 18.0, Ground_M), 3);
+         Q := Plan_Box (Stockpile_Box, (22.8, 18.0, Ground_M), 3);
+         Check (P.Snap = At_Middle and then not Q.Lot.Ok and then Box_Refusal = "it overlaps a path",
+                "turned north-west there, the side that path runs into: refused ('" & Box_Refusal & "')");
+      end;
+
+      --  refused over what is there; against a neighbour; the player's order
+      Fresh;
+      declare
+         use Castle.Actions;
+         R  : Result;
+         M  : constant Menu := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (30.0, 30.0, Ground_M)));
+         Offered : Natural := 0;
+         Paths_0 : constant Natural := Path_Count;
+         P  : Placement;
+         Q  : Box_Plan;
+      begin
+         for K in 1 .. M.N loop
+            if M.Items (K).Todo.What = Place_Stockpile and then M.Items (K).Two_Point then
+               Offered := Offered + 1;
+            end if;
+         end loop;
+         Perform ((What => Place_Stockpile, By => The_Player, Pile_At => (25.5, 23.2, Ground_M), Pile_Way => 0), R);
+         Check (Offered = 1 and then (for all K in 1 .. M.N => M.Items (K).Todo.What /= Zone_Stockpile)
+                and then R.Done and then R.Count = 100 and then Zone_Count = 1 and then Path_Count = Paths_0
+                and then Zone_At (1).Placed and then Flat (Zone_At (1).From, (20.5, 17.5, 0.0)) < 0.001,
+                "the ground's menu offers it to be held, and no stockpile corner to corner; the player's order puts"
+                & " it down beside the path: a hundred places, no path added");
+         Perform ((What => Place_Stockpile, By => The_Player, Pile_At => (27.0, 24.0, Ground_M), Pile_Way => 0), R);
+         Check (not R.Done and then Zone_Count = 1
+                and then Why_Not ((What => Place_Stockpile, By => The_Player, Pile_At => (27.0, 24.0, Ground_M),
+                                   Pile_Way => 0), R) = "it overlaps a stockpile",
+                "a second held over it is refused: '" & Box_Refusal & "'");
+         P := Box_At (Stockpile_Box, (36.3, 23.1, Ground_M), 0);
+         Q := Plan_Box (Stockpile_Box, (36.3, 23.1, Ground_M), 0);
+         Check (P.Snap = Along_Path and then abs (P.Front.X - 30.5) < 0.001 and then Q.Lot.Ok and then Q.Lot.Cells = 100
+                and then abs (Q.New_Path_M - 0.5) < 0.01,
+                "held 0.8 m along from it, it lies against it, not flush with the path's end half a metre short: a"
+                & " hundred places, half a metre of path new");
+         Perform ((What => Place_Stockpile, By => The_Player, Pile_At => (36.3, 23.1, Ground_M), Pile_Way => 0), R);
+         Check (R.Done and then R.Count = 100 and then Zone_Count = 2 and then Box_Counts (1).Its_Own = 1_600
+                and then Box_Counts (2).Its_Own = 1_600 and then Box_Counts (2).Other = 0,
+                "put down: two boxes side by side, each all its own (" & Img (Box_Counts (1).Its_Own) & " and "
+                & Img (Box_Counts (2).Its_Own) & " block columns)");
+         Q := Plan_Box (Stockpile_Box, (30.0, 43.0, Ground_M), 0);
+         Check (Q.Lot.Ok, "(open ground further north takes one)");
+         Q := Plan_Box (Stockpile_Box, (30.0, 13.2, Ground_M), 0);
+         Check (not Q.Lot.Ok and then Box_Refusal = "it overlaps a path" and then Q.Where.Snap = Free,
+                "held free across the path: refused ('" & Box_Refusal & "')");
+         declare
+            Data : constant Bytes := Save;
+            Ok   : Boolean;
+         begin
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Zone_Count = 2 and then Zone_At (2).Placed
+                   and then Zone_At (2).Way = 0 and then Zone_At (2).Along_B = 40
+                   and then Flat (Zone_At (2).From, (30.5, 17.5, 0.0)) < 0.001 and then Box_Place,
+                   "saved and loaded: the same bytes, each zone with its frame");
+         end;
+      end;
+
+      --  a street's lots are not moved by a box put down beside its path
+      Fresh;
+      declare
+         Lots, Cells : Natural;
+         Before : array (1 .. 8) of Lot_Corners;
+         N_Before : Natural;
+         Moved : Boolean := False;
+      begin
+         Zone_Housing (22.0, 18.2, 38.0, 26.0, Lots);
+         N_Before := Natural'Min (Before'Last, Lot_Count);
+         for K in 1 .. N_Before loop
+            Before (K) := Lot_At (K);
+         end loop;
+         Place_Box (Stockpile_Box, (30.3, 17.5 - 5.5 - 0.4, Ground_M), 4, Cells);
+         for K in 1 .. Natural'Min (N_Before, Lot_Count) loop
+            for I in Before (K)'Range loop
+               if Flat (Before (K) (I), Lot_At (K) (I)) > 0.001 then
+                  Moved := True;
+               end if;
+            end loop;
+         end loop;
+         Check (Lots > 0 and then N_Before > 0 and then Cells = 100 and then Lot_Count = N_Before and then not Moved,
+                "housing along the path's north side (" & Img (N_Before) & " lots laid out) and a box put down on its"
+                & " south side: no lot moved");
+      end;
+
+      --  a tree in it is felled and taken out (John, 2026-11-20: "fell the tree in the stockpile"): its
+      --  foot is the stockpile's ground, a place lies over it, closed while the tree stands; whoever has
+      --  a place at an extra task fells it; nothing of it is left; its place is opened
+      Set_Up (With_Stockpile => False, With_Bushes => False, With_Trees => True, With_Labour => True);
+      Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);   --  (said here too: this section is run alone as well)
+      Set_Box_Place (True);
+      declare
+         Cells : Natural;
+         Oak   : Natural := 0;
+         Closed_0, Closed_1, Trunk_Left : Natural := 0;
+         Left_0 : Natural;
+         C0    : Box_Count;
+         Felled_At : Natural := 0;
+         Zone_N : Natural;
+      begin
+         Place_Box (Stockpile_Box, (27.0, 27.0, Ground_M), 0, Cells);
+         Zone_N := Zone_Count;
+         C0 := Box_Counts (Zone_N);
+         Left_0 := Box_Trees_Left;
+         for K in 1 .. Cell_Count loop
+            if Zone_Of_Cell (K) = Zone_N and then Cell_At (K).Closed then
+               Closed_0 := Closed_0 + 1;
+            end if;
+         end loop;
+         for K in 1 .. Tree_Count loop
+            if Tree_At (K).Bx = 100 then
+               Oak := K;
+            end if;
+         end loop;
+         for S in 1 .. 3_000 loop
+            Run (1);
+            if Oak > 0 and then Tree_Down (Oak) then
+               Felled_At := S;
+               exit;
+            end if;
+         end loop;
+         Run (5);
+         for K in 1 .. Cell_Count loop
+            if Zone_Of_Cell (K) = Zone_N and then Cell_At (K).Closed then
+               Closed_1 := Closed_1 + 1;
+            end if;
+         end loop;
+         for Z in Ground_Row - 3 .. Ground_Row + 24 loop
+            if Get (100, 100, Z) = Log then
+               Trunk_Left := Trunk_Left + 1;
+            end if;
+         end loop;
+         Check (Cells = 100 and then C0.Its_Own = C0.Box and then C0.Bare = 0 and then Left_0 = 1 and then Closed_0 = 1
+                and then Oak > 0 and then Felled_At > 0 and then Trunk_Left = 0 and then Closed_1 = 0
+                and then Box_Trees_Left = 0 and then Get (100, 100, Ground_Row - 1) = Dirt
+                and then Zone_On (25.1, 25.1) = Zone_N,
+                "put down over a tree: a hundred places all the same, its foot the stockpile's ground, the place it"
+                & " stands in closed; one of the band fells it (down after" & Felled_At'Image & " colony seconds), nothing"
+                & " of it is left, and its place is open");
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Trees => True, With_Labour => True);
+         Set_Box_Place (True);
+         Set_Box_Fell (False);
+         Place_Box (Stockpile_Box, (27.0, 27.0, Ground_M), 0, Cells);
+         C0 := Box_Counts (Zone_Count);
+         Run (600);
+         Check (Cells = 99 and then C0.Bare = 1 and then Box_Trees_Left = 0
+                and then Get (100, 100, Ground_Row + 5) = Log,
+                "with Set_Box_Fell off: ninety-nine places, the tree's foot nobody's, and after ten minutes it stands");
+         Set_Box_Fell (True);
+         --  and the same beside a path that is laid already, with nothing else for the band to build
+         --  (found 2026-11-20: a member turned to the band's building only while the camp, a path, earth
+         --  in its hands or the lord's cart wanted it, so a stockpile put down along a laid path, the
+         --  commonest place for one, kept its tree and the place under it closed)
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Trees => True, With_Labour => True);
+         Set_Box_Place (True);
+         declare
+            Where : constant Placement := Box_At (Stockpile_Box, (27.0, 27.0, Ground_M), 0);
+            Laid  : Natural;
+            To_Lay : Natural;
+         begin
+            Lay_Path (Where.From, Where.To, Laid);
+            Build_Paths_Now;
+            Place_Box (Stockpile_Box, (27.0, 27.0, Ground_M), 0, Cells);
+            To_Lay := Paths_To_Lay;
+            Left_0 := Box_Trees_Left;
+            Felled_At := 0;
+            Oak := 0;
+            for K in 1 .. Tree_Count loop
+               if Tree_At (K).Bx = 100 then
+                  Oak := K;
+               end if;
+            end loop;
+            for S in 1 .. 3_000 loop
+               Run (1);
+               if Oak > 0 and then Tree_Down (Oak) then
+                  Felled_At := S;
+                  exit;
+               end if;
+            end loop;
+            Check (Cells = 100 and then To_Lay = 0 and then Left_0 = 1 and then Felled_At > 0
+                   and then Box_Trees_Left = 0,
+                   "put down along a path that is laid already, no path to lay and no camp to build:"
+                   & To_Lay'Image & " metres to lay," & Left_0'Image & " tree to fell, down after" & Felled_At'Image
+                   & " colony seconds (" & Box_Trees_Left'Image & " left)");
+         end;
+         --  the stump of a tree felled before the stockpile was put down (a forester's work: three days
+         --  in, the trees nearest the fire are stumps) is taken out as a tree is, and its place opened
+         --  (found 2026-11-20: the place over a stump stayed closed for good)
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Trees => True, With_Labour => True);
+         Set_Box_Place (True);
+         declare
+            procedure Lop (Bx, By, Bz : Integer; M : Material) is
+               pragma Unreferenced (M);
+            begin
+               if Bz > Ground_Row then
+                  Set (Bx, By, Bz, Air);
+               end if;
+            end Lop;
+            Out_At : Natural := 0;
+         begin
+            Shape (The_Trees (1).I, The_Trees (1).J, Lop'Access);     --  (felled as a forester fells: the stump left)
+            Build_Paths_Now;
+            Place_Box (Stockpile_Box, (27.0, 27.0, Ground_M), 0, Cells);
+            Zone_N := Zone_Count;
+            Left_0 := Box_Trees_Left;
+            Closed_0 := 0;
+            for K in 1 .. Cell_Count loop
+               if Zone_Of_Cell (K) = Zone_N and then Cell_At (K).Closed then
+                  Closed_0 := Closed_0 + 1;
+               end if;
+            end loop;
+            for S in 1 .. 3_000 loop
+               Run (1);
+               if (for all Z in Ground_Row - 3 .. Ground_Row + 2 => Get (100, 100, Z) /= Log) then
+                  Out_At := S;
+                  exit;
+               end if;
+            end loop;
+            Run (5);
+            Closed_1 := 0;
+            for K in 1 .. Cell_Count loop
+               if Zone_Of_Cell (K) = Zone_N and then Cell_At (K).Closed then
+                  Closed_1 := Closed_1 + 1;
+               end if;
+            end loop;
+            Check (Cells = 100 and then Left_0 = 1 and then Closed_0 = 1 and then Out_At > 0 and then Closed_1 = 0
+                   and then Box_Trees_Left = 0 and then Get (100, 100, Ground_Row - 1) = Dirt
+                   and then Logs_Lying = 0,
+                   "put down over the stump of a tree felled before:" & Cells'Image & " places," & Closed_0'Image
+                   & " closed," & Left_0'Image & " stump to take out; out, roots and all, after" & Out_At'Image
+                   & " colony seconds, its place open (" & Closed_1'Image & " closed), and no log come of it");
+         end;
+      end;
+
+      --  the player's own gesture, swept: a stockpile held every 0.35 m over the land round a straight
+      --  path and one at 45 degrees, every way it can be turned.  Held again by its own middle it lies
+      --  as it lay; or, held at the very edge of a path's reach (its own middle, on whole blocks, is a
+      --  little nearer than the cursor was), it is drawn to that path and then lies as it lay: none
+      --  goes on moving.  And put down, at one place in so many of those that take it, none of its box
+      --  is a path's ground or another zone's
+      declare
+         use Castle.Actions;
+         R : Result;
+         procedure Land is
+         begin
+            Fresh;
+            Perform ((What => Lay_Path, By => The_Player, From => (24.0, 30.0, Ground_M), To => (34.0, 40.0, Ground_M)),
+                     R);
+            Build_Paths_Now;
+         end Land;
+         Held, Drawn, Crept, Plans, Taken, Put, Faulty : Natural := 0;
+         Crept_At, Faulty_At : Vec3 := (0.0, 0.0, 0.0);
+         Crept_Way, Faulty_Way : Way_Index := 0;
+         By_Snap : array (Box_Snap) of Natural := [others => 0];
+         --  held again by its own middle until it lies as it lay: how many times it moved (3: it goes on)
+         function Moves (P : Placement; W : Way_Index) return Natural is
+            Q : Placement := P;
+         begin
+            for N in 0 .. 2 loop
+               declare
+                  Next : constant Placement := Box_At (Stockpile_Box, Box_Middle (Q), W);
+               begin
+                  if Same (Next, Q) then
+                     return N;
+                  end if;
+                  Q := Next;
+               end;
+            end loop;
+            return 3;
+         end Moves;
+      begin
+         Land;
+         for Ix in 0 .. 97 loop
+            for Iy in 0 .. 114 loop
+               for W in Way_Index loop
+                  declare
+                     Mid : constant Vec3 := (14.0 + 0.35 * Float (Ix), 8.0 + 0.35 * Float (Iy), Ground_M);
+                     P   : constant Placement := Box_At (Stockpile_Box, Mid, W);
+                  begin
+                     if P.Ok then
+                        Held := Held + 1;
+                        By_Snap (P.Snap) := By_Snap (P.Snap) + 1;
+                        case Moves (P, W) is
+                           when 0 => null;
+                           when 1 | 2 => Drawn := Drawn + 1;
+                           when others =>
+                              if Crept = 0 then
+                                 Crept_At := Mid;
+                                 Crept_Way := W;
+                              end if;
+                              Crept := Crept + 1;
+                        end case;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+         end loop;
+         for Ix in 0 .. 19 loop
+            for Iy in 0 .. 22 loop
+               for W in Way_Index loop
+                  declare
+                     Mid  : constant Vec3 := (14.0 + 1.75 * Float (Ix), 8.0 + 1.75 * Float (Iy), Ground_M);
+                     Plan : constant Box_Plan := Plan_Box (Stockpile_Box, Mid, W);
+                     Cells : Natural;
+                     C     : Box_Count;
+                  begin
+                     Plans := Plans + 1;
+                     if Plan.Lot.Ok then
+                        Taken := Taken + 1;
+                        if Taken mod 23 = 1 then
+                           Place_Box (Stockpile_Box, Mid, W, Cells);
+                           C := Box_Counts (Zone_Count);
+                           Put := Put + 1;
+                           if Cells /= Plan.Lot.Cells or else C.Other /= 0 or else C.Path /= 0 or else C.Front_Bare /= 0
+                             or else C.Its_Own + C.Bare /= C.Box
+                           then
+                              if Faulty = 0 then
+                                 Faulty_At := Mid;
+                                 Faulty_Way := W;
+                              end if;
+                              Faulty := Faulty + 1;
+                           end if;
+                           Land;
+                        end if;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+         end loop;
+         Check (Held > 80_000 and then Crept = 0 and then By_Snap (Along_Path) > 1_000 and then By_Snap (At_End) > 100
+                and then By_Snap (At_Middle) > 1_000 and then Drawn < Held / 20
+                and then Taken > 1_000 and then Put > 40 and then Faulty = 0,
+                "held at" & Held'Image & " places and ways round a straight path and one at 45 degrees ("
+                & Img (By_Snap (Along_Path)) & " drawn along a path, " & Img (By_Snap (At_End)) & " to an end, "
+                & Img (By_Snap (At_Middle)) & " to a middle): held again by its own middle, each lies as it lay, or ("
+                & Img (Drawn) & " of them, at the edge of a path's reach) is drawn to that path and then does; "
+                & Img (Crept) & " go on moving" & (if Crept > 0 then ", the first at " & Img (Crept_At.X, 2) & ", "
+                                                   & Img (Crept_At.Y, 2) & " turned " & Ways (Crept_Way) else "")
+                & "; of" & Plans'Image & " planned" & Taken'Image & " would be taken, and" & Put'Image
+                & " of those put down: none with a path's ground or another zone's in its box ("
+                & Img (Faulty) & " faulty" & (if Faulty > 0 then ", the first at " & Img (Faulty_At.X, 2) & ", "
+                                              & Img (Faulty_At.Y, 2) & " turned " & Ways (Faulty_Way) else "") & ")");
+      end;
+      Set_Box_Place (False);
+   end;
+
+   ------------------------------------------------------------------ the homestake and the campfire one, 2026-11-20
+   --  (John: "Let's merge the homestake and the campfire, no physical stake now, lets expand the
+   --  campfire/homestake, to a 10x10 area, terriform so the entire area is flat, and build a path around the
+   --  perimeter"; and: "place the path around the outside of the 10x10m so it will be 12x12m when it's built")
+   Put_Line ("the homestake and the campfire one, a square with its path round it:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      --  The meadow with nobody on it yet (Rise_M above nought: rising to the east from x = 30, a block
+      --  every so far), the camp's labour as said.
+      procedure Empty_Land (Labour : Boolean; Rise_M : Float := 0.0; Sources : Boolean := False) is
+      begin
+         Reset;
+         Set_Beds (False);
+         Set_Curing (True);                 --  (the lord's cart comes with the band)
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (Labour);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Box_Place (True);
+         Set_Path_Level (True);             --  (a path brought to its line as it is laid, as a colony's is)
+         Meadow;
+         if Sources then                    --  (the trees and the boulder a camp's hearth is built of)
+            Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);
+            for T of Active loop
+               Shape (T.I, T.J, Grow'Access);
+            end loop;
+            Porter_Ground;
+         end if;
+         if Rise_M > 0.0 then
+            for K in 1 .. Integer (Float'Floor (33.0 / Rise_M)) loop
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+            end loop;
+            Changed_World;
+         end if;
+         Hours := 16.0 * 24.0;
+         Set_Arrivals (6, 42);
+      end Empty_Land;
+      procedure Found (X, Y : Float; Way : Way_Index) is
+      begin
+         Perform ((What => Raise_Stake, By => The_Player, Stake_At => (X, Y, Ground_M), As_Square => True,
+                   Stake_Way => Way), R);
+         Index_All;
+      end Found;
+      --  the top of the ground at a place (the row), and what it is made of
+      function Top_At (X, Y : Float) return Integer is
+      begin
+         for Z in reverse 1 .. Ground_Row + 40 loop
+            if Get (B (X), B (Y), Z) not in Air | Tall_Grass then
+               return Z;
+            end if;
+         end loop;
+         return 0;
+      end Top_At;
+      function Stuff_At (X, Y : Float) return Material is (Get (B (X), B (Y), Top_At (X, Y)));
+   begin
+      --  on open ground, squarely and aslant
+      for Way in 0 .. 1 loop
+         Empty_Land (Labour => False);
+         declare
+            Plan : constant Square_Plan := Plan_Square ((32.1, 32.2, Ground_M), Way);
+            M    : Menu;
+            Posts : Natural := 0;
+            Out_M : constant Float := (if Way = 0 then 5.75 else 5.48 / Sqrt (2.0));   --  (on its path, east or north-east)
+            Past  : constant Float := (if Way = 0 then 6.25 else 6.3 / Sqrt (2.0));    --  (and past it)
+            Inn   : constant Float := (if Way = 0 then 4.75 else 4.6 / Sqrt (2.0));    --  (and on its floor)
+            Up    : constant Float := (if Way = 0 then 0.0 else 1.0);                  --  (north too, aslant)
+            C     : Box_Count;
+            Before : Zone_View;
+         begin
+            Castle.Actions.Square_Stake := True;
+            M := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (32.1, 32.2, Ground_M)));
+            Castle.Actions.Square_Stake := False;
+            Found (32.1, 32.2, Way);
+            for Z in Ground_Row .. Ground_Row + 8 loop
+               if Get (B (Stake.X), B (Stake.Y), Z) /= Air or else Get (B (Stake.X) - 1, B (Stake.Y) - 1, Z) /= Air then
+                  Posts := Posts + 1;
+               end if;
+            end loop;
+            Before := Zone_At (1);
+            C := Box_Counts (1);
+            Check (Plan.Ok and then M.N = 1 and then M.Items (1).Todo.What = Raise_Stake and then M.Items (1).Two_Point
+                   and then R.Done and then Has_Stake and then Has_Camp and then Camp_Is_Square and then Members = 6
+                   and then Flat (Stake, (32.0, 32.25, 0.0)) < 0.001 and then Flat (Camp, Stake) < 0.001
+                   and then Posts = 0
+                   and then Zone_Count = 1 and then Before.Kind = Camp_Zone and then Before.Placed
+                   and then Before.Way = Way and then Before.Along_B = (if Way = 0 then 44 else 31)
+                   and then C.Box = (if Way = 0 then 1_600 else 1_624) and then C.Its_Own = C.Box
+                   and then Path_Count = 4
+                   and then Stuff_At (32.0 + Out_M, 32.25 + Out_M * Up) = Footpath
+                   and then Stuff_At (32.0 - Out_M, 32.25 - Out_M * Up) = Footpath
+                   and then Stuff_At (32.0 + Past, 32.25 + Past * Up) = Grass
+                   and then Zone_On (32.0 + Inn, 32.25 + Inn * Up) = 1
+                   and then Stuff_At (32.0 + Inn, 32.25 + Inn * Up) /= Footpath,
+                   (if Way = 0 then "squarely" else "aslant") & ": one order founds the colony: the band arrives, no"
+                   & " post is raised, the stake's place is the fire's, on a corner of blocks; the camp's zone its"
+                   & C.Box'Image & " block columns of floor, all its own, and four stretches of path round the outside"
+                   & " of it (the menu, with the square on, holds it to be turned)");
+            Run (2);
+            Check (Cart.Here and then Zone_On (Cart.At_P.X, Cart.At_P.Y) = 0 and then not On_Path (Cart.At_P.X, Cart.At_P.Y)
+                   and then Flat (Cart.At_P, Stake) > 6.5,
+                   "the lord's cart comes to stand clear of the square and its path (" & Img (Flat (Cart.At_P, Stake), 1)
+                   & " m from the fire)");
+            if Way = 0 then
+               Perform ((What => Raise_Stake, By => The_Player, Stake_At => (20.0, 50.0, Ground_M), As_Square => True,
+                         Stake_Way => 0), R);
+               M := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (50.0, 50.0, Ground_M)));
+               Check (not R.Done and then R.Why = Not_Now and then Zone_Count = 1
+                      and then (for all K in 1 .. M.N => M.Items (K).Todo.What not in Zone_Camp | Raise_Stake),
+                      "once only, and no camp is zoned apart from it");
+               --  a box is drawn to its path as to any; on its floor it is refused
+               declare
+                  P : constant Placement := Box_At (Stockpile_Box, (32.0 + 5.5 + 5.5 + 0.7, 32.6, Ground_M), 6);
+                  Q : constant Box_Plan := Plan_Box (Stockpile_Box, (32.0 + 5.5 + 5.5 + 0.7, 32.6, Ground_M), 6);
+                  In_It : constant Box_Plan := Plan_Box (Stockpile_Box, (30.0, 36.0, Ground_M), 0);
+                  Why   : constant String := Box_Refusal;
+               begin
+                  Check (P.Snap = Along_Path and then abs (P.From.X - 37.5) < 0.001 and then Q.Lot.Ok
+                         and then Plan_Box (Stockpile_Box, (43.7, 32.6, Ground_M), 6).Lot.Cells = 100
+                         and then Plan_Box (Stockpile_Box, (43.7, 32.6, Ground_M), 6).New_Path_M = 0.0
+                         and then not In_It.Lot.Ok and then Why = "it overlaps the camp",
+                         "a stockpile held east of it, turned south, is drawn to its path's east side: a hundred"
+                         & " places, nothing new to lay; held on its floor it is refused ('" & Why & "')");
+               end;
+               declare
+                  Data : constant Bytes := Save;
+                  Ok   : Boolean;
+               begin
+                  Load (Data, Ok);
+                  Check (Ok and then Save = Data and then Camp_Is_Square and then Zone_At (1).Placed
+                         and then Zone_At (1).Along_B = 44 and then Path_Count = 4,
+                         "saved and loaded: the same bytes, the square a square");
+               end;
+            end if;
+         end;
+      end loop;
+
+      --  refused: water on it; something standing by the fire; and left standing further out
+      Empty_Land (Labour => False);
+      Set (B (33.0), B (34.0), Ground_Row, Water);
+      Changed_World;
+      Found (32.1, 32.2, 0);
+      Check (not R.Done and then not Has_Stake and then Zone_Count = 0 and then Path_Count = 0
+             and then Why_Not ((What => Raise_Stake, By => The_Player, Stake_At => (32.1, 32.2, Ground_M),
+                                As_Square => True, Stake_Way => 0), R) (1 .. 20) = "there is water on it",
+             "with water on it, refused: '" & Square_Refusal & "'");
+      Empty_Land (Labour => False);
+      Fill (33.5, 33.0, 34.0, 33.5, Ground_Row, Ground_Row + 3, Boulder);
+      Changed_World;
+      Found (32.1, 32.2, 0);
+      Check (not R.Done and then not Has_Stake and then Square_Refusal (1 .. 26) = "a boulder stands by where ",
+             "a boulder two metres from where its fire is to be: refused ('" & Square_Refusal & "')");
+      Empty_Land (Labour => False);
+      Fill (35.5, 35.5, 36.0, 36.0, Ground_Row, Ground_Row + 3, Boulder);
+      Changed_World;
+      Found (32.1, 32.2, 0);
+      Build_Camp_Now;
+      Check (R.Done and then Has_Stake and then Camp_State.Built and then Stuff_At (35.6, 35.6) = Boulder
+             and then Top_At (35.6, 35.6) = Ground_Row + 3 and then Stuff_At (35.2, 35.2) = Grass,
+             "one five metres off, on its floor: the colony is founded, and it is left standing as the square is made");
+
+      --  on ground that rises a block every metre: all of it brought to one level by the band's
+      --  hands, its path to that level where the ground is within half a metre of it, and no pit
+      Empty_Land (Labour => True, Rise_M => 1.0);
+      Found (38.1, 32.2, 0);
+      declare
+         Level_Z : constant Float := Camp_State.Floor_Z;
+         To_Dig  : constant Natural := Camp_State.To_Dig;
+         To_Fill : constant Natural := Camp_State.To_Fill;
+         V       : constant Zone_View := Zone_At (1);
+         Off, Turf, Ring_Level, Ring_Off, Spots, Pits : Natural := 0;
+         Level   : Integer;
+         X, Y    : Float;
+      begin
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Run (2);
+         Level := Integer (Level_Z * 4.0) - 1;
+         for K in 1 .. Zone_Runs (1) loop
+            declare
+               Rn : constant Zone_Run := Zone_Run_At (1, K);
+            begin
+               for Bx in Rn.X0 .. Rn.X1 loop
+                  if Top_At ((Float (Bx) + 0.5) * 0.25, (Float (Rn.Y) + 0.5) * 0.25) /= Level then
+                     Off := Off + 1;
+                  end if;
+                  if Get (Bx, Rn.Y, Level) = Grass then
+                     Turf := Turf + 1;
+                  end if;
+               end loop;
+            end;
+         end loop;
+         for Bx in B (38.0 - 6.0) .. B (38.0 + 6.0) - 1 loop
+            for By in B (32.25 - 6.0) .. B (32.25 + 6.0) - 1 loop
+               declare
+                  Px : constant Float := (Float (Bx) + 0.5) * 0.25;
+                  Py : constant Float := (Float (By) + 0.5) * 0.25;
+               begin
+                  if Get (Bx, By, Top_At (Px, Py)) = Footpath then
+                     if Top_At (Px, Py) = Level then
+                        Ring_Level := Ring_Level + 1;
+                     else
+                        Ring_Off := Ring_Off + 1;
+                     end if;
+                  end if;
+               end;
+            end loop;
+         end loop;
+         X := 38.0 - 9.0;
+         while X <= 38.0 + 9.0 loop
+            Y := 32.25 - 9.0;
+            while Y <= 32.25 + 9.0 loop
+               declare
+                  Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+               begin
+                  if Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, (X, Y, Z)).Result, Castle.Nav.Found) then
+                     Spots := Spots + 1;
+                     if not Castle.Nav."=" (Castle.Nav.Plan ((X, Y, Z), Stake).Result, Castle.Nav.Found) then
+                        Pits := Pits + 1;
+                     end if;
+                  end if;
+               end;
+               Y := Y + 0.5;
+            end loop;
+            X := X + 0.5;
+         end loop;
+         Check (R.Done and then Level_Z > 0.0 and then To_Dig > 100 and then To_Fill > 100 and then V.Blocks = 1_600
+                and then Camp_State.Built and then Off = 0 and then Turf = 0
+                and then Ring_Level > 150 and then Ring_Off > 0
+                and then Spots > 800 and then Pits = 0
+                and then Castle.Nav."=" (Castle.Nav.Plan ((20.0, 20.0, Ground_M), Stake).Result, Castle.Nav.Found),
+                "on ground rising a block a metre: its floor chosen level at " & Img (Level_Z, 2) & " m (" & Img (To_Dig)
+                & " blocks to dig off, " & Img (To_Fill) & " to fill); made, every one of its 1600 block columns is at"
+                & " that level and trodden bare; " & Img (Ring_Level) & " block columns of its path lie level with it,"
+                & Ring_Off'Image & " as the ground does beyond half a metre; of" & Spots'Image & " spots round it that"
+                & " can be got to from the fire, none is a pit, and the fire is got to from the meadow");
+      end;
+      --  the same ground with a tree's foot three blocks wide standing on its floor, one on the low
+      --  side (where the floor is filled up round it) and one on the high (where it is dug down), and
+      --  a bush three blocks wide on each: the feet are left out of its ground and it is made round
+      --  them; the bushes are cleared at the founding, their ground floor like the rest; no pit
+      --  (with a square's trees left standing, Set_Square_Fell off, as it first was)
+      Empty_Land (Labour => True, Rise_M => 1.0);
+      Set_Square_Fell (False);
+      Fill (33.25, 33.0, 34.0, 33.75, Ground_Row + 3, Ground_Row + 17, Log);          --  (on ground three blocks up)
+      Fill (42.5, 31.0, 43.25, 31.75, Ground_Row + 12, Ground_Row + 26, Log);         --  (and on ground twelve blocks up)
+      Fill (33.25, 30.0, 34.0, 30.75, Ground_Row + 3, Ground_Row + 4, Berry_Bush);
+      Fill (42.0, 35.0, 42.75, 35.75, Ground_Row + 12, Ground_Row + 13, Berry_Bush);
+      Fill (36.0, 30.0, 36.5, 30.5, Ground_Row + 12, Ground_Row + 12, Leaves);        --  (and leaves low over it: 6 blocks up)
+      Changed_World;
+      Found (38.1, 32.2, 0);
+      declare
+         Level   : constant Integer := Integer (Camp_State.Floor_Z * 4.0) - 1;
+         Blocks  : constant Natural := (if Zone_Count >= 1 then Zone_At (1).Blocks else 0);
+         Bushes, Low_Leaves, Pits, Off : Natural := 0;
+         X, Y : Float;
+      begin
+         for Bx in B (33.0) .. B (43.0) loop
+            for By in B (27.25) .. B (37.25) loop
+               for Z in Ground_Row .. Ground_Row + 20 loop
+                  if Get (Bx, By, Z) in Berry_Bush | Bare_Bush then
+                     Bushes := Bushes + 1;
+                  elsif Get (Bx, By, Z) = Leaves then
+                     Low_Leaves := Low_Leaves + 1;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Run (2);
+         X := 38.0 - 9.0;
+         while X <= 38.0 + 9.0 loop
+            Y := 32.25 - 9.0;
+            while Y <= 32.25 + 9.0 loop
+               declare
+                  Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+               begin
+                  if Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, (X, Y, Z)).Result, Castle.Nav.Found)
+                    and then not Castle.Nav."=" (Castle.Nav.Plan ((X, Y, Z), Stake).Result, Castle.Nav.Found)
+                  then
+                     Pits := Pits + 1;
+                  end if;
+               end;
+               Y := Y + 0.25;
+            end loop;
+            X := X + 0.25;
+         end loop;
+         for K in 1 .. Zone_Runs (1) loop
+            declare
+               Rn : constant Zone_Run := Zone_Run_At (1, K);
+            begin
+               for Bx in Rn.X0 .. Rn.X1 loop
+                  if Top_At ((Float (Bx) + 0.5) * 0.25, (Float (Rn.Y) + 0.5) * 0.25) /= Level then
+                     Off := Off + 1;
+                  end if;
+               end loop;
+            end;
+         end loop;
+         Check (R.Done and then Blocks = 1_600 - 15 and then Bushes = 0 and then Low_Leaves = 0
+                and then Camp_State.Built and then Off = 0 and then Pits = 0
+                and then Get (B (33.5), B (33.5), Ground_Row + 10) = Log and then Get (B (42.6), B (31.5), Ground_Row + 20) = Log
+                and then Zone_On (33.4, 30.4) = 1 and then Top_At (33.4, 30.4) = Level
+                and then Zone_On (33.5, 33.5) = 0,
+                "with its trees left standing (Set_Square_Fell off), a tree's foot three blocks wide on its low side"
+                & " and one on its high, a bush by each: founded, the"
+                & " feet left out of its ground (" & Img (Blocks) & " block columns) and left standing; the bushes"
+                & " and the leaves low over it cleared at the founding; made, all of its ground at its level, where"
+                & " the bushes stood too, and no spot round it a pit");
+      end;
+      --  (so founded:) no forester fells a tree left standing on its floor (felled, its foot would leave a
+      --  hole in a floor filled up round it): they fell the others; and it is spared still when trees
+      --  are felled for squares again (a square that was founded round its trees keeps them)
+      Empty_Land (Labour => True, Sources => True);
+      Set_Square_Fell (False);
+      Found (20.1, 31.3, 0);
+      Set_Square_Fell (True);
+      declare
+         Pine, Oak_A, Oak_B : Natural := 0;
+         Others_At : Natural := 0;
+      begin
+         for K in 1 .. Tree_Count loop
+            if Tree_At (K).Bx = 62 then
+               Pine := K;
+            elsif Tree_At (K).Bx = 100 then
+               Oak_A := K;
+            elsif Tree_At (K).Bx = 42 then
+               Oak_B := K;
+            end if;
+         end loop;
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Want (Wood, 400);
+         Set_Job (1, Forester);
+         Set_Job (2, Forester);
+         for S in 1 .. 12_000 loop
+            Run (1);
+            if Others_At = 0 and then Oak_A > 0 and then Oak_B > 0 and then Tree_Down (Oak_A) and then Tree_Down (Oak_B)
+            then
+               Others_At := S;
+            end if;
+            exit when Others_At > 0 and then S >= Others_At + 1_200;
+         end loop;
+         Check (R.Done and then Pine > 0 and then Zone_On (15.6, 31.1) = 0 and then Zone_On (16.2, 31.1) = 1
+                and then Others_At > 0 and then not Tree_Down (Pine)
+                and then Get (62, 124, Ground_Row + 6) = Log and then Get (63, 125, Ground_Row + 20) = Log,
+                "a square founded round a pine, 4.2 m from its fire (and trees felled for squares again since): two"
+                & " foresters fell the two trees off it (down after" & Others_At'Image & " colony seconds) and, twenty"
+                & " minutes on, have left the pine standing");
+      end;
+      --  a tree on the square is felled and taken out by the band (John, 2026-11-20: "a tree left on a
+      --  square, can stay in habitation zone, if it doesn't interfere with anything, or felled and removed
+      --  anywhere else"): a pine 1.2 m from where the fire is to be does not refuse it; anyone of the band
+      --  fells it before the ground is made under it; its stump and roots are earth, its place floor;
+      --  its logs lie on the floor; the camp is not built while it stands
+      Empty_Land (Labour => True, Sources => True);
+      Found (17.1, 31.3, 0);
+      declare
+         Pine : Natural := 0;
+         Blocks : constant Natural := (if Zone_Count >= 1 then Zone_At (1).Blocks else 0);
+         Left_0 : constant Natural := Square_Trees_Left;
+         Ground_0 : constant Natural := Camp_State.Ground_Left;
+         Felled_At, Built_At : Natural := 0;
+         Built_Before_Felled : Boolean := False;
+         Trunk_Left, Off_Logs : Natural := 0;
+         Level : Integer;
+      begin
+         for K in 1 .. Tree_Count loop
+            if Tree_At (K).Bx = 62 then
+               Pine := K;
+            end if;
+         end loop;
+         for S in 1 .. 9_000 loop
+            Run (1);
+            if Felled_At = 0 and then Pine > 0 and then Tree_Down (Pine) then
+               Felled_At := S;
+            end if;
+            if Built_At = 0 and then Camp_State.Built then
+               Built_At := S;
+               Built_Before_Felled := Felled_At = 0;
+            end if;
+            exit when Camp_State.Built and then Felled_At > 0;
+         end loop;
+         Level := Integer (Camp_State.Floor_Z * 4.0) - 1;
+         for X in 62 .. 63 loop
+            for Y in 124 .. 125 loop
+               for Z in Ground_Row - 3 .. Ground_Row + 30 loop
+                  if Get (X, Y, Z) = Log then
+                     Trunk_Left := Trunk_Left + 1;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+         for K in 1 .. Pile_Count loop
+            if Pile_At (K).Count > 0 and then Flat (Pile_At (K).Centre, Stake) < 8.0
+              and then abs (Pile_At (K).Centre.Z - Castle.Nav.Surface_Z (Pile_At (K).Centre.X, Pile_At (K).Centre.Y)) > 0.3
+            then
+               Off_Logs := Off_Logs + 1;
+            end if;
+         end loop;
+         Check (R.Done and then Pine > 0 and then Blocks = 1_600 and then Left_0 = 1 and then Ground_0 > 100
+                and then Felled_At > 0 and then Built_At > 0 and then not Built_Before_Felled
+                and then Trunk_Left = 0 and then Square_Trees_Left = 0
+                and then Top_At (15.6, 31.1) = Level and then Top_At (15.9, 31.4) = Level
+                and then Stuff_At (15.6, 31.1) = Dirt and then Zone_On (15.6, 31.1) = 1
+                and then Off_Logs = 0 and then Logs_Lying + Stored (Wood) + Camp_State.Logs + Camp_State.Seats > 0,
+                "a pine 1.2 m from where its fire is to be: founded all the same, all 1600 block columns of its box"
+                & " its floor, a tree to fell on it; the band fells it (down after" & Felled_At'Image & " colony seconds),"
+                & " nothing of it is left (stump and roots earth), its place is at the floor's level and trodden, its"
+                & " logs lie on the floor; the hearth stands after" & Built_At'Image & ", not before the tree was down");
+      end;
+      --  a knoll with banks all round it: made level it would be a floor no serf could step up onto
+      --  again, so it is refused; with the band's labour off (its floor left as it lies) it is taken
+      Empty_Land (Labour => True);
+      Fill (34.5, 28.75, 41.5, 35.75, Ground_Row, Ground_Row + 4, Dirt);
+      Fill (34.5, 28.75, 41.5, 35.75, Ground_Row + 5, Ground_Row + 5, Grass);
+      Changed_World;
+      Found (38.1, 32.2, 0);
+      declare
+         Why : constant String := Square_Refusal;
+         Refused : constant Boolean := not R.Done and then not Has_Stake;
+      begin
+         Empty_Land (Labour => False);
+         Fill (34.5, 28.75, 41.5, 35.75, Ground_Row, Ground_Row + 4, Dirt);
+         Fill (34.5, 28.75, 41.5, 35.75, Ground_Row + 5, Ground_Row + 5, Grass);
+         Changed_World;
+         Found (38.1, 32.2, 0);
+         Check (Refused and then Why'Length > 27 and then Why (1 .. 27) = "its floor would lie cut off"
+                and then R.Done and then Has_Stake,
+                "on a knoll 7 m across and 1.5 m high, banks all round it: refused ('" & Why & "'); with the band's"
+                & " labour off, its floor left as it lies, it is taken");
+      end;
+      --  a stockpile held all round the square, squarely and aslant, every 0.35 m and every way: held
+      --  again by its own middle it lies as it lay, or is drawn to a side it was at the edge of the
+      --  reach of and then does; put down at one place in so many, none of its box is the square's
+      --  floor or its path's ground
+      for Way in 0 .. 1 loop
+         declare
+            function Same (A, C : Placement) return Boolean is
+              (A.Ok = C.Ok and then A.Way = C.Way and then A.Along_B = C.Along_B and then Flat (A.From, C.From) < 0.001
+               and then Flat (A.To, C.To) < 0.001 and then Flat (A.Front, C.Front) < 0.001);
+            Held, Drawn, Crept, Taken, Put, Faulty : Natural := 0;
+            Crept_At, Faulty_At : Vec3 := (0.0, 0.0, 0.0);
+            Crept_Way, Faulty_Way : Way_Index := 0;
+            By_Snap : array (Box_Snap) of Natural := [others => 0];
+            function Moves (P : Placement; W : Way_Index) return Natural is
+               Q : Placement := P;
+            begin
+               for N in 0 .. 2 loop
+                  declare
+                     Next : constant Placement := Box_At (Stockpile_Box, Box_Middle (Q), W);
+                  begin
+                     if Same (Next, Q) then
+                        return N;
+                     end if;
+                     Q := Next;
+                  end;
+               end loop;
+               return 3;
+            end Moves;
+         begin
+            Empty_Land (Labour => False);
+            Found (32.1, 32.2, Way);
+            for Ix in 0 .. 91 loop
+               for Iy in 0 .. 91 loop
+                  for W in Way_Index loop
+                     declare
+                        Mid : constant Vec3 := (16.0 + 0.35 * Float (Ix), 16.0 + 0.35 * Float (Iy), Ground_M);
+                        P   : constant Placement := Box_At (Stockpile_Box, Mid, W);
+                     begin
+                        if P.Ok then
+                           Held := Held + 1;
+                           By_Snap (P.Snap) := By_Snap (P.Snap) + 1;
+                           case Moves (P, W) is
+                              when 0 => null;
+                              when 1 | 2 => Drawn := Drawn + 1;
+                              when others =>
+                                 if Crept = 0 then
+                                    Crept_At := Mid;
+                                    Crept_Way := W;
+                                 end if;
+                                 Crept := Crept + 1;
+                           end case;
+                        end if;
+                     end;
+                  end loop;
+               end loop;
+            end loop;
+            for Ix in 0 .. 18 loop
+               for Iy in 0 .. 18 loop
+                  for W in Way_Index loop
+                     declare
+                        Mid  : constant Vec3 := (16.0 + 1.75 * Float (Ix), 16.0 + 1.75 * Float (Iy), Ground_M);
+                        Plan : constant Box_Plan := Plan_Box (Stockpile_Box, Mid, W);
+                        Cells : Natural;
+                        C     : Box_Count;
+                     begin
+                        if Plan.Lot.Ok then
+                           Taken := Taken + 1;
+                           if Taken mod 17 = 1 then
+                              Place_Box (Stockpile_Box, Mid, W, Cells);
+                              C := Box_Counts (Zone_Count);
+                              Put := Put + 1;
+                              if Cells /= Plan.Lot.Cells or else Zone_Count /= 2 or else C.Other /= 0 or else C.Path /= 0
+                                or else C.Front_Bare /= 0 or else C.Its_Own + C.Bare /= C.Box
+                                or else Box_Counts (1).Its_Own /= Box_Counts (1).Box
+                              then
+                                 if Faulty = 0 then
+                                    Faulty_At := Mid;
+                                    Faulty_Way := W;
+                                 end if;
+                                 Faulty := Faulty + 1;
+                              end if;
+                              Empty_Land (Labour => False);
+                              Found (32.1, 32.2, Way);
+                           end if;
+                        end if;
+                     end;
+                  end loop;
+               end loop;
+            end loop;
+            Check (Held > 60_000 and then Crept = 0 and then By_Snap (Along_Path) > 1_000 and then By_Snap (At_End) > 100
+                   and then Drawn < Held / 20 and then Taken > 500 and then Put > 25 and then Faulty = 0,
+                   "a stockpile held at" & Held'Image & " places and ways round the square"
+                   & (if Way = 0 then "" else " aslant") & " (" & Img (By_Snap (Along_Path)) & " drawn along a side of"
+                   & " its path, " & Img (By_Snap (At_End)) & " to a corner, " & Img (By_Snap (At_Middle))
+                   & " to a side's middle): held again by its own middle, each lies as it lay, or (" & Img (Drawn)
+                   & " of them, at the edge of a side's reach) is drawn to it and then does; " & Img (Crept)
+                   & " go on moving"
+                   & (if Crept > 0 then ", the first at " & Img (Crept_At.X, 2) & ", " & Img (Crept_At.Y, 2) & " way"
+                                        & Crept_Way'Image else "")
+                   & ";" & Taken'Image & " would be taken, and" & Put'Image & " of those put down: none with the"
+                   & " square's floor or a path's ground in its box (" & Img (Faulty) & " faulty"
+                   & (if Faulty > 0 then ", the first at " & Img (Faulty_At.X, 2) & ", " & Img (Faulty_At.Y, 2) & " way"
+                                         & Faulty_Way'Image else "") & ")");
+         end;
+      end loop;
+
+      Empty_Land (Labour => False, Rise_M => 0.5);
+      Found (38.1, 32.2, 0);
+      Check (not R.Done and then not Has_Stake and then Square_Refusal (1 .. 26) = "the ground rises and falls",
+             "on ground rising a block every half metre: refused ('" & Square_Refusal & "')");
+
+      --  the band builds it: its ground made ready, its hearth, its path laid
+      Empty_Land (Labour => True, Sources => True);
+      Found (32.1, 44.2, 0);
+      declare
+         Ready_At, Paths_At, Built_At : Natural := 0;
+         Was_Building : constant Boolean := not Camp_State.Built and then Camp_State.Ground_Left > 50;
+         To_Lay_0 : constant Natural := Paths_To_Lay;
+      begin
+         for S in 1 .. 8_000 loop
+            Run (1);
+            if Ready_At = 0 and then Camp_State.Ground_Left = 0 then
+               Ready_At := S;
+            end if;
+            if Paths_At = 0 and then Paths_To_Lay = 0 then
+               Paths_At := S;
+            end if;
+            if Built_At = 0 and then Camp_State.Built then
+               Built_At := S;
+            end if;
+            exit when Camp_State.Built and then Paths_To_Lay = 0;
+         end loop;
+         Check (R.Done and then Was_Building and then To_Lay_0 = 44
+                and then Ready_At > 0 and then Paths_At > 0 and then Built_At > 0
+                and then Camp_State.Built and then Paths_To_Lay = 0
+                and then Stuff_At (32.0 + 5.75, 44.25) = Footpath and then Stuff_At (32.0 + 2.0, 44.25 + 3.0) = Dirt,
+                "the band of six builds it: its hundred square metres made ready in" & Ready_At'Image
+                & " colony seconds, its 44 m of path laid in" & Paths_At'Image & ", its hearth standing after"
+                & Built_At'Image & " (stone prised off a boulder, deadwood from the trees)");
+
+      end;
+      Set_Box_Place (False);
+   end;
+
+   --  The banks of the square the colony was founded on, walled with stone, and its stairs (John,
+   --  2026-11-20: "stone wall and stair, also step the stone walls towards the higher ground if over
+   --  1m. so from lower ground for each 1m of retaining wall step inwards .25").  On the meadow rising
+   --  a block a metre to the east the square has a bank of five or six blocks against its east side
+   --  and as much under its west: two lifts each, and a stair in each.
+   Put_Line ("the square's walls and stair:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      procedure Rising_Land (Labour : Boolean; Sources : Boolean := False; Walls : Boolean := True;
+                             Diagonal : Boolean := False) is
+      begin
+         Reset;
+         Set_Beds (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (Labour);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Box_Place (True);
+         Set_Path_Level (True);
+         Set_Square_Walls (Walls);
+         Meadow;
+         if Sources then                    --  (the boulder its stone is prised off)
+            Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);
+            for T of Active loop
+               Shape (T.I, T.J, Grow'Access);
+            end loop;
+            Porter_Ground;
+         end if;
+         if Diagonal then
+            --  (rising a block a metre to the north-east, eight blocks up at the square's middle, for a
+            --  square aslant: the bank even along two of its sides)
+            for Bx in 100 .. 250 loop
+               for By in 60 .. 250 loop
+                  declare
+                     K : constant Integer := Integer (Float'Floor (Float (Bx + By - 236) * 0.25 / Sqrt (2.0)));
+                  begin
+                     for Z in 1 .. Integer'Min (K, 30) loop
+                        Set (Bx, By, Ground_Row + Z - 1, (if Z = Integer'Min (K, 30) then Grass else Dirt));
+                        if Z > 1 and then Get (Bx, By, Ground_Row + Z - 2) = Grass then
+                           Set (Bx, By, Ground_Row + Z - 2, Dirt);
+                        end if;
+                     end loop;
+                  end;
+               end loop;
+            end loop;
+         else
+            for K in 1 .. 33 loop
+               Fill (30.0 + Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+               Fill (30.0 + Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+            end loop;
+         end if;
+         Changed_World;
+         Hours := 16.0 * 24.0;
+         Set_Arrivals (6, 42);
+      end Rising_Land;
+      procedure Found (X, Y : Float; Way : Way_Index) is
+      begin
+         Perform ((What => Raise_Stake, By => The_Player, Stake_At => (X, Y, Ground_M), As_Square => True,
+                   Stake_Way => Way), R);
+         Index_All;
+      end Found;
+      function Top_B (Bx, By : Integer) return Integer is
+      begin
+         for Z in reverse 1 .. Ground_Row + 60 loop
+            if Get (Bx, By, Z) not in Air | Tall_Grass then
+               return Z;
+            end if;
+         end loop;
+         return 0;
+      end Top_B;
+      --  the plan, kept by block column (the square's middle is near 38, 32.25: block 152, 129)
+      None : constant := Integer'First;
+      type Col is record
+         Top, Stone : Integer := None;
+      end record;
+      type Plan_Map is array (112 .. 192, 89 .. 169) of Col;
+      Plan  : Plan_Map;
+      Level : Integer := 0;
+      procedure Note (Bx, By, Top, Stone, L : Integer) is
+      begin
+         Level := L;
+         if Bx in Plan'Range (1) and then By in Plan'Range (2) then
+            Plan (Bx, By) := (Top, Stone);
+         end if;
+      end Note;
+      procedure Read_Plan is
+      begin
+         Plan := [others => [others => <>]];
+         For_Wall_Plan (Note'Access);
+      end Read_Plan;
+      --  as built against as planned: floor columns whose top is not at its planned row, planned rows
+      --  of stone that are not stone, blocks of stone outside the floor, blocks of stone in all
+      procedure Compare (Off, Unlaid, Outside, Stones : out Natural) is
+      begin
+         Off := 0;
+         Unlaid := 0;
+         Outside := 0;
+         Stones := 0;
+         for Bx in Plan'Range (1) loop
+            for By in Plan'Range (2) loop
+               if Plan (Bx, By).Top /= None then
+                  if Top_B (Bx, By) /= Plan (Bx, By).Top then
+                     Off := Off + 1;
+                  end if;
+                  for Z in Plan (Bx, By).Stone .. Plan (Bx, By).Top loop
+                     if Get (Bx, By, Z) /= Fieldstone then
+                        Unlaid := Unlaid + 1;
+                     end if;
+                  end loop;
+               end if;
+               for Z in Ground_Row - 4 .. Ground_Row + 40 loop
+                  if Get (Bx, By, Z) = Fieldstone then
+                     Stones := Stones + 1;
+                     if Plan (Bx, By).Top = None then
+                        Outside := Outside + 1;
+                     end if;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+      end Compare;
+      --  spots within 9 m of its middle that can be got to from the fire and not back from
+      function Pits_By (Mx, My : Float) return Natural is
+         Pits : Natural := 0;
+         X, Y : Float;
+      begin
+         X := Mx - 9.0;
+         while X <= Mx + 9.0 loop
+            Y := My - 9.0;
+            while Y <= My + 9.0 loop
+               declare
+                  Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+               begin
+                  if Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, (X, Y, Z)).Result, Castle.Nav.Found)
+                    and then not Castle.Nav."=" (Castle.Nav.Plan ((X, Y, Z), Stake).Result, Castle.Nav.Found)
+                  then
+                     Pits := Pits + 1;
+                  end if;
+               end;
+               Y := Y + 0.5;
+            end loop;
+            X := X + 0.5;
+         end loop;
+         return Pits;
+      end Pits_By;
+      --  the way from a spot to the fire and back, metres (a thousand: none)
+      function Way_M (X, Y : Float) return Float is
+         Z    : constant Float := Castle.Nav.Surface_Z (X, Y);
+         There : constant Castle.Nav.Route := Castle.Nav.Plan ((X, Y, Z), Stake);
+         Back  : constant Castle.Nav.Route := Castle.Nav.Plan (Stake, (X, Y, Z));
+         D     : Float := 0.0;
+      begin
+         if Z < 0.0 or else not Castle.Nav."=" (There.Result, Castle.Nav.Found)
+           or else not Castle.Nav."=" (Back.Result, Castle.Nav.Found)
+         then
+            return 1_000.0;
+         end if;
+         for K in 2 .. There.N loop
+            D := D + Flat (There.Pts (K).P, There.Pts (K - 1).P);
+         end loop;
+         for K in 2 .. Back.N loop
+            D := D + Flat (Back.Pts (K).P, Back.Pts (K - 1).P);
+         end loop;
+         return D;
+      end Way_M;
+   begin
+      --  squarely, built on the spot: the walls as planned, lift by lift, and the stairs
+      for Try in 1 .. 2 loop       --  (its middle on a block corner odd and even north: the stair begins on an even column either way)
+         Rising_Land (Labour => True);
+         Found (38.1, (if Try = 1 then 32.2 else 32.45), 0);
+         declare
+            My  : constant Float := (if Try = 1 then 32.25 else 32.5);
+            Y0  : constant Integer := B (My + 0.01);          --  the block north of its middle
+            Row : constant Integer := Y0 - 17;                --  a row of blocks clear of the stairs and of the corners
+            W0, W1 : Walls_View;
+            Off, Unlaid, Outside, Stones : Natural;
+            Ge, Gw : Integer;
+            East_Ok, West_Ok, Stair_E, Stair_W : Boolean;
+            St0 : Integer := Integer'Last;                    --  the first column of the east stair
+            St_N : Natural := 0;
+            Ways_Before, Ways_After : array (1 .. 2) of Float;
+         begin
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Run (1);
+            W0 := Square_Walls_State;
+            Ways_Before := [Way_M (43.6, My), Way_M (32.4, My)];
+            Read_Plan;
+            Build_Walls_Now;
+            Run (1);
+            W1 := Square_Walls_State;
+            Ways_After := [Way_M (43.6, My), Way_M (32.4, My)];
+            Compare (Off, Unlaid, Outside, Stones);
+            Ge := Top_B (172, Row);                           --  the path's inner column east, and west
+            Gw := Top_B (131, Row);
+            --  against the higher ground: the first metre over the floor a block column in from the
+            --  edge, what is over it at the edge, flush with the path
+            East_Ok := Ge - Level in 5 .. 8 and then Plan (171, Row).Top = Ge and then Plan (170, Row).Top = Level + 4
+              and then Plan (169, Row).Top = Level
+              and then (for all Z in Level + 1 .. Level + 4 => Get (170, Row, Z) = Fieldstone)
+              and then Get (170, Row, Level + 5) = Air
+              and then (for all Z in Level + 5 .. Ge => Get (171, Row, Z) = Fieldstone)
+              and then Get (171, Row, Ge + 1) = Air and then Get (169, Row, Level + 1) = Air;
+            --  holding the floor up: the first metre over the path at the edge, a ledge; what is over
+            --  it a block column in, the floor's edge
+            West_Ok := Level - Gw in 5 .. 8 and then Plan (132, Row).Top = Gw + 4 and then Plan (133, Row).Top = Level
+              and then (for all Z in Gw + 1 .. Gw + 4 => Get (132, Row, Z) = Fieldstone)
+              and then Get (132, Row, Gw + 5) = Air
+              and then (for all Z in Gw + 5 .. Level => Get (133, Row, Z) = Fieldstone)
+              and then Get (133, Row, Level + 1) = Air;
+            --  the stairs: a block a step from the path's level to the floor's, four columns wide
+            for By in Y0 - 6 .. Y0 + 6 loop
+               if Plan (171, By).Top = Top_B (172, By) - 1 then
+                  St0 := Integer'Min (St0, By);
+                  St_N := St_N + 1;
+               end if;
+            end loop;
+            Stair_E := St_N = 4 and then St0 mod 2 = 0
+              and then Plan (172 - (Top_B (172, St0) - Level), St0).Top = Level
+              and then (for all K in 1 .. Top_B (172, St0) - Level - 1 =>
+                          Plan (172 - K, St0).Top = Top_B (172, St0) - K
+                          and then Get (172 - K, St0, Top_B (172, St0) - K) = Fieldstone);
+            Stair_W := Plan (131 + (Level - Top_B (131, St0)), St0).Top = Level
+              and then (for all K in 1 .. Level - Top_B (131, St0) - 1 =>
+                          Plan (131 + K, St0).Top = Top_B (131, St0) + K
+                          and then Get (131 + K, St0, Top_B (131, St0) + K) = Fieldstone);
+            Check (R.Done and then W0.Stone_Left > 300 and then W0.Lifts = 2 and then W0.Stairs = 2
+                   and then W0.Too_High = 0 and then W0.Unready = 0
+                   and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then Off = 0 and then Unlaid = 0
+                   and then Outside = 0 and then Stones = W0.Stone_Left,
+                   "squarely" & (if Try = 1 then "" else ", its middle a block north") & ": planned," & W0.Stone_Left'Image
+                   & " blocks of stone and" & W0.Dig_Left'Image & " of earth to dig off in" & W0.Columns'Image
+                   & " block columns, the highest bank" & W0.Highest_B'Image & " blocks, two lifts, two stairs; built on"
+                   & " the spot, every column stands as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid), "
+                   & Img (Stones) & " blocks of stone, none of them outside its floor (" & Img (Outside) & ")");
+            Check (East_Ok and then West_Ok,
+                   "a wall over a metre is set back, counted up from the lower ground: against the bank east ("
+                   & Img (Ge - Level) & " blocks) the first metre over the floor stands a block column in from the edge"
+                   & " and what is over it at the edge, flush with the path; holding the floor up west ("
+                   & Img (Level - Gw) & " blocks) the first metre over the path stands at the edge, a ledge, and what is"
+                   & " over it a block column in");
+            Check (Stair_E and then Stair_W
+                   and then Ways_Before (1) > 14.0 and then Ways_Before (2) > 14.0
+                   and then Ways_After (1) < 13.5 and then Ways_After (2) < 13.5 and then Pits_By (38.0, My) = 0,
+                   "a stair in each: four block columns wide from an even one (" & Img (St0) & "), a block a step, its"
+                   & " treads of stone; from the middle of the path east to the fire and back " & Img (Ways_Before (1), 1)
+                   & " m before and " & Img (Ways_After (1), 1) & " m by the stair, west " & Img (Ways_Before (2), 1)
+                   & " and " & Img (Ways_After (2), 1) & "; no pit by it");
+            if Try = 1 then
+               declare
+                  Data : constant Bytes := Save;
+                  Ok   : Boolean;
+               begin
+                  Load (Data, Ok);
+                  Run (1);
+                  Check (Ok and then Save'Length = Data'Length and then Walls_Left = 0
+                         and then Square_Walls_State.Columns = W0.Columns,
+                         "saved and loaded: nothing of them is kept, and they are read the same again");
+               end;
+            end if;
+         end;
+      end loop;
+
+      --  aslant: the set-back a diagonal row of blocks, the stairs walked
+      Rising_Land (Labour => True, Diagonal => True);
+      Found (38.1, 32.2, 1);
+      declare
+         W0, W1 : Walls_View;
+         Off, Unlaid, Outside, Stones : Natural;
+         Before, After : array (1 .. 4) of Float;
+         Shorter : Natural := 0;
+         R45 : constant Float := 5.5 / Sqrt (2.0);
+      begin
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Run (1);
+         W0 := Square_Walls_State;
+         Before := [Way_M (38.0 + R45, 32.25 + R45), Way_M (38.0 - R45, 32.25 + R45),
+                    Way_M (38.0 - R45, 32.25 - R45), Way_M (38.0 + R45, 32.25 - R45)];
+         Read_Plan;
+         Build_Walls_Now;
+         Run (1);
+         W1 := Square_Walls_State;
+         After := [Way_M (38.0 + R45, 32.25 + R45), Way_M (38.0 - R45, 32.25 + R45),
+                   Way_M (38.0 - R45, 32.25 - R45), Way_M (38.0 + R45, 32.25 - R45)];
+         Compare (Off, Unlaid, Outside, Stones);
+         for K in Before'Range loop
+            if After (K) < Before (K) - 1.0 then
+               Shorter := Shorter + 1;
+            end if;
+         end loop;
+         Check (R.Done and then W0.Stone_Left > 200 and then W0.Lifts >= 2 and then W0.Stairs >= 1
+                and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then Off = 0 and then Unlaid = 0
+                and then Outside = 0 and then Shorter = W0.Stairs
+                and then (for all K in After'Range => After (K) <= Before (K) + 0.6 and then After (K) < 16.0)
+                and then Pits_By (38.0, 32.25) = 0,
+                "aslant:" & W0.Stone_Left'Image & " blocks of stone in" & W0.Columns'Image & " block columns, the highest"
+                & " bank" & W0.Highest_B'Image & " blocks," & W0.Lifts'Image & " lifts," & W0.Stairs'Image
+                & " stairs; built on the spot every column stands as planned, none of the stone outside its floor;"
+                & " the way from the middle of each side's path to the fire and back: " & Img (Before (1), 1) & " "
+                & Img (Before (2), 1) & " " & Img (Before (3), 1) & " " & Img (Before (4), 1) & " m before, "
+                & Img (After (1), 1) & " " & Img (After (2), 1) & " " & Img (After (3), 1) & " " & Img (After (4), 1)
+                & " after (" & Img (Shorter) & " shorter, as many as it has stairs); no pit by it");
+      end;
+
+      --  built by the band, squarely and aslant: stone prised off the boulder, a stone sixteen blocks of
+      --  wall; at every second of it everyone has a way to the fire and nobody stands in a wall; at
+      --  every minute no spot by the square is a pit
+      for Way in 0 .. 1 loop
+         Rising_Land (Labour => True, Sources => True, Diagonal => Way = 1);
+         Found (38.1, 32.2, Way);
+         declare
+            W0, W1 : Walls_View;
+            Done_At, No_Way, In_Wall, Pits, Wall_Hands_Most : Natural := 0;
+            Off, Unlaid, Outside, Stones : Natural;
+            Saved_Ok : Boolean := True;
+            Halfway  : Boolean := False;
+         begin
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Stoke (400.0);                             --  (its fire lit: the walls wait for that)
+            Run (1);
+            W0 := Square_Walls_State;
+            Read_Plan;
+            for S in 1 .. 12_000 loop
+               Run (1);
+               declare
+                  Hands : Natural := 0;
+               begin
+                  for I in 1 .. Members loop
+                     declare
+                        W : constant Vec3 := Where (I);
+                     begin
+                        if not Castle.Nav."=" (Castle.Nav.Plan (W, Stake).Result, Castle.Nav.Found) then
+                           No_Way := No_Way + 1;
+                        end if;
+                        --  (half a metre and more over its feet: a step it is climbing is under that)
+                        if Get (B (W.X), B (W.Y), B (W.Z + 0.05) + 2) = Fieldstone
+                          or else Get (B (W.X), B (W.Y), B (W.Z + 0.05) + 3) = Fieldstone
+                        then
+                           In_Wall := In_Wall + 1;
+                        end if;
+                        if Ada.Strings.Fixed.Index (Status (I), "the square's wall") > 0 then
+                           Hands := Hands + 1;
+                        end if;
+                     end;
+                  end loop;
+                  Wall_Hands_Most := Natural'Max (Wall_Hands_Most, Hands);
+               end;
+               if S mod 20 = 0 then
+                  Pits := Pits + Pits_By (38.0, 32.25);
+               end if;
+               if not Halfway and then Walls_Left in 1 .. W0.Stone_Left / 2 then
+                  Halfway := True;                     --  (half laid: saved and loaded at once, the same bytes again)
+                  declare
+                     Data : constant Bytes := Save;
+                     Left : constant Natural := Walls_Left;
+                     Ok   : Boolean;
+                  begin
+                     Load (Data, Ok);
+                     Saved_Ok := Ok and then Save = Data;
+                     Run (1);
+                     Saved_Ok := Saved_Ok and then Walls_Left <= Left and then Walls_Left + 4 * Wall_Per_Stone >= Left;
+                  end;
+               end if;
+               if Square_Walls_State.Stone_Left = 0 and then Square_Walls_State.Dig_Left = 0 then
+                  Done_At := S;
+                  exit;
+               end if;
+            end loop;
+            Run (30);
+            W1 := Square_Walls_State;
+            Compare (Off, Unlaid, Outside, Stones);
+            Check (R.Done and then W0.Stone_Left > 200 and then Done_At > 0 and then No_Way = 0 and then In_Wall = 0
+                   and then Pits = 0 and then W1.Stone_Left = 0 and then Off = 0 and then Unlaid = 0 and then Outside = 0
+                   and then Halfway and then Saved_Ok and then Wall_Hands_Most in 1 .. 6
+                   and then (for all I in 1 .. Members => Carried (I) = 0),
+                   (if Way = 0 then "squarely" else "aslant") & ", built by the band:" & W0.Stone_Left'Image
+                   & " blocks of stone laid in" & Done_At'Image & " colony seconds (" & Img (Wall_Hands_Most)
+                   & " at it at the most); at every second each of the six has a way to the fire (" & Img (No_Way)
+                   & " without) and none stands in a wall (" & Img (In_Wall) & "); every twenty seconds no spot by it is a pit ("
+                   & Img (Pits) & "); half laid, it is saved and loaded to the same bytes and goes on; at the end"
+                   & " every column stands as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid, "
+                   & Img (Outside) & " blocks of stone outside its floor), and nobody is left holding stone");
+         end;
+      end loop;
+
+      --  what cannot be walled is never counted as left: a boulder in the path's line (it is its own
+      --  bank: no wall is asked for beside it), and no stone to be had (the band goes on with its own)
+      Rising_Land (Labour => True);
+      Fill (43.0, 29.0, 43.5, 29.75, Ground_Row + 10, Ground_Row + 20, Granite);      --  (on the path east, a boulder)
+      Fill (42.5, 34.5, 43.0, 35.0, Ground_Row + 10, Ground_Row + 16, Boulder);       --  (and one on the floor's own edge)
+      Changed_World;
+      Found (38.1, 32.2, 0);
+      declare
+         W0, W1 : Walls_View;
+         By_Rock : Boolean := True;
+         On_Edge : Boolean := True;
+      begin
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Run (1);
+         W0 := Square_Walls_State;
+         Read_Plan;
+         for By in B (29.0) .. B (29.75) - 1 loop
+            By_Rock := By_Rock and then Plan (171, By).Top = Level and then Plan (171, By).Stone > Plan (171, By).Top;
+         end loop;
+         Build_Walls_Now;
+         Run (1);
+         W1 := Square_Walls_State;
+         --  (the one on its floor's edge is the floor's own ground, rock that is neither dug nor walled: whole still)
+         for Bx in B (42.5) .. B (43.0) - 1 loop
+            for By in B (34.5) .. B (35.0) - 1 loop
+               On_Edge := On_Edge and then (for all Z in Ground_Row + 10 .. Ground_Row + 16 => Get (Bx, By, Z) = Boulder)
+                 and then Get (Bx, By, Ground_Row + 17) = Air;
+            end loop;
+         end loop;
+         Check (R.Done and then W0.Stone_Left > 200 and then By_Rock and then On_Edge
+                and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then Walls_Left = 0 and then Pits_By (38.0, 32.25) = 0,
+                "a boulder standing in its path's line, and one left standing on the edge of its floor: no wall is"
+                & " planned beside the one, the other stands whole, and with the rest built nothing is left to lay"
+                & " and no spot by it is a pit");
+         --  with the band at it and no stone anywhere: nobody goes on asking
+         Rising_Land (Labour => True);
+         Found (38.1, 32.2, 0);
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Run (90);
+         declare
+            Before_Fire : constant Natural := Walls_Left;     --  (nothing is wanted of them until its fire is lit,
+            Second_Day  : Natural;                            --  or, with none lit at all, until the colony's third day)
+         begin
+            Run (2_700);
+            Second_Day := Walls_Left;
+            Run (120);
+            Check (Before_Fire = 0 and then Second_Day = 0 and then Walls_Left > 200,
+                   "before its fire is lit nothing of them is wanted (" & Img (Before_Fire) & " after ninety seconds, "
+                   & Img (Second_Day) & " late on the second day); with no fire lit at all they are wanted from the"
+                   & " third day (" & Img (Walls_Left) & " blocks)");
+         end;
+         Check (Walls_Left > 200
+                and then (for all I in 1 .. Members =>
+                            Ada.Strings.Fixed.Index (Status (I), "wall") = 0 and then Carrying (I) /= Stone),
+                "with no stone to be had in reach:" & Walls_Left'Image & " blocks are left to lay, nobody is after"
+                & " stone for them, and the band goes on");
+      end;
+
+      --  one standing still where a wall's stone is to go steps aside, and the stone is laid (the
+      --  band's own builds above never have anyone standing there: with the guard taken out of
+      --  Wall_Bout they pass all the same, and this fails)
+      Rising_Land (Labour => True);
+      Found (38.1, 32.2, 0);
+      declare
+         Before : Natural;
+         W      : Vec3;
+         Lvl    : Integer;
+      begin
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Run (1);
+         Lvl := Integer (Camp_State.Floor_Z * 4.0) - 1;
+         Hold_Still (1, (42.9, 30.1, Camp_State.Floor_Z), 600.0);        --  (in the floor's outermost column east)
+         Before := Stepped_Aside;
+         Build_Walls_Now;
+         W := Where (1);
+         Check (Stepped_Aside > Before and then Square_Walls_State.Stone_Left = 0
+                and then (for all Z in Lvl + 1 .. Top_B (172, B (30.1)) => Get (171, B (30.1), Z) = Fieldstone)
+                and then (for all Up in 0 .. 6 => Get (B (W.X), B (W.Y), B (W.Z + 0.05) + Up) /= Fieldstone)
+                and then Castle.Nav."=" (Castle.Nav.Plan (W, Stake).Result, Castle.Nav.Found),
+                "one standing still where a wall is to go steps aside: the wall stands there to its top, it stands"
+                & " in no stone, and has its way to the fire");
+      end;
+
+      --  with Set_Square_Walls off: nothing is planned or laid (that its path is then brought level
+      --  column by column, as it first was, is held by the runs of tools/square_sites.sh)
+      Rising_Land (Labour => True, Walls => False);
+      Found (38.1, 32.2, 0);
+      declare
+         Off, Unlaid, Outside, Stones : Natural;
+      begin
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Build_Walls_Now;
+         Run (2);
+         Read_Plan;
+         Compare (Off, Unlaid, Outside, Stones);
+         Check (R.Done and then Stones = 0 and then Square_Walls_State = Walls_View'(others => <>) and then Walls_Left = 0
+                and then Off = 0,
+                "with Set_Square_Walls off: no stone is laid and nothing is planned");
+      end;
+   end;
+
+   ------------------------------------------------------------------ housing pulled with its path, 2026-11-20
+   --  (John: "when the player starts laying the habitation what we are chaning with the zone right now is
+   --  that it will include the path with the zone placement, it will allow either an overlap, extension, or
+   --  intersection with an existing path"; and: "Housing on one side, if they want both sides they can lay
+   --  down the zones twice. OR we can allow the player to select a double or single row?")
+   Put_Line ("housing pulled with its path:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      Max_Kept : constant := 6_000;
+      type Run_Set is array (1 .. Max_Kept) of Zone_Run;
+      --  The meadow with its path along y = 17.5 from 20.5 to 40 (Aslant: and one from 24, 28 north-east to
+      --  40, 44); Labour: paths planned for the band to lay, as a colony's are.
+      procedure Land (Labour : Boolean := False; Aslant : Boolean := False) is
+         Laid : Natural;
+      begin
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Labour => Labour);
+         if Aslant then
+            Lay_Path ((24.0, 28.0, Ground_M), (40.0, 44.0, Ground_M), Laid);
+         end if;
+      end Land;
+      --  The meadow with the colony founded on a square, its middle at 32, 32.25.
+      procedure Square_Land (Way : Way_Index) is
+      begin
+         Reset;
+         Set_Beds (False);
+         Set_Curing (True);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Path_Level (True);
+         Meadow;
+         Hours := 16.0 * 24.0;
+         Set_Arrivals (6, 42);
+         Perform ((What => Raise_Stake, By => The_Player, Stake_At => (32.1, 32.2, Ground_M), As_Square => True,
+                   Stake_Way => Way), R);
+         Index_All;
+      end Square_Land;
+      function At_G (X, Y : Float) return Vec3 is ((X, Y, Ground_M));
+      --  a pull read and ordered, and one of its rows looked at, as the interface does them
+      procedure Pull (A, Z : Vec3; Rows : Pull_Rows; Lots : out Natural) is
+      begin
+         Pull_Housing (Pull_Line (A, Z), Rows, Lots);
+      end Pull;
+      function Plan_Row (A, Z : Vec3; Begun_Side : Boolean) return Lot_Plan is
+        (Plan_Housing_Pull (Pull_Line (A, Z), Begun_Side));
+      --  housing at a point (0: none there, or it is no housing)
+      function Housing_On (X, Y : Float) return Natural is
+        (if Zone_On (X, Y) > 0 and then Zone_At (Zone_On (X, Y)).Kind = Habitation_Zone then Zone_On (X, Y) else 0);
+      function Housing_Zones return Natural is
+         N : Natural := 0;
+      begin
+         for Z in 1 .. Zone_Count loop
+            if Zone_At (Z).Kind = Habitation_Zone and then Zone_At (Z).Blocks > 0 then
+               N := N + 1;
+            end if;
+         end loop;
+         return N;
+      end Housing_Zones;
+      function Housing_Blocks return Natural is
+         N : Natural := 0;
+      begin
+         for Z in 1 .. Zone_Count loop
+            if Zone_At (Z).Kind = Habitation_Zone then
+               N := N + Zone_At (Z).Blocks;
+            end if;
+         end loop;
+         return N;
+      end Housing_Blocks;
+      --  a row of a pull runs its whole length: housing 3 m to that side of its line, 2.5 m from each end
+      function Row_Runs (L : Pull_View; Left : Boolean) return Boolean is
+         Len : constant Float := Flat (L.From, L.To);
+         Ux  : constant Float := (L.To.X - L.From.X) / Len;
+         Uy  : constant Float := (L.To.Y - L.From.Y) / Len;
+         S   : constant Float := (if Left then 1.0 else -1.0);
+         function At_T (T : Float) return Natural is
+           (Housing_On (L.From.X + Ux * T - S * Uy * 3.0, L.From.Y + Uy * T + S * Ux * 3.0));
+      begin
+         return At_T (2.5) /= 0 and then At_T (Len - 2.5) = At_T (2.5) and then At_T (Len * 0.5) = At_T (2.5);
+      end Row_Runs;
+   begin
+      --  his gesture as it was: two clicks beside a path that is there give the strip Zone_Housing gives
+      --  for the same two points, and no path
+      declare
+         type Pull_Case is record
+            X0, Y0, X1, Y1 : Float;
+            Aslant : Boolean;
+         end record;
+         Cases : constant array (1 .. 8) of Pull_Case :=
+           [(24.0, 19.0, 34.0, 19.2, False),        --  near it, north
+            (26.0, 29.0, 36.0, 28.0, False),        --  11.5 m off it
+            (30.0, 20.0, 33.0, 20.5, False),        --  a short one
+            (36.0, 15.0, 25.0, 16.0, False),        --  south of it, pulled west
+            (28.0, 6.5, 35.0, 7.0, False),          --  11 m south
+            (25.0, 17.5, 35.0, 17.6, False),        --  begun on the path itself
+            (26.59, 33.41, 34.44, 41.56, True),     --  beside the path at 45 degrees
+            (41.24, 36.76, 32.54, 29.46, True)];    --  its other side, 6 m off, pulled back along it
+         Same, Along, Zoned : Natural := 0;
+         Worst : Natural := 0;
+      begin
+         for C in Cases'Range loop
+            declare
+               Kept   : Run_Set;
+               N_Kept : Natural := 0;
+               Lots_A, Lots_B, Paths_A : Natural;
+               Equal  : Boolean := True;
+               Line   : Pull_View;
+            begin
+               Land (Aslant => Cases (C).Aslant);
+               Zone_Housing (Cases (C).X0, Cases (C).Y0, Cases (C).X1, Cases (C).Y1, Lots_A);
+               Paths_A := Path_Count;
+               if Zone_Count = 1 then
+                  N_Kept := Zone_Runs (1);
+                  for K in 1 .. Natural'Min (N_Kept, Max_Kept) loop
+                     Kept (K) := Zone_Run_At (1, K);
+                  end loop;
+               end if;
+               Land (Aslant => Cases (C).Aslant);
+               Line := Pull_Line (At_G (Cases (C).X0, Cases (C).Y0), At_G (Cases (C).X1, Cases (C).Y1));
+               Pull (At_G (Cases (C).X0, Cases (C).Y0), At_G (Cases (C).X1, Cases (C).Y1), Side_Begun, Lots_B);
+               Equal := Zone_Count = 1 and then N_Kept > 0 and then N_Kept <= Max_Kept and then Zone_Runs (1) = N_Kept
+                 and then Lots_A = Lots_B and then Path_Count = Paths_A and then Pull_Path_M = 0.0
+                 and then Pull_Refusal = "";
+               if Equal then
+                  for K in 1 .. N_Kept loop
+                     Equal := Equal and then Zone_Run_At (1, K) = Kept (K);
+                  end loop;
+               end if;
+               if Equal then
+                  Same := Same + 1;
+               elsif Worst = 0 then
+                  Worst := C;
+               end if;
+               if Line.Ok and then Line.Along_Path then
+                  Along := Along + 1;
+               end if;
+               if Lots_A > 0 then
+                  Zoned := Zoned + 1;
+               end if;
+            end;
+         end loop;
+         Check (Same = Cases'Length and then Along = Cases'Length and then Zoned >= 6,
+                "begun beside a path that is there and pulled along it (near it and 11.5 m off, short and long,"
+                & " either way, on the path itself, beside one at 45 degrees): the strip Zone_Housing gives for the"
+                & " same two points, block column for block column, and no path laid (" & Img (Same) & " of "
+                & Img (Natural'(Cases'Length)) & (if Worst > 0 then "; the first that differs is case" & Worst'Image else "")
+                & ")");
+      end;
+
+      --  the other row, and both
+      Land;
+      declare
+         Lots : Natural;
+         Line : constant Pull_View := Pull_Line (At_G (24.0, 19.0), At_G (34.0, 19.2));
+         Paths_0 : constant Natural := Path_Count;
+         One, Two : Natural;
+      begin
+         Pull (At_G (24.0, 19.0), At_G (34.0, 19.2), Other_Side, Lots);
+         One := Housing_Zones;
+         Check (Pull_Refusal = "" and then One = 1 and then Pull_Rows_Zoned = 1 and then Path_Count = Paths_0
+                and then Housing_On (29.0, 14.0) /= 0 and then Housing_On (29.0, 21.0) = 0
+                and then (Line.Begun_Left = (Line.To.X > Line.From.X)),
+                "the same pull with the other row asked: housing south of the path, none north of it");
+         Land;
+         Pull (At_G (24.0, 19.0), At_G (34.0, 19.2), Both_Sides, Lots);
+         Two := Housing_Zones;
+         Check (Pull_Refusal = "" and then Two = 2 and then Pull_Rows_Zoned = 2 and then Path_Count = Paths_0
+                and then Housing_On (29.0, 14.0) /= 0 and then Housing_On (29.0, 21.0) /= 0
+                and then Housing_On (29.0, 14.0) /= Housing_On (29.0, 21.0) and then Lots > 0,
+                "and with both: a row either side of the path, two zones, lots laid out on them (" & Img (Lots) & ")");
+      end;
+
+      --  pulled past the path's end: the path goes on, and the housing with it
+      Land;
+      declare
+         Lots : Natural;
+         Line : constant Pull_View := Pull_Line (At_G (34.0, 19.0), At_G (52.0, 19.5));
+         Plan : constant Lot_Plan := Plan_Row (At_G (34.0, 19.0), At_G (52.0, 19.5), True);
+         Paths_0 : constant Natural := Path_Count;
+         Zones_0 : constant Natural := Zone_Count;
+      begin
+         Pull (At_G (34.0, 19.0), At_G (52.0, 19.5), Side_Begun, Lots);
+         Check (Line.Ok and then Line.Along_Path and then abs (Line.New_Path_M - 12.0) < 0.01
+                and then abs (Line.To.X - 52.0) < 0.01 and then Zones_0 = 0 and then Plan.Ok
+                and then Pull_Refusal = "" and then abs (Pull_Path_M - 12.0) < 0.01 and then Path_Count = Paths_0 + 1
+                and then Housing_Zones = 1 and then Zone_At (1).Blocks = Plan.Blocks
+                and then Get (B (46.1), B (17.6), Ground_Row - 1) = Footpath
+                and then Housing_On (35.0, 21.0) /= 0 and then Housing_On (51.0, 21.0) = Housing_On (35.0, 21.0)
+                and then Housing_On (33.0, 21.0) = 0,
+                "pulled 12 m past the path's east end: the path goes on from its end (12 m laid) and the housing"
+                & " with it, one strip from where it was begun to where it was pulled (" & Img (Plan.Blocks)
+                & " block columns planned, as many taken; looking changed nothing)");
+         Land;
+         Pull (At_G (26.0, 15.5), At_G (12.0, 15.9), Side_Begun, Lots);
+         Check (Pull_Refusal = "" and then abs (Pull_Path_M - 8.5) < 0.01 and then Path_Count = Paths_0 + 1
+                and then Get (B (14.1), B (17.6), Ground_Row - 1) = Footpath
+                and then Housing_On (13.0, 14.0) /= 0 and then Housing_On (25.0, 14.0) = Housing_On (13.0, 14.0),
+                "pulled west past its other end, on its south side: the path goes on 8.5 m that way, the housing"
+                & " along all of it");
+      end;
+
+      --  a line of its own on open ground, each row; what is planned is what is taken
+      for Rows in Pull_Rows loop
+         Land;
+         declare
+            Begun : constant Vec3 := At_G (10.0, 40.1);
+            To_P  : constant Vec3 := At_G (30.1, 40.3);
+            Line  : constant Pull_View := Pull_Line (Begun, To_P);
+            Plan_B : constant Lot_Plan := Plan_Row (Begun, To_P, True);
+            Plan_O : constant Lot_Plan := Plan_Row (Begun, To_P, False);
+            Paths_0 : constant Natural := Path_Count;
+            Zones_0 : constant Natural := Zone_Count;
+            Lots  : Natural;
+            Want  : constant Natural :=
+              (case Rows is when Side_Begun => Plan_B.Blocks, when Other_Side => Plan_O.Blocks,
+                            when Both_Sides => Plan_B.Blocks + Plan_O.Blocks);
+         begin
+            Pull (Begun, To_P, Rows, Lots);
+            Check (Line.Ok and then not Line.Along_Path and then Flat (Line.From, (10.0, 40.0, 0.0)) < 0.001
+                   and then Flat (Line.To, (30.0, 40.0, 0.0)) < 0.001 and then Line.Begun_Left
+                   and then abs (Line.New_Path_M - 20.0) < 0.01 and then Plan_B.Ok and then Plan_O.Ok
+                   and then Paths_0 = 1 and then Zones_0 = 0
+                   and then Pull_Refusal = "" and then Path_Count = 2 and then abs (Pull_Path_M - 20.0) < 0.01
+                   and then Get (B (20.1), B (40.1), Ground_Row - 1) = Footpath
+                   and then Housing_Zones = (if Rows = Both_Sides then 2 else 1) and then Housing_Blocks = Want
+                   and then (Row_Runs (Line, True) = (Rows /= Other_Side))
+                   and then (Row_Runs (Line, False) = (Rows /= Side_Begun)) and then Lots > 0,
+                   "a line of its own on open ground, 20 m east, "
+                   & (case Rows is when Side_Begun => "the side begun", when Other_Side => "the other side",
+                                   when Both_Sides => "both sides")
+                   & ": its path from a corner of blocks to one, laid; "
+                   & (case Rows is when Side_Begun => "a row on its left (north)", when Other_Side => "a row on its right",
+                                   when Both_Sides => "a row either side")
+                   & " its whole length, the block columns that were planned (" & Img (Want) & "), "
+                   & Img (Lots) & " lots laid out; looking had changed nothing");
+         end;
+      end loop;
+
+      --  with the band's labour on its path is planned in stretches of 20 m: a pull of 31 m at 45
+      --  degrees is one run all the same, and a second from its end joins each row to its own
+      Land (Labour => True);
+      declare
+         Begun : constant Vec3 := At_G (8.0, 30.0);
+         To_P  : constant Vec3 := At_G (30.2, 51.9);
+         Line  : constant Pull_View := Pull_Line (Begun, To_P);
+         Paths_0 : constant Natural := Path_Count;
+         Lots, Lots_2 : Natural;
+         To_Lay_0 : constant Natural := Paths_To_Lay;
+         Line_2 : Pull_View;
+      begin
+         Pull (Begun, To_P, Both_Sides, Lots);
+         Check (Line.Ok and then not Line.Along_Path and then Flat (Line.To, (30.0, 52.0, 0.0)) < 0.001
+                and then Pull_Refusal = "" and then Path_Count = Paths_0 + 2 and then Paths_To_Lay > To_Lay_0 + 25
+                and then Housing_Zones = 2 and then Row_Runs (Line, True) and then Row_Runs (Line, False),
+                "with the band's labour on, 31 m at 45 degrees: its path planned as two stretches ("
+                & Img (Paths_To_Lay - To_Lay_0) & " m more to lay), each row one strip its whole length");
+         Line_2 := Pull_Line (At_G (30.0, 52.0), At_G (40.1, 61.9));
+         Pull (At_G (30.0, 52.0), At_G (40.1, 61.9), Both_Sides, Lots_2);
+         Check (Line_2.Ok and then Flat (Line_2.From, (30.0, 52.0, 0.0)) < 0.001 and then Pull_Refusal = ""
+                and then Pull_Rows_Zoned = 2 and then Housing_Zones = 2 and then Housing_Joined = 1
+                and then Row_Runs (Line_2, True) and then Row_Runs (Line_2, False)
+                and then Housing_On (Line_2.From.X + 2.0 - 2.2, Line_2.From.Y + 2.0 + 2.2)
+                         = Housing_On (Line.From.X + 2.0 - 2.2, Line.From.Y + 2.0 + 2.2),
+                "a second pull from its end, the same way: the path goes on, and each row is one zone with the row"
+                & " before it (two housing zones still)");
+      end;
+
+      --  from the square the colony was founded on: out from each corner, out from each side's middle,
+      --  and along each side
+      for Way in 0 .. 1 loop
+         declare
+            Rr : constant Float := (if Way = 0 then 5.5 else 7.75);
+            --  its path's corners, and the ways out from them
+            Cx : constant array (1 .. 4) of Float :=
+              (if Way = 0 then [32.0 - Rr, 32.0 + Rr, 32.0 + Rr, 32.0 - Rr] else [32.0 - Rr, 32.0, 32.0 + Rr, 32.0]);
+            Cy : constant array (1 .. 4) of Float :=
+              (if Way = 0 then [32.25 - Rr, 32.25 - Rr, 32.25 + Rr, 32.25 + Rr]
+               else [32.25, 32.25 - Rr, 32.25, 32.25 + Rr]);
+            Corner_Ok, Corner_N, Middle_Ok, Middle_N, Side_Ok, Side_N : Natural := 0;
+            Bad : Vec3 := (0.0, 0.0, 0.0);
+            Bad_Why : Castle.Text.Line := Castle.Text.To_Line ("");
+            procedure Note (Ok : Boolean; Good : in out Natural; At_P : Vec3) is
+            begin
+               if Ok then
+                  Good := Good + 1;
+               elsif Castle.Text.Str (Bad_Why) = "" then
+                  Bad := At_P;
+                  Bad_Why := Castle.Text.To_Line ((if Pull_Refusal = "" then "(not refused)" else Pull_Refusal));
+               end if;
+            end Note;
+            Lots : Natural;
+         begin
+            --  out from each corner, every way that leads away from the square: both rows, its whole length
+            for C in 1 .. 4 loop
+               for W in Way_Index loop
+                  declare
+                     Dx : constant array (Way_Index) of Float := [1.0, 1.0, 0.0, -1.0, -1.0, -1.0, 0.0, 1.0];
+                     Dy : constant array (Way_Index) of Float := [0.0, 1.0, 1.0, 1.0, 0.0, -1.0, -1.0, -1.0];
+                     Out_X : constant Float := Cx (C) - 32.0;
+                     Out_Y : constant Float := Cy (C) - 32.25;
+                     Step  : constant Float := (if W mod 2 = 0 then 14.0 else 10.0);
+                     To_P  : constant Vec3 := At_G (Cx (C) + Dx (W) * Step + 0.05, Cy (C) + Dy (W) * Step + 0.06);
+                     Line  : Pull_View;
+                  begin
+                     --  (away from the square: no part of the way leads back over it)
+                     if Dx (W) * Out_X >= -0.01 and then Dy (W) * Out_Y >= -0.01
+                       and then Dx (W) * Out_X + Dy (W) * Out_Y > 0.5
+                     then
+                        Square_Land (Way);
+                        Line := Pull_Line (At_G (Cx (C), Cy (C)), To_P);
+                        Pull (At_G (Cx (C), Cy (C)), To_P, Both_Sides, Lots);
+                        Corner_N := Corner_N + 1;
+                        Note (Line.Ok and then Flat (Line.From, (Cx (C), Cy (C), 0.0)) < 0.001
+                              and then Pull_Refusal = "" and then Pull_Rows_Zoned = 2
+                              and then abs (Pull_Path_M - Flat (Line.From, Line.To)) < 0.01
+                              and then Flat (Line.From, Line.To) > 13.5
+                              and then Row_Runs (Line, True) and then Row_Runs (Line, False)
+                              and then Box_Counts (1).Its_Own = Box_Counts (1).Box,
+                              Corner_Ok, To_P);
+                     end if;
+                  end;
+               end loop;
+            end loop;
+            --  out from each side's middle, squarely to it: a line of its own from that side, both rows
+            for C in 1 .. 4 loop
+               declare
+                  Nx : constant Integer := C mod 4 + 1;
+                  --  (a corner of blocks on the side's line, by its middle)
+                  Mx : constant Float := (if Way = 0 then (Cx (C) + Cx (Nx)) * 0.5 else Cx (C) + (Cx (Nx) - Cx (C)) * 15.0 / 31.0);
+                  My : constant Float := (if Way = 0 then (Cy (C) + Cy (Nx)) * 0.5 else Cy (C) + (Cy (Nx) - Cy (C)) * 15.0 / 31.0);
+                  Len : constant Float := Sqrt ((Mx - 32.0) ** 2 + (My - 32.25) ** 2);
+                  Ox  : constant Float := (Mx - 32.0) / Len;
+                  Oy  : constant Float := (My - 32.25) / Len;
+                  To_P : constant Vec3 := At_G (Mx + Ox * 14.2, My + Oy * 14.2);
+                  Line : Pull_View;
+               begin
+                  Square_Land (Way);
+                  Line := Pull_Line (At_G (Mx, My), To_P);
+                  Pull (At_G (Mx, My), To_P, Both_Sides, Lots);
+                  Middle_N := Middle_N + 1;
+                  Note (Line.Ok and then not Line.Along_Path and then Flat (Line.From, (Mx, My, 0.0)) < 0.2
+                        and then Pull_Refusal = "" and then Pull_Rows_Zoned = 2
+                        and then Flat (Line.From, Line.To) > 13.5
+                        and then abs (Pull_Path_M - Flat (Line.From, Line.To)) < 0.01
+                        and then Row_Runs (Line, True) and then Row_Runs (Line, False)
+                        and then Box_Counts (1).Its_Own = Box_Counts (1).Box,
+                        Middle_Ok, To_P);
+               end;
+            end loop;
+            --  along each side, either way: nothing laid, and the row first offered is the one off its floor
+            for C in 1 .. 4 loop
+               for Back in Boolean loop
+                  declare
+                     Nx : constant Integer := C mod 4 + 1;
+                     A  : constant Vec3 := At_G ((if Back then Cx (Nx) else Cx (C)), (if Back then Cy (Nx) else Cy (C)));
+                     Z  : constant Vec3 := At_G ((if Back then Cx (C) else Cx (Nx)), (if Back then Cy (C) else Cy (Nx)));
+                     Mid : constant Vec3 := (A + Z) * 0.5;
+                     Len : constant Float := Sqrt ((Mid.X - 32.0) ** 2 + (Mid.Y - 32.25) ** 2);
+                     Line : Pull_View;
+                     Paths_0 : Natural;
+                  begin
+                     Square_Land (Way);
+                     Paths_0 := Path_Count;
+                     Line := Pull_Line (A, Z);
+                     Pull (A, Z, Side_Begun, Lots);
+                     Side_N := Side_N + 1;
+                     Note (Line.Ok and then Line.Along_Path and then Pull_Refusal = "" and then Pull_Rows_Zoned = 1
+                           and then Pull_Path_M = 0.0 and then Path_Count = Paths_0
+                           and then Housing_On (Mid.X + (Mid.X - 32.0) / Len * 3.0, Mid.Y + (Mid.Y - 32.25) / Len * 3.0) /= 0
+                           and then Box_Counts (1).Its_Own = Box_Counts (1).Box,
+                           Side_Ok, Z);
+                  end;
+               end loop;
+            end loop;
+            Check (Corner_N >= 8 and then Corner_Ok = Corner_N and then Middle_Ok = 4 and then Side_Ok = 8,
+                   "from the square" & (if Way = 0 then "" else ", aslant") & ": pulled out from each corner of its path"
+                   & " every way that leads away (" & Img (Corner_Ok) & " of " & Img (Corner_N) & ") and out from each"
+                   & " side's middle (" & Img (Middle_Ok) & " of 4), both rows: its path from there, each row its whole"
+                   & " length; pulled along each side either way (" & Img (Side_Ok) & " of 8): nothing laid, and the row"
+                   & " offered first is the one off its floor; its floor all its own still"
+                   & (if Castle.Text.Str (Bad_Why) /= "" then " (THE FIRST AMISS: pulled to " & Img (Bad.X, 2) & ", "
+                                                          & Img (Bad.Y, 2) & ": " & Castle.Text.Str (Bad_Why) & ")"
+                      else ""));
+         end;
+      end loop;
+
+      --  pulled up to a path it comes to, it meets it; pulled on, it crosses it (an intersection),
+      --  and each row lies on both sides of the path crossed
+      Land;
+      declare
+         Lots : Natural;
+         Meets : constant Pull_View := Pull_Line (At_G (30.0, 6.0), At_G (30.1, 17.1));
+         Line  : constant Pull_View := Pull_Line (At_G (30.0, 6.0), At_G (30.05, 30.2));
+         On_Old : Natural := 0;
+      begin
+         Pull (At_G (30.0, 6.0), At_G (30.05, 30.2), Both_Sides, Lots);
+         for K in 0 .. 60 loop
+            if Zone_On (22.0 + Float (K) * 0.25, 17.5) /= 0 then
+               On_Old := On_Old + 1;
+            end if;
+         end loop;
+         Check (Meets.Ok and then abs (Meets.To.Y - 17.5) < 0.001 and then abs (Meets.To.X - 30.0) < 0.001
+                and then Line.Ok and then not Line.Along_Path and then abs (Line.To.Y - 30.25) < 0.001
+                and then abs (Line.New_Path_M - 24.25) < 0.01 and then Pull_Refusal = "" and then Path_Count = 2
+                and then Pull_Rows_Zoned = 2 and then Housing_Zones = 2 and then On_Old = 0
+                and then Housing_On (27.0, 12.0) /= 0 and then Housing_On (27.0, 24.0) = Housing_On (27.0, 12.0)
+                and then Housing_On (33.0, 12.0) /= 0 and then Housing_On (33.0, 24.0) = Housing_On (33.0, 12.0)
+                and then Housing_On (27.0, 12.0) /= Housing_On (33.0, 12.0)
+                and then Get (B (30.1), B (17.6), Ground_Row - 1) = Footpath
+                and then Get (B (30.1), B (25.0), Ground_Row - 1) = Footpath,
+                "pulled north up to the path, its line ends where the two cross; pulled on over it, its path is"
+                & " laid across (24.25 m, the crossing both paths' own) and each row lies on both sides of the path"
+                & " crossed, one zone a row");
+      end;
+
+      --  a street off a street that has housing along both its sides: the housing gives way under it
+      Land;
+      declare
+         Lots : Natural;
+         Blocks_0, Zones_0, Paths_0 : Natural;
+         Line : Pull_View;
+         On_Path : Natural := 0;
+      begin
+         Pull (At_G (22.0, 18.5), At_G (38.0, 18.6), Both_Sides, Lots);
+         Blocks_0 := Housing_Blocks;
+         Zones_0 := Housing_Zones;
+         Paths_0 := Path_Count;
+         Line := Pull_Line (At_G (30.0, 17.5), At_G (30.05, 30.2));
+         Pull (At_G (30.0, 17.5), At_G (30.05, 30.2), Both_Sides, Lots);
+         for K in 0 .. 40 loop
+            if Zone_On (30.0, 18.1 + Float (K) * 0.3) /= 0 then
+               On_Path := On_Path + 1;
+            end if;
+         end loop;
+         Check (Zones_0 = 2 and then Line.Ok and then not Line.Along_Path and then Flat (Line.From, (30.0, 17.5, 0.0)) < 0.001
+                and then abs (Line.To.Y - 30.25) < 0.001 and then Pull_Refusal = ""
+                and then Pull_Gave_Way > 100 and then Path_Count = Paths_0 + 1 and then On_Path = 0
+                and then Get (B (30.1), B (24.0), Ground_Row - 1) = Footpath
+                and then Housing_Zones = 2 and then Pull_Rows_Zoned = 2
+                and then Housing_On (27.0, 22.0) /= 0 and then Housing_On (33.0, 22.0) = Housing_On (27.0, 22.0)
+                and then Housing_On (27.0, 29.5) = Housing_On (27.0, 22.0)
+                and then Housing_Blocks > Blocks_0 - Pull_Gave_Way,
+                "a street pulled north off the middle of a street with housing along both its sides: the housing"
+                & " gives way under its path (" & Img (Pull_Gave_Way) & " block columns), the path is laid through,"
+                & " and its two rows are one zone with the housing that was there");
+      end;
+      --  the path tool's own path the same (his answer: "a paths pull through housing should give way as
+      --  built, if the path can pass and not interfere with anything built"): through housing it is laid
+      --  and the housing gives way; with Set_Path_Through off it is refused, as before
+      Land;
+      declare
+         Lots : Natural;
+         Blocks_0, Paths_0 : Natural;
+         On_Path_Z : Natural := 0;
+         Refused_Before : Boolean;
+         Why_Before : Castle.Text.Line;
+      begin
+         Pull (At_G (22.0, 18.5), At_G (38.0, 18.6), Both_Sides, Lots);
+         Blocks_0 := Housing_Blocks;
+         Paths_0 := Path_Count;
+         Perform ((What => Lay_Path, By => The_Player, From => At_G (30.0, 17.5), To => At_G (30.0, 30.0)), R);
+         Refused_Before := not R.Done and then Path_Count = Paths_0 and then Housing_Blocks = Blocks_0;
+         Why_Before := Castle.Text.To_Line (Path_Refusal);
+         Set_Path_Through (True);
+         Perform ((What => Lay_Path, By => The_Player, From => At_G (30.0, 17.5), To => At_G (30.0, 30.0)), R);
+         for K in 0 .. 40 loop
+            if Zone_On (30.0, 18.1 + Float (K) * 0.3) /= 0 then
+               On_Path_Z := On_Path_Z + 1;
+            end if;
+         end loop;
+         Check (Refused_Before and then Castle.Text.Str (Why_Before) = "a zone is in the way: paths go round zones"
+                and then R.Done and then Path_Count = Paths_0 + 1 and then Pull_Gave_Way > 100 and then On_Path_Z = 0
+                and then Housing_Blocks = Blocks_0 - Pull_Gave_Way
+                and then Get (B (30.1), B (24.0), Ground_Row - 1) = Footpath and then Housing_Zones = 2,
+                "a path ordered through housing, the path tool's: refused with Set_Path_Through off ('"
+                & Castle.Text.Str (Why_Before) & "'); with it on it is laid, and the housing gives way under it ("
+                & Img (Pull_Gave_Way) & " block columns)");
+         --  not through a hovel's lot
+         Land;
+         Set_Path_Through (True);
+         Pull (At_G (22.0, 18.5), At_G (38.0, 18.6), Side_Begun, Lots);
+         Build_Homes_Now;
+         declare
+            Hx : constant Float :=
+              (if House_Count > 0 then (House_At (1).Corner (1).X + House_At (1).Corner (3).X) * 0.5 else 0.0);
+         begin
+            Paths_0 := Path_Count;
+            Blocks_0 := Housing_Blocks;
+            Perform ((What => Lay_Path, By => The_Player, From => At_G (Hx, 17.5), To => At_G (Hx, 30.0)), R);
+            Check (House_Count > 0 and then not R.Done and then Path_Count = Paths_0 and then Housing_Blocks = Blocks_0
+                   and then Why_Not ((What => Lay_Path, By => The_Player, From => At_G (Hx, 17.5), To => At_G (Hx, 30.0)), R)
+                            = "a hovel's lot is in the way: a path goes through housing only where nothing is built",
+                   "through the lot of a hovel that stands it is refused: '" & Path_Refusal & "'");
+         end;
+         Set_Path_Through (False);
+      end;
+
+      --  not through a hovel's lot, nor a stockpile
+      Land;
+      declare
+         Lots, Cells : Natural;
+         Blocks_0, Paths_0 : Natural;
+         Homes : Natural := 0;
+         Hx : Float := 0.0;
+         Why_Lot, Why_Pile : Castle.Text.Line;
+         Kept_Lot, Kept_Pile : Boolean;
+      begin
+         Pull (At_G (22.0, 18.5), At_G (38.0, 18.6), Side_Begun, Lots);
+         Build_Homes_Now;
+         Homes := House_Count;
+         for H in 1 .. House_Count loop
+            if Hx = 0.0 then
+               Hx := (House_At (H).Corner (1).X + House_At (H).Corner (3).X) * 0.5;
+            end if;
+         end loop;
+         Blocks_0 := Housing_Blocks;
+         Paths_0 := Path_Count;
+         Pull (At_G (Hx, 17.5), At_G (Hx + 0.05, 30.2), Both_Sides, Lots);
+         Why_Lot := Castle.Text.To_Line (Pull_Refusal);
+         Kept_Lot := Housing_Blocks = Blocks_0 and then Path_Count = Paths_0;
+         Land;
+         Set_Box_Place (True);
+         Place_Box (Stockpile_Box, At_G (30.0, 26.0), 0, Cells);
+         Set_Box_Place (False);
+         Paths_0 := Path_Count;
+         Pull (At_G (30.0, 17.5), At_G (30.05, 30.2), Both_Sides, Lots);
+         Why_Pile := Castle.Text.To_Line (Pull_Refusal);
+         Kept_Pile := Housing_Zones = 0 and then Path_Count = Paths_0;
+         Check (Homes > 0 and then Hx > 20.0 and then Castle.Text.Str (Why_Lot) = "a hovel's lot is in the way of its path"
+                and then Kept_Lot and then Cells = 100
+                and then Castle.Text.Str (Why_Pile) = "a stockpile is in the way of its path" and then Kept_Pile,
+                "through the lot of a hovel that stands it is refused ('" & Castle.Text.Str (Why_Lot) & "'), and"
+                & " through a stockpile ('" & Castle.Text.Str (Why_Pile) & "'): nothing laid, nothing zoned");
+      end;
+
+      --  the player's order, the menu, a save
+      Land;
+      declare
+         M : Menu;
+         Offered, Old_Offered : Natural := 0;
+         Lots : Natural;
+         By_Serf : Result;
+      begin
+         Castle.Actions.Housing_Pull := True;
+         M := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => At_G (30.0, 40.0)));
+         Castle.Actions.Housing_Pull := False;
+         for K in 1 .. M.N loop
+            if M.Items (K).Todo.What = Pull_Housing and then M.Items (K).Two_Point then
+               Offered := Offered + 1;
+            elsif M.Items (K).Todo.What = Zone_Housing then
+               Old_Offered := Old_Offered + 1;
+            end if;
+         end loop;
+         Perform ((What => Pull_Housing, By => 2, Begun => At_G (10.0, 40.1), Pulled_To => At_G (30.1, 40.3),
+                   Rows => Both_Sides), By_Serf);
+         Perform ((What => Pull_Housing, By => The_Player, Begun => At_G (10.0, 40.1), Pulled_To => At_G (30.1, 40.3),
+                   Rows => Both_Sides), R);
+         Lots := R.Count;
+         Check (Offered = 1 and then Old_Offered = 0 and then not By_Serf.Done and then By_Serf.Why = Not_Permitted
+                and then R.Done and then Lots > 0 and then Housing_Zones = 2 and then Path_Count = 2,
+                "the ground's menu, with the pull on, offers housing with its path to be pulled and not housing"
+                & " beside a path; a serf may not order it; the player's order zones both rows (" & Img (Lots) & " lots)");
+         Perform ((What => Pull_Housing, By => The_Player, Begun => At_G (40.0, 50.0), Pulled_To => At_G (40.1, 50.1),
+                   Rows => Side_Begun), R);
+         Check (not R.Done and then Why_Not ((What => Pull_Housing, By => The_Player, Begun => At_G (40.0, 50.0),
+                                              Pulled_To => At_G (40.1, 50.1), Rows => Side_Begun), R)
+                                    = "pull it along the way its path is to run",
+                "pulled no way at all it is refused: '" & Pull_Refusal & "'");
+         declare
+            Data : constant Bytes := Save;
+            Ok   : Boolean;
+         begin
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Housing_Zones = 2 and then Path_Count = 2,
+                   "saved and loaded: the same bytes (a pull is paths and housing: nothing of it is saved that was not)");
+         end;
+      end;
+   end;
+
+   --  the square eleven metres, thirteen with its path (John, 2026-11-21: "Let's expand the
+   --  campfire/homestake square to 13x13m (with the footpath) so the campfire is in the center")
+   Put_Line ("the square eleven metres, thirteen with its path:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      procedure Empty_Land (Labour : Boolean; Rise_M : Float := 0.0; Sources : Boolean := False; Wide : Boolean := True) is
+      begin
+         Reset;
+         Set_Square_Wide (Wide);
+         Set_Beds (False);
+         Set_Curing (True);                 --  (the lord's cart comes with the band)
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (Labour);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Box_Place (True);
+         Set_Path_Level (True);             --  (a path brought to its line as it is laid, as a colony's is)
+         Meadow;
+         if Sources then                    --  (the trees and the boulder a camp's hearth is built of)
+            Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);
+            for T of Active loop
+               Shape (T.I, T.J, Grow'Access);
+            end loop;
+            Porter_Ground;
+         end if;
+         if Rise_M > 0.0 then
+            for K in 1 .. Integer (Float'Floor (33.0 / Rise_M)) loop
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+            end loop;
+            Changed_World;
+         end if;
+         Hours := 16.0 * 24.0;
+         Set_Arrivals (6, 42);
+      end Empty_Land;
+      procedure Found (X, Y : Float; Way : Way_Index) is
+      begin
+         Perform ((What => Raise_Stake, By => The_Player, Stake_At => (X, Y, Ground_M), As_Square => True,
+                   Stake_Way => Way), R);
+         Index_All;
+      end Found;
+      function Top_At (X, Y : Float) return Integer is
+      begin
+         for Z in reverse 1 .. Ground_Row + 40 loop
+            if Get (B (X), B (Y), Z) not in Air | Tall_Grass then
+               return Z;
+            end if;
+         end loop;
+         return 0;
+      end Top_At;
+      function Stuff_At (X, Y : Float) return Material is (Get (B (X), B (Y), Top_At (X, Y)));
+   begin
+      --  on open ground, squarely and aslant: its floor, its path, where the fire stands
+      for Way in 0 .. 1 loop
+         Empty_Land (Labour => False);
+         declare
+            Plan : constant Square_Plan := Plan_Square ((32.1, 32.2, Ground_M), Way);
+            On_P : constant Float := (if Way = 0 then 6.25 else 6.0 / Sqrt (2.0));     --  (on its path, east or north-east)
+            Past : constant Float := (if Way = 0 then 6.75 else 6.8 / Sqrt (2.0));     --  (and past it)
+            Inn  : constant Float := (if Way = 0 then 5.25 else 5.3 / Sqrt (2.0));     --  (and on its floor, where the
+            Up   : constant Float := (if Way = 0 then 0.0 else 1.0);                   --   first square's path lay)
+            C    : Box_Count;
+            V    : Zone_View;
+            Paths : Natural := 0;
+         begin
+            Found (32.1, 32.2, Way);
+            V := Zone_At (1);
+            C := Box_Counts (1);
+            for Bx in B (32.0 - 10.0) .. B (32.0 + 10.0) - 1 loop
+               for By in B (32.25 - 10.0) .. B (32.25 + 10.0) - 1 loop
+                  if Get (Bx, By, Ground_Row - 1) = Footpath then
+                     Paths := Paths + 1;
+                  end if;
+               end loop;
+            end loop;
+            Check (Plan.Ok and then R.Done and then Camp_Is_Square and then Flat (Stake, (32.0, 32.25, 0.0)) < 0.001
+                   and then V.Placed and then V.Along_B = (if Way = 0 then 48 else 34)
+                   and then C.Box = (if Way = 0 then 1_936 else 1_984) and then C.Its_Own = C.Box
+                   and then V.Blocks = C.Box and then Path_Count = 4
+                   and then Stuff_At (32.0 + On_P, 32.25 + On_P * Up) = Footpath
+                   and then Stuff_At (32.0 - On_P, 32.25 - On_P * Up) = Footpath
+                   and then Stuff_At (32.0 + Past, 32.25 + Past * Up) = Grass
+                   and then Zone_On (32.0 + Inn, 32.25 + Inn * Up) = 1
+                   and then Stuff_At (32.0 + Inn, 32.25 + Inn * Up) /= Footpath
+                   and then abs (Flat (Plan.Corner (1), Plan.Corner (2)) - (if Way = 0 then 11.0 else 11.02)) < 0.01
+                   and then abs (Flat (Plan.Ring (1), Plan.Ring (2)) - (if Way = 0 then 12.0 else 12.02)) < 0.01,
+                   (if Way = 0 then "squarely" else "aslant") & ": its floor " & Img (Flat (Plan.Corner (1), Plan.Corner (2)), 2)
+                   & " m a side," & C.Box'Image & " block columns, all the zone's own; its path's line "
+                   & Img (Flat (Plan.Ring (1), Plan.Ring (2)), 2) & " m a side, a metre wide round the outside of it ("
+                   & Img (Paths) & " block columns of path)");
+         end;
+      end loop;
+      --  the square metres its ground is made ready in: counted from its edges, eleven each way, the
+      --  fire in the middle of the middle one (on ten metres, ten each way, the fire where four meet)
+      for Wide in Boolean loop
+         Empty_Land (Labour => True, Wide => Wide);
+         Found (32.1, 32.2, 0);
+         declare
+            Metres : constant Natural := Camp_State.Ground_Left;
+            Lay_0  : constant Natural := Paths_To_Lay;
+            V      : constant Zone_View := Zone_At (1);
+         begin
+            if Wide then
+               Check (R.Done and then V.Blocks = 1_936 and then Metres = 121 and then Lay_0 = 48,
+                      "founded with the band's labour: " & Img (Metres) & " square metres of floor to make ready (eleven"
+                      & " by eleven: none cut in half at an edge, the fire in the middle one), " & Img (Lay_0)
+                      & " m of path to lay");
+            else
+               Check (R.Done and then V.Blocks = 1_600 and then Metres = 100 and then Lay_0 = 44,
+                      "(with Set_Square_Wide off, --square-10: " & Img (Metres) & " square metres of floor, "
+                      & Img (Lay_0) & " m of path, as it first was)");
+            end if;
+         end;
+      end loop;
+      --  a square of ten metres stays ten metres: saved, and loaded where squares are founded eleven
+      Empty_Land (Labour => True, Rise_M => 1.0, Wide => False);
+      Found (38.1, 32.2, 0);
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+         Ten_Plan : constant Boolean := not Plan_Square ((20.0, 20.0, Ground_M), 0).Ok;   --  (a stake is raised)
+      begin
+         Set_Square_Wide (True);
+         Load (Data, Ok);
+         declare
+            Again : constant Bytes := Save;
+            V     : constant Zone_View := Zone_At (1);
+            Lay_0 : constant Natural := Paths_To_Lay;
+            Off   : Natural := 0;
+            Level : Integer;
+         begin
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Run (2);
+            Level := Integer (Camp_State.Floor_Z * 4.0) - 1;
+            for K in 1 .. Zone_Runs (1) loop
+               declare
+                  Rn : constant Zone_Run := Zone_Run_At (1, K);
+               begin
+                  for Bx in Rn.X0 .. Rn.X1 loop
+                     if Top_At ((Float (Bx) + 0.5) * 0.25, (Float (Rn.Y) + 0.5) * 0.25) /= Level then
+                        Off := Off + 1;
+                     end if;
+                  end loop;
+               end;
+            end loop;
+            Check (Ok and then Ten_Plan and then Again = Data and then V.Along_B = 44 and then V.Blocks = 1_600
+                   and then Lay_0 = 44 and then Camp_State.Built and then Off = 0 and then Paths_To_Lay = 0
+                   and then Stuff_At (38.0 - 5.75, 32.25) = Footpath and then Stuff_At (38.0 - 6.25, 32.25) /= Footpath
+                   and then Stuff_At (38.0 - 4.75, 32.25) /= Footpath,
+                   "a square of ten metres, saved, and loaded where squares are founded eleven: the same bytes, and"
+                   & " ten metres still: its 1600 block columns made level, its 44 m of path laid a metre wide from five"
+                   & " metres out (a square keeps the size it was founded with: its zone's frame, which is saved)");
+         end;
+      end;
+      --  on rising ground: made level, no pit (aslant it lies further across the rise: a block every
+      --  two metres is as much there as a block a metre is squarely)
+      for Way in 0 .. 1 loop
+         Empty_Land (Labour => True, Rise_M => (if Way = 0 then 1.0 else 2.0));
+         Found (38.1, 32.2, Way);
+         declare
+            Level_Z : constant Float := Camp_State.Floor_Z;
+            V       : constant Zone_View := Zone_At (1);
+            Off, Turf, Spots, Pits : Natural := 0;
+            Level   : Integer;
+            X, Y    : Float;
+         begin
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Run (2);
+            Level := Integer (Level_Z * 4.0) - 1;
+            for K in 1 .. Zone_Runs (1) loop
+               declare
+                  Rn : constant Zone_Run := Zone_Run_At (1, K);
+               begin
+                  for Bx in Rn.X0 .. Rn.X1 loop
+                     if Top_At ((Float (Bx) + 0.5) * 0.25, (Float (Rn.Y) + 0.5) * 0.25) /= Level then
+                        Off := Off + 1;
+                     end if;
+                     if Get (Bx, Rn.Y, Level) = Grass then
+                        Turf := Turf + 1;
+                     end if;
+                  end loop;
+               end;
+            end loop;
+            X := 38.0 - 10.0;
+            while X <= 38.0 + 10.0 loop
+               Y := 32.25 - 10.0;
+               while Y <= 32.25 + 10.0 loop
+                  declare
+                     Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+                  begin
+                     if Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, (X, Y, Z)).Result, Castle.Nav.Found) then
+                        Spots := Spots + 1;
+                        if not Castle.Nav."=" (Castle.Nav.Plan ((X, Y, Z), Stake).Result, Castle.Nav.Found) then
+                           Pits := Pits + 1;
+                        end if;
+                     end if;
+                  end;
+                  Y := Y + 0.5;
+               end loop;
+               X := X + 0.5;
+            end loop;
+            Check (R.Done and then Level_Z > 0.0 and then V.Blocks = (if Way = 0 then 1_936 else 1_984)
+                   and then Camp_State.Built and then Off = 0 and then Turf = 0 and then Paths_To_Lay = 0
+                   and then Spots > 1_000 and then Pits = 0
+                   and then Castle.Nav."=" (Castle.Nav.Plan ((20.0, 20.0, Ground_M), Stake).Result, Castle.Nav.Found),
+                   (if Way = 0 then "squarely on ground rising a block a metre" else "aslant on ground rising a block every"
+                    & " two metres") & ": made, every one of its"
+                   & V.Blocks'Image & " block columns is at its level (" & Img (Level_Z, 2) & " m) and trodden bare; of"
+                   & Spots'Image & " spots round it that can be got to from the fire none is a pit");
+         end;
+      end loop;
+      --  and the band builds it
+      Empty_Land (Labour => True, Sources => True);
+      Found (32.1, 44.2, 0);
+      declare
+         Ready_At, Paths_At, Built_At : Natural := 0;
+         Metres_0 : constant Natural := Camp_State.Ground_Left;
+         To_Lay_0 : constant Natural := Paths_To_Lay;
+      begin
+         for S in 1 .. 9_000 loop
+            Run (1);
+            if Ready_At = 0 and then Camp_State.Ground_Left = 0 then
+               Ready_At := S;
+            end if;
+            if Paths_At = 0 and then Paths_To_Lay = 0 then
+               Paths_At := S;
+            end if;
+            if Built_At = 0 and then Camp_State.Built then
+               Built_At := S;
+            end if;
+            exit when Camp_State.Built and then Paths_To_Lay = 0;
+         end loop;
+         Check (R.Done and then Metres_0 > 100 and then To_Lay_0 = 48
+                and then Ready_At > 0 and then Paths_At > 0 and then Built_At > 0
+                and then Camp_State.Built and then Paths_To_Lay = 0
+                and then Stuff_At (32.0 + 6.25, 44.25) = Footpath and then Stuff_At (32.0 + 5.25, 44.25) = Dirt
+                and then Flat (Camp, Stake) < 0.001,
+                "the band of six builds it: its" & Metres_0'Image & " square metres made ready in" & Ready_At'Image
+                & " colony seconds, its 48 m of path laid in" & Paths_At'Image & ", its hearth standing after"
+                & Built_At'Image);
+      end;
+   end;
+
+   --  a special zone's area is kept whole (John, 2026-11-21: "the area of a special zone like these
+   --  takes precedent, so if a retaining wall is needed put it on the zones edge, shift the path. So
+   --  the area of the campfire stays 11x11m + the wall on the sides if needed then the path that
+   --  follows, the size can change overall")
+   Put_Line ("the square's walls outside its floor, its path beyond them:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      --  The meadow rising to the east from x = 30, a block every Rise_M metres (or, Diagonal, a block
+      --  a metre to the north-east, as the older section's), the square eleven metres, its walls on.
+      procedure Rising_Land (Rise_M : Float := 1.0; Sources : Boolean := False; Diagonal : Boolean := False;
+                             Outside : Boolean := True; Corner : Boolean := False) is
+      begin
+         Reset;
+         Set_Square_Wide (True);
+         Set_Square_Walls (True);
+         Set_Square_Outside (Outside);
+         Set_Square_Stair_Corner (Corner);
+         Set_Beds (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (True);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Box_Place (True);
+         Set_Path_Level (True);
+         Meadow;
+         if Sources then                    --  (the boulder its stone is prised off)
+            Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);
+            for T of Active loop
+               Shape (T.I, T.J, Grow'Access);
+            end loop;
+            Porter_Ground;
+         end if;
+         if Diagonal then
+            for Bx in 100 .. 250 loop
+               for By in 60 .. 250 loop
+                  declare
+                     K : constant Integer :=
+                       Integer (Float'Floor (Float (Bx + By - 236) * 0.25 / (Sqrt (2.0) * Rise_M)));
+                  begin
+                     for Z in 1 .. Integer'Min (K, 30) loop
+                        Set (Bx, By, Ground_Row + Z - 1, (if Z = Integer'Min (K, 30) then Grass else Dirt));
+                        if Z > 1 and then Get (Bx, By, Ground_Row + Z - 2) = Grass then
+                           Set (Bx, By, Ground_Row + Z - 2, Dirt);
+                        end if;
+                     end loop;
+                  end;
+               end loop;
+            end loop;
+         else
+            for K in 1 .. Integer (Float'Floor (33.0 / Rise_M)) loop
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+               Fill (30.0 + Rise_M * Float (K), 0.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+            end loop;
+         end if;
+         Changed_World;
+         Hours := 16.0 * 24.0;
+         Set_Arrivals (6, 42);
+      end Rising_Land;
+      procedure Found (X, Y : Float; Way : Way_Index) is
+      begin
+         Perform ((What => Raise_Stake, By => The_Player, Stake_At => (X, Y, Ground_M), As_Square => True,
+                   Stake_Way => Way), R);
+         Index_All;
+      end Found;
+      function Top_B (Bx, By : Integer) return Integer is
+      begin
+         for Z in reverse 1 .. Ground_Row + 60 loop
+            if Get (Bx, By, Z) not in Air | Tall_Grass then
+               return Z;
+            end if;
+         end loop;
+         return 0;
+      end Top_B;
+      --  the plan, kept by block column
+      None : constant := Integer'First;
+      type Col is record
+         Top, Stone : Integer := None;
+      end record;
+      type Plan_Map is array (88 .. 216, 64 .. 192) of Col;
+      Plan  : Plan_Map;
+      Level : Integer := 0;
+      procedure Note (Bx, By, Top, Stone, L : Integer) is
+      begin
+         Level := L;
+         if Bx in Plan'Range (1) and then By in Plan'Range (2) then
+            Plan (Bx, By) := (Top, Stone);
+         end if;
+      end Note;
+      procedure Read_Plan is
+      begin
+         Plan := [others => [others => <>]];
+         For_Wall_Plan (Note'Access);
+      end Read_Plan;
+      --  As built against as planned: columns of the plan whose top is not at its planned row, planned
+      --  rows of stone that are not stone, blocks of stone that are in no column of the plan.  And of
+      --  the floor, the zone's own columns: those not at its level, and those of stone, that no
+      --  stair of its excuses (a stair is cut into the floor a metre wide squarely and 1.6 m aslant,
+      --  and the earth beside its steps is faced with stone, a block column either side; nothing
+      --  else of the floor is anything but floor).  A stair excuses its own place and no more: at
+      --  the middle of its side, within Stair_M of that side's middle line, on that side of the
+      --  square's middle; at an end of it, the corner of the floor End_M along the side and
+      --  Deep_M in from it.  So that nothing stands at the middle of a side whose stair is in a corner.
+      procedure Compare (Mx, My : Float; Aslant : Boolean; Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : out Natural) is
+         Ex : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 1.0);
+         Ey : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 0.0);
+         Stair_M : constant Float := (if Aslant then 1.1 else 1.0);
+         End_M   : constant Float := (if Aslant then 1.85 else 1.55);
+         Deep_M  : constant Float := (if Aslant then 3.1 else 2.3);
+         Half_M  : constant Float := 5.5;
+         St : constant Stair_Places := Square_Walls_State.Stair_At;
+         function Excused (U, V : Float) return Boolean is
+         begin
+            for Sd in 1 .. 4 loop
+               declare
+                  C : constant Float := (if Sd <= 2 then U else V) * (if Sd in 1 | 3 then 1.0 else -1.0);   --  out across the side
+                  T : constant Float := (if Sd <= 2 then V else U);                                         --  along it
+               begin
+                  if (St (Sd) = At_Middle and then abs T <= Stair_M and then C > 0.0)
+                    or else (St (Sd) = At_Low and then T < -Half_M + End_M and then C > Half_M - Deep_M)
+                    or else (St (Sd) = At_High and then T > Half_M - End_M and then C > Half_M - Deep_M)
+                  then
+                     return True;
+                  end if;
+               end;
+            end loop;
+            return False;
+         end Excused;
+      begin
+         Off := 0;
+         Unlaid := 0;
+         Stray := 0;
+         Floor_Off := 0;
+         Floor_Stone := 0;
+         Strip_Stone := 0;
+         for Bx in Plan'Range (1) loop
+            for By in Plan'Range (2) loop
+               if Plan (Bx, By).Top /= None then
+                  if Top_B (Bx, By) /= Plan (Bx, By).Top then
+                     Off := Off + 1;
+                  end if;
+                  --  (a column of a strip laid as path, where it stands over lower ground beside it, is
+                  --  faced with stone under its top: its top stays path)
+                  for Z in Plan (Bx, By).Stone .. Plan (Bx, By).Top loop
+                     if Get (Bx, By, Z) /= Fieldstone and then not (Z = Plan (Bx, By).Top and then Get (Bx, By, Z) = Footpath) then
+                        Unlaid := Unlaid + 1;
+                     end if;
+                  end loop;
+               end if;
+               declare
+                  Dx : constant Float := (Float (Bx) + 0.5) * 0.25 - Mx;
+                  Dy : constant Float := (Float (By) + 0.5) * 0.25 - My;
+                  U  : constant Float := Dx * Ex + Dy * Ey;
+                  V  : constant Float := Dy * Ex - Dx * Ey;
+                  Any_Stone : Boolean := False;
+               begin
+                  for Z in Ground_Row - 4 .. Ground_Row + 40 loop
+                     if Get (Bx, By, Z) = Fieldstone then
+                        Any_Stone := True;
+                        if Plan (Bx, By).Top = None then
+                           Stray := Stray + 1;
+                        end if;
+                     end if;
+                  end loop;
+                  if Zone_On ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25) = 1 then
+                     if not Excused (U, V) then
+                        if Top_B (Bx, By) /= Level then
+                           Floor_Off := Floor_Off + 1;
+                        end if;
+                        if Any_Stone then
+                           Floor_Stone := Floor_Stone + 1;
+                        end if;
+                     end if;
+                  elsif Any_Stone then
+                     Strip_Stone := Strip_Stone + 1;
+                  end if;
+               end;
+            end loop;
+         end loop;
+      end Compare;
+      function Pits_By (Mx, My : Float) return Natural is
+         Pits : Natural := 0;
+         X, Y : Float;
+      begin
+         X := Mx - 10.0;
+         while X <= Mx + 10.0 loop
+            Y := My - 10.0;
+            while Y <= My + 10.0 loop
+               declare
+                  Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+               begin
+                  if Z >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, (X, Y, Z)).Result, Castle.Nav.Found)
+                    and then not Castle.Nav."=" (Castle.Nav.Plan ((X, Y, Z), Stake).Result, Castle.Nav.Found)
+                  then
+                     Pits := Pits + 1;
+                  end if;
+               end;
+               Y := Y + 0.5;
+            end loop;
+            X := X + 0.5;
+         end loop;
+         return Pits;
+      end Pits_By;
+      function Strips_Img (S : Square_Strips) return String is
+        (Img (S (1)) & " " & Img (S (2)) & " " & Img (S (3)) & " " & Img (S (4)));
+      --  the sides of a ring of four corners, metres
+      function Side_M (C : Lot_Corners; K : Positive) return Float is (Flat (C (K), C (K mod 4 + 1)));
+   begin
+      Check (not Square_Stair_Corner,
+             "(a square's stair stands at the middle of its side as the game begins: Set_Square_Stair_Corner is off"
+             & " until the colony is told otherwise)");
+      --  squarely and aslant, on three rises: planned, founded, made on the spot
+      for Try in 1 .. 3 loop
+         declare
+            Aslant : constant Boolean := Try = 3;
+            Way    : constant Way_Index := (if Aslant then 1 else 0);
+            Mx     : constant Float := (if Try = 1 then 36.0 else 38.0);
+            My     : constant Float := 32.25;
+         begin
+            Rising_Land (Rise_M => (if Try = 1 then 2.0 else 1.0), Diagonal => Aslant);
+            declare
+               P : constant Square_Plan := Plan_Square ((Mx + 0.1, My - 0.05, Ground_M), Way);
+               W0, W1 : Walls_View;
+               Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+               Level_Was : Integer;
+               Level_Path, Path_Out : Natural := 0;        --  (of the strips: columns laid as path, level with the floor)
+               Plain : constant Float := (if Aslant then 12.02 else 12.0);
+               Step  : constant Float := (if Aslant then 0.25 / Sqrt (2.0) else 0.25);
+               --  (the sides of its path's ring, in Square_At's order: squarely south, east, north,
+               --  west; aslant south-west, south-east, north-east, north-west; each as long as the
+               --  plain ring's and a ring's width more for every ring kept at either end of it)
+               Ends  : constant array (Boolean, 1 .. 4, 1 .. 2) of Positive :=
+                 [False => [[2, 1], [4, 3], [1, 2], [3, 4]], True => [[3, 4], [2, 1], [4, 3], [1, 2]]];
+               Ring_Ok : Boolean := True;
+            begin
+               Found (Mx + 0.1, My - 0.05, Way);
+               Level_Was := Integer (Camp_State.Floor_Z * 4.0) - 1;
+               for K in 1 .. 4 loop
+                  Ring_Ok := Ring_Ok
+                    and then abs (Side_M (P.Ring, K)
+                                  - (Plain + Step * Float (P.Strip (Ends (Aslant, K, 1)) + P.Strip (Ends (Aslant, K, 2))))) < 0.02;
+               end loop;
+               Build_Camp_Now;
+               Build_Paths_Now;
+               W0 := Square_Walls_State;
+               Read_Plan;
+               Build_Walls_Now;
+               Run (2);
+               W1 := Square_Walls_State;
+               Compare (Mx, My, Aslant, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+               --  (of the strips: what was laid as path with a quarter metre brought level)
+               for Bx in Plan'Range (1) loop
+                  for By in Plan'Range (2) loop
+                     if Plan (Bx, By).Top /= None and then Zone_On ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25) = 0
+                       and then Get (Bx, By, Top_B (Bx, By)) = Footpath
+                     then
+                        if Top_B (Bx, By) = Level then
+                           Level_Path := Level_Path + 1;
+                        else
+                           Path_Out := Path_Out + 1;
+                        end if;
+                     end if;
+                  end loop;
+               end loop;
+               Check (P.Ok and then R.Done and then Square_Is_Outside and then Square_Strips_Now = P.Strip
+                      and then (for some S in 1 .. 4 => P.Strip (S) > 0) and then Ring_Ok
+                      and then P.Level_Row = Level_Was and then Level_Was = Level,
+                      (if Aslant then "aslant on ground rising a block a metre to the north-east"
+                       elsif Try = 1 then "squarely on ground rising a block every two metres"
+                       else "squarely on ground rising a block a metre")
+                      & ": planned with rings kept along, against, left and right of its way " & Strips_Img (P.Strip)
+                      & ", and founded so; its path's four lines " & Img (Side_M (P.Ring, 1), 2) & ", "
+                      & Img (Side_M (P.Ring, 2), 2) & ", " & Img (Side_M (P.Ring, 3), 2) & " and "
+                      & Img (Side_M (P.Ring, 4), 2) & " m; the level it was planned at is the level it is founded at");
+               Check (W0.Outside and then W0.Strip = P.Strip and then W0.Need = P.Strip and then W0.Short = 0
+                      and then W0.Unwalled = 0 and then W0.Unready = 0 and then W0.Stone_Left > 100,
+                      "its path laid, it asks of each side the rings that were kept for it (" & Strips_Img (W0.Need)
+                      & "): no wall stands steeper for want of one, no bank is left earth;" & W0.Stone_Left'Image
+                      & " blocks of stone to lay," & W0.Lifts'Image & " lifts," & W0.Stairs'Image & " stairs");
+               Check (W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Inside = 0 and then Off = 0 and then Unlaid = 0
+                      and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0 and then Strip_Stone > 40
+                      and then Zone_At (1).Blocks = (if Aslant then 1_984 else 1_936)
+                      and then Pits_By (Mx, My) = 0
+                      and then Castle.Nav."=" (Castle.Nav.Plan ((20.0, 20.0, Ground_M), Stake).Result, Castle.Nav.Found),
+                      "built: every column stands as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid, "
+                      & Img (Stray) & " blocks of stone astray); **all of its floor is floor**: of its"
+                      & Zone_At (1).Blocks'Image & " block columns none but a stair's is off its level (" & Img (Floor_Off)
+                      & ") or stone (" & Img (Floor_Stone) & "); " & Img (Strip_Stone)
+                      & " columns of stone stand outside it; no spot by it is a pit, and the fire is got to from the meadow");
+               if Try = 1 then
+                  Check (Level_Path > 20 and then Path_Out = 0,
+                         "where its path lies level with its floor the strip between them is laid level with both, as"
+                         & " path: " & Img (Level_Path) & " block columns of it (none of them off the floor's level)");
+               end if;
+               declare
+                  Data : constant Bytes := Save;
+                  Ok   : Boolean;
+               begin
+                  Set_Square_Outside (False);
+                  Load (Data, Ok);
+                  Check (Ok and then Save = Data and then Square_Is_Outside and then Square_Strips_Now = P.Strip
+                         and then Square_Walls_State = W1,
+                         "saved, and loaded where squares are founded with their walls inside: the same bytes, its"
+                         & " strips its own still, nothing more to lay");
+                  Set_Square_Outside (True);
+               end;
+            end;
+         end;
+      end loop;
+      --  a square's stair in a corner of the zone, not at the middle of its side: **the rule kept
+      --  behind its switch, off** (Set_Square_Stair_Corner, --square-stair-corner).  It was built on
+      --  his "The path level at one corner is great, move the stair to the opposite corner instead of
+      --  the center, if a stair is to be had it's to be at the corner of the zone", read as a
+      --  square's; he meant the stockyard's (John, 2026-11-21, evening: "No let's go back to square
+      --  stair middle, I was talking about the stockyard having the stair in the corner rather than
+      --  the middle").  These are its checks, each with the switch on.
+      declare
+         --  The way between the path before the stair that side Sd has at Spot and the fire, there and
+         --  back, in metres (under 0: none): from the middle of that side's path, moved along the side
+         --  to before the stair (where the walking map has no floor there, a quarter metre further in).
+         function Stair_Way (Aslant : Boolean; Sd : Positive; Spot : Stair_Spot) return Float is
+            Ex  : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 1.0);
+            Ey  : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 0.0);
+            Mid : constant Vec3 := Square_Path_Middle (Sd);
+            Ax  : constant Float := (if Sd <= 2 then -Ey else Ex);          --  (along the side)
+            Ay  : constant Float := (if Sd <= 2 then Ex else Ey);
+            function Length (Rt : Castle.Nav.Route) return Float is
+               D : Float := 0.0;
+            begin
+               for K in 2 .. Rt.N loop
+                  D := D + Flat (Rt.Pts (K).P, Rt.Pts (K - 1).P);
+               end loop;
+               return D;
+            end Length;
+         begin
+            for Try in 0 .. 6 loop
+               declare
+                  T : constant Float := (if Spot = At_High then 1.0 else -1.0) * (4.9 - 0.25 * Float (Try));
+                  X : constant Float := Mid.X + T * Ax;
+                  Y : constant Float := Mid.Y + T * Ay;
+                  Z : constant Float := Castle.Nav.Surface_Z (X, Y);
+               begin
+                  if Z >= 0.0 then
+                     declare
+                        To_Fire : constant Castle.Nav.Route := Castle.Nav.Plan ((X, Y, Z), Stake);
+                        Back    : constant Castle.Nav.Route := Castle.Nav.Plan (Stake, (X, Y, Z));
+                     begin
+                        return (if Castle.Nav."=" (To_Fire.Result, Castle.Nav.Found)
+                                  and then Castle.Nav."=" (Back.Result, Castle.Nav.Found)
+                                then Length (To_Fire) + Length (Back) else -1.0);
+                     end;
+                  end if;
+               end;
+            end loop;
+            return -2.0;
+         end Stair_Way;
+         --  What stands by a corner of the floor, 3 m each way of it and all the path and strip
+         --  outside: every block column's top and what it is made of.
+         type Corner_Look is array (-12 .. 11, -12 .. 11) of Integer;
+         function Look (Cx, Cy, Sx, Sy : Integer) return Corner_Look is
+            L : Corner_Look;
+         begin
+            for A in L'Range (1) loop
+               for C in L'Range (2) loop
+                  declare
+                     Bx : constant Integer := Cx - Sx * A;       --  (A, C: block columns in from the corner; under 0: outside)
+                     By : constant Integer := Cy - Sy * C;
+                     T  : constant Integer := Top_B (Bx, By);
+                  begin
+                     L (A, C) := T * 64 + Material'Pos (Get (Bx, By, T));
+                  end;
+               end loop;
+            end loop;
+            return L;
+         end Look;
+      begin
+         --  squarely, a bank even along its east side and one under its west: a stair at an end of each,
+         --  in corners diagonally across; its middle on an even block corner north, and an odd one
+         for Try in 1 .. 2 loop
+            Rising_Land (Corner => True);
+            Found (38.1, (if Try = 1 then 32.2 else 32.45), 0);
+            declare
+               My : constant Float := (if Try = 1 then 32.25 else 32.5);
+               X0 : constant Integer := B (38.0 + 0.01);
+               Y0 : constant Integer := B (My + 0.01);
+               Wide : constant Integer := (if (Y0 + 22) mod 2 = 0 then 4 else 5);
+               W0, W1 : Walls_View;
+               Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+               --  (the columns of the floor off its level: east of its middle and west, the rows they are in)
+               E_Lo, W_Lo : Integer := Integer'Last;
+               E_Hi, W_Hi : Integer := Integer'First;
+               E_N, W_N : Natural := 0;
+               Steps_Ok : Boolean := True;
+               East_M, West_M : Float;
+            begin
+               Build_Camp_Now;
+               Build_Paths_Now;
+               W0 := Square_Walls_State;
+               Read_Plan;
+               Build_Walls_Now;
+               Run (2);
+               W1 := Square_Walls_State;
+               Compare (38.0, My, False, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+               for Bx in X0 - 22 .. X0 + 21 loop
+                  for By in Y0 - 22 .. Y0 + 21 loop
+                     if Plan (Bx, By).Top /= None and then Plan (Bx, By).Top /= Level then
+                        if Bx >= X0 then
+                           E_Lo := Integer'Min (E_Lo, By);
+                           E_Hi := Integer'Max (E_Hi, By);
+                           E_N := E_N + 1;
+                           --  (a block a step: each column a block under the one outside it, of stone)
+                           Steps_Ok := Steps_Ok
+                             and then Plan (Bx, By).Top = (if Bx = X0 + 21 then Top_B (X0 + 22, By) else Plan (Bx + 1, By).Top) - 1
+                             and then Get (Bx, By, Plan (Bx, By).Top) = Fieldstone;
+                        else
+                           W_Lo := Integer'Min (W_Lo, By);
+                           W_Hi := Integer'Max (W_Hi, By);
+                           W_N := W_N + 1;
+                           Steps_Ok := Steps_Ok
+                             and then Plan (Bx, By).Top = (if Bx = X0 - 22 then Top_B (X0 - 23, By) else Plan (Bx - 1, By).Top) + 1
+                             and then Get (Bx, By, Plan (Bx, By).Top) = Fieldstone;
+                        end if;
+                     end if;
+                  end loop;
+               end loop;
+               East_M := Stair_Way (False, 1, At_Low);
+               West_M := Stair_Way (False, 2, At_High);
+               Check (R.Done and then W0.Stairs = 2 and then W0.Stair_At = [At_Low, At_High, No_Stair, No_Stair]
+                      and then W0.Stairs_Lost = 0 and then W0.Stairs_Shared = 0 and then W0.Too_High = 0
+                      and then E_N > 0 and then W_N > 0
+                      and then E_Lo = Y0 - 22 and then E_Hi = Y0 - 23 + Wide and then (E_Hi - 3) mod 2 = 0
+                      and then W_Hi = Y0 + 21 and then W_Lo = Y0 + 22 - Wide and then W_Lo mod 2 = 0
+                      and then Steps_Ok
+                      and then Plan (X0 + 21, Y0).Top = Level and then Plan (X0 - 22, Y0).Top = Level,
+                      "squarely, a bank even along its east side and one under its west"
+                      & (if Try = 1 then "" else ", its middle a block north") & ": a stair at an end of each, the east"
+                      & " side's in the south-east corner and the west side's in the north-west, diagonally across; "
+                      & Img (Wide) & " block columns wide from the floor's corner (rows " & Img (E_Lo - (Y0 - 22)) & " to "
+                      & Img (E_Hi - (Y0 - 22)) & " of its 44 east, " & Img (W_Lo - (Y0 - 22)) & " to " & Img (W_Hi - (Y0 - 22))
+                      & " west), its inner four two whole cells of the walking map, a block a step (" & Img (E_N) & " and "
+                      & Img (W_N) & " columns off the floor's level), its treads of stone; nothing at the middle of"
+                      & " either side");
+               Check (W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Inside = 0 and then Off = 0 and then Unlaid = 0
+                      and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0 and then Pits_By (38.0, My) = 0
+                      and then East_M in 10.0 .. 24.0 and then West_M in 10.0 .. 24.0,
+                      "built: every column as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid, " & Img (Stray)
+                      & " astray), none of the floor but the two corners off its level or stone (" & Img (Floor_Off) & ", "
+                      & Img (Floor_Stone) & "), no pit; from the path before each stair to the fire and back "
+                      & Img (East_M, 1) & " and " & Img (West_M, 1) & " m");
+            end;
+         end loop;
+         --  squarely on ground rising to the north-east: the path comes in level at the north-west and
+         --  south-east corners, and every side is banked at its middle.  With the stair at the middle,
+         --  four; in a corner, the east side's and the north side's are one stair in the north-east
+         --  corner, the west's and the south's one in the south-west.  And what he praised is the
+         --  measure: by the two level corners every block is what it is with the stairs at the middles.
+         declare
+            X0 : constant Integer := B (38.0 + 0.01);
+            Y0 : constant Integer := B (32.25 + 0.01);
+            type Looks is array (Boolean, 1 .. 2) of Corner_Look;
+            L  : Looks;
+            W  : array (Boolean) of Walls_View;
+            St : array (Boolean) of Stair_Sites;
+            Left : array (Boolean) of Natural := [others => 1];
+            Pits : array (Boolean) of Natural := [others => 1];
+            Differ : Natural := 0;
+            Ne_M, Sw_M : Float := -9.0;
+         begin
+            for Corner in Boolean loop
+               Rising_Land (Rise_M => 1.3, Diagonal => True, Corner => Corner);
+               Found (38.1, 32.2, 0);
+               Build_Camp_Now;
+               Build_Paths_Now;
+               W (Corner) := Square_Walls_State;
+               St (Corner) := Square_Stair_Sites;
+               Build_Walls_Now;
+               Run (2);
+               Left (Corner) := Square_Walls_State.Stone_Left + Square_Walls_State.Dig_Left + Square_Walls_State.Inside;
+               Pits (Corner) := Pits_By (38.0, 32.25);
+               L (Corner, 1) := Look (X0 - 22, Y0 + 21, -1, 1);       --  (the north-west corner of the floor)
+               L (Corner, 2) := Look (X0 + 21, Y0 - 22, 1, -1);       --  (the south-east)
+               if Corner then
+                  Ne_M := Stair_Way (False, 3, At_High);
+                  Sw_M := Stair_Way (False, 4, At_Low);
+               end if;
+            end loop;
+            for K in 1 .. 2 loop
+               for A in Corner_Look'Range (1) loop
+                  for C in Corner_Look'Range (2) loop
+                     if L (True, K) (A, C) /= L (False, K) (A, C) then
+                        Differ := Differ + 1;
+                     end if;
+                  end loop;
+               end loop;
+            end loop;
+            Check (R.Done and then W (False).Stairs = 4
+                   and then W (False).Stair_At = [At_Middle, At_Middle, At_Middle, At_Middle]
+                   and then W (True).Stairs = 2 and then W (True).Stair_At = [No_Stair, No_Stair, At_High, At_Low]
+                   and then W (True).Stairs_Shared = 2 and then W (True).Stairs_Lost = 0
+                   and then (St (True) (2, At_High).Level or else St (True) (3, At_Low).Level)
+                   and then (St (True) (1, At_Low).Level or else St (True) (4, At_High).Level)
+                   and then St (True) (1, At_High).Takes and then St (True) (3, At_High).Takes
+                   and then St (True) (2, At_Low).Takes and then St (True) (4, At_Low).Takes
+                   and then not St (True) (1, At_Low).Takes and then not St (True) (3, At_Low).Takes
+                   and then Left (True) = 0 and then Left (False) = 0 and then Pits (True) = 0 and then Pits (False) = 0
+                   and then Ne_M in 10.0 .. 26.0 and then Sw_M in 10.0 .. 26.0,
+                   "squarely on ground rising to the north-east, its path level at the north-west and south-east"
+                   & " corners: with the stair at the middle of its side (Set_Square_Stair_Corner off) four, one a"
+                   & " side; in the corner each side's stair is at the end away from its level end, the opposite"
+                   & " corner, the east and north sides' one stair in the north-east corner (a bank of"
+                   & St (True) (3, At_High).Least_B'Image & " to" & St (True) (3, At_High).Most_B'Image
+                   & " blocks) and the west and south sides' one in the south-west (" & Img (W (True).Stairs_Shared)
+                   & " sides' stairs another side's); built whole, no pit; from the path before them to the fire and"
+                   & " back " & Img (Ne_M, 1) & " and " & Img (Sw_M, 1) & " m");
+            Check (Differ = 0,
+                   "what he praised is the measure: within 3 m of the two level corners, and over their strips and"
+                   & " paths, every block column stands as high and of the same stuff with the stairs in the corners"
+                   & " as with the stairs at the middles (" & Img (Differ) & " of 1,152 differ)");
+         end;
+         --  a corner that is a level way in on one side only.  On the flat, the ground west of the
+         --  square raised, and its south side's path left level to the corner: the west side is
+         --  banked from end to end and the south side comes in level where they meet.  First with
+         --  both ends of the west side taking a stair (three blocks at the south end, five at the
+         --  north, where the north side's path is raised too): it stands at the north end, the
+         --  opposite corner from the level one, though the bank is higher there.  Then with the
+         --  ground at the north end raised a block only (the path there is brought level with the
+         --  floor: no bank at all, as the check's own line prints): it stands at the south end all
+         --  the same, beside the level way in, and is counted.
+         for Try in 1 .. 2 loop
+            Rising_Land (Rise_M => 100.0, Corner => True);
+            if Try = 1 then
+               Fill (26.0, 20.0, 32.5, 32.25, Ground_Row, Ground_Row + 2, Dirt);
+               Fill (26.0, 32.25, 32.5, 44.0, Ground_Row, Ground_Row + 4, Dirt);
+               Fill (32.5, 37.75, 35.0, 44.0, Ground_Row, Ground_Row + 4, Dirt);
+            else
+               Fill (26.0, 20.0, 32.5, 35.75, Ground_Row, Ground_Row + 2, Dirt);
+               Fill (26.0, 35.75, 32.5, 44.0, Ground_Row, Ground_Row + 1, Dirt);
+            end if;
+            Changed_World;
+            Found (38.1, 32.2, 0);
+            declare
+               W0, W1 : Walls_View;
+               St : Stair_Sites;
+               Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+               Way : Float;
+            begin
+               Build_Camp_Now;
+               Build_Paths_Now;
+               W0 := Square_Walls_State;
+               St := Square_Stair_Sites;
+               Read_Plan;
+               Build_Walls_Now;
+               Run (2);
+               W1 := Square_Walls_State;
+               Compare (38.0, 32.25, False, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+               Way := Stair_Way (False, 2, (if Try = 1 then At_High else At_Low));
+               Check (R.Done and then St (2, At_Low).Takes and then St (2, At_Middle).Takes
+                      and then St (2, At_High).Takes = (Try = 1)
+                      and then St (4, At_Low).Level and then St (3, At_Low).Level = (Try = 2)
+                      and then (Try = 2 or else St (2, At_Low).Most_B < St (2, At_High).Most_B)
+                      and then W0.Stairs = 1
+                      and then W0.Stair_At = [No_Stair, (if Try = 1 then At_High else At_Low), No_Stair, No_Stair]
+                      and then W0.Stairs_By_Level = (if Try = 1 then 0 else 1) and then W0.Stairs_Lost = 0
+                      and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Inside = 0 and then Off = 0
+                      and then Unlaid = 0 and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0
+                      and then Pits_By (38.0, 32.25) = 0 and then Way in 10.0 .. 30.0,
+                      (if Try = 1
+                       then "a side banked from end to end (" & Img (St (2, At_Low).Most_B) & " blocks at one end, "
+                            & Img (St (2, At_High).Most_B) & " at the other, both taking a stair), the next side's path"
+                            & " level where they meet at its lower end: the stair stands at the far end from that"
+                            & " corner, against the higher bank, not beside the level way in"
+                       else "a side with one end only that takes a stair (" & Img (St (2, At_Low).Most_B) & " blocks; "
+                            & Img (St (2, At_High).Most_B) & " at the other), the next side's path level where they meet"
+                            & " there: the stair stands at that end all the same, beside the level way in, and is"
+                            & " counted (" & Img (W0.Stairs_By_Level) & ")")
+                      & "; built whole, none of the floor off its level or stone but the stair's corner, no pit; from"
+                      & " the path before it to the fire and back " & Img (Way, 1) & " m");
+            end;
+         end loop;
+         --  aslant, a bank even along its north-east side and one under its south-west
+         Rising_Land (Diagonal => True, Corner => True);
+         Found (38.1, 32.2, 1);
+         declare
+            W0, W1 : Walls_View;
+            Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+            Up_M, Down_M : Float;
+         begin
+            Build_Camp_Now;
+            Build_Paths_Now;
+            W0 := Square_Walls_State;
+            Read_Plan;
+            Build_Walls_Now;
+            Run (2);
+            W1 := Square_Walls_State;
+            Compare (38.0, 32.25, True, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+            Up_M := Stair_Way (True, 1, At_Low);
+            Down_M := Stair_Way (True, 2, At_High);
+            Check (R.Done and then W0.Stairs = 2 and then W0.Stair_At = [At_Low, At_High, No_Stair, No_Stair]
+                   and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Inside = 0 and then Off = 0
+                   and then Unlaid = 0 and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0
+                   and then Pits_By (38.0, 32.25) = 0 and then Up_M in 10.0 .. 26.0 and then Down_M in 10.0 .. 26.0,
+                   "aslant, a bank even along its north-east side and one under its south-west: the first side's stair"
+                   & " in the floor's east corner and the other's in its west, diagonally across; built, every column"
+                   & " as planned, none of the floor but those two corners off its level or stone (" & Img (Floor_Off)
+                   & ", " & Img (Floor_Stone) & "), no pit; from the path before each to the fire and back "
+                   & Img (Up_M, 1) & " and " & Img (Down_M, 1) & " m");
+         end;
+         --  a square with its walls on its own edge keeps its stair at the middle: the wall of the side
+         --  it would meet in a corner stands on the floor's outermost columns there
+         Rising_Land (Outside => False, Corner => True);
+         Found (38.1, 32.2, 0);
+         Build_Camp_Now;
+         Build_Paths_Now;
+         Check (Square_Stair_Corner and then not Square_Is_Outside
+                and then Square_Walls_State.Stair_At = [At_Middle, At_Middle, No_Stair, No_Stair],
+                "(a square founded with its walls on its own edge, --square-walls-inside, keeps its stair at the"
+                & " middle of its side, as squares were)");
+      end;
+      --  aslant, a strip is two rings or none: a path at 45 degrees that a stockpile or a turned house
+      --  can lie along runs on every other diagonal of the block grid.  (With a ring a lift, two sides
+      --  that met with strips an odd number apart had lines that crossed at the middle of a block's
+      --  edge; a stockpile held by such a side was refused, "it overlaps a path", or put down along a
+      --  path of its own 18 cm beside the square's.  Found 2026-11-21 at four of seven angled squares
+      --  with a strip, by the band that starved for want of its stockpile.)
+      declare
+         Found_One : Boolean := False;
+         Tried, Odd : Natural := 0;
+         Rises  : constant array (1 .. 4) of Float := [2.0, 1.5, 3.0, 1.0];
+         Places : constant array (1 .. 5) of Float := [34.0, 36.0, 38.0, 40.0, 33.0];
+      begin
+         for Rise of Rises loop
+            for Mx of Places loop
+               Rising_Land (Rise_M => Rise);
+               declare
+                  P : constant Square_Plan := Plan_Square ((Mx + 0.1, 32.2, Ground_M), 1);
+               begin
+                  if P.Ok then
+                     Tried := Tried + 1;
+                     if (for some S in 1 .. 4 => P.Strip (S) not in 0 | 2) then
+                        Odd := Odd + 1;
+                     end if;
+                  end if;
+                  --  (the first with a strip on one side and none on the next: founded, a stockpile held
+                  --  by each side)
+                  if P.Ok and then not Found_One
+                    and then (P.Strip (1) /= P.Strip (3) or else P.Strip (3) /= P.Strip (2) or else P.Strip (2) /= P.Strip (4))
+                  then
+                     Found_One := True;
+                     Found (Mx + 0.1, 32.2, 1);
+                     Build_Camp_Now;
+                     Build_Paths_Now;
+                     declare
+                        On_Corners, Along : Natural := 0;
+                        --  (held eight and a half metres east or west and north or south of its middle, its
+                        --  path's way that side's: north-east, north-west, south-west, south-east)
+                        Dx : constant array (1 .. 4) of Float := [1.0, -1.0, -1.0, 1.0];
+                        Dy : constant array (1 .. 4) of Float := [1.0, 1.0, -1.0, -1.0];
+                        Way : constant array (1 .. 4) of Way_Index := [7, 1, 3, 5];
+                     begin
+                        for K in 1 .. Path_Count loop
+                           declare
+                              A : constant Vec3 := Path_End (K, Second => False);
+                              Z : constant Vec3 := Path_End (K, Second => True);
+                           begin
+                              if abs (A.X * 4.0 - Float'Rounding (A.X * 4.0)) < 0.001
+                                and then abs (A.Y * 4.0 - Float'Rounding (A.Y * 4.0)) < 0.001
+                                and then abs (Z.X * 4.0 - Float'Rounding (Z.X * 4.0)) < 0.001
+                                and then abs (Z.Y * 4.0 - Float'Rounding (Z.Y * 4.0)) < 0.001
+                              then
+                                 On_Corners := On_Corners + 1;
+                              end if;
+                           end;
+                        end loop;
+                        for D in 1 .. 4 loop
+                           declare
+                              B : constant Box_Plan :=
+                                Plan_Box (Stockpile_Box, (Mx + 8.5 * Dx (D), 32.25 + 8.5 * Dy (D), Ground_M), Way (D));
+                           begin
+                              if B.Where.Snap in Along_Path | At_End and then B.New_Path_M < 0.01 then
+                                 Along := Along + 1;
+                              end if;
+                           end;
+                        end loop;
+                        Check (R.Done and then Path_Count = 4 and then On_Corners = 4 and then Along = 4
+                               and then Square_Walls_State.Unready = 0,
+                               "aslant, rings kept " & Strips_Img (P.Strip) & ": each of the four stretches of its path"
+                               & " begins and ends on a corner of blocks (" & Img (On_Corners) & "), and a stockpile held"
+                               & " by each side lies along that side's own path, none of its path new (" & Img (Along)
+                               & " of four)");
+                     end;
+                  end if;
+               end;
+            end loop;
+         end loop;
+         Check (Found_One and then Tried >= 8 and then Odd = 0,
+                "of " & Img (Tried) & " angled squares planned on four rises every strip is two rings or none ("
+                & Img (Odd) & " with any other)");
+      end;
+      --  housing pulled along a walled side: the strip is nobody's to zone (pulled with a row toward the
+      --  square it took the strip, eighty block columns of it along ten metres; the strip was then not
+      --  laid as path where it should be and the wall stood on housing)
+      declare
+         Zoned, Housing : array (Pull_Rows) of Natural := [others => 0];
+         Left_After : Natural := 0;
+      begin
+         for Rows in Pull_Rows loop
+            Rising_Land (Rise_M => 2.0);
+            Found (36.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            --  (along its north side's path, which lies a ring further out: a strip between it and the floor)
+            Perform ((What => Pull_Housing, By => The_Player, Begun => (32.0, 38.5, Ground_M),
+                      Pulled_To => (40.0, 38.5, Ground_M), Rows => Rows), R);
+            Build_Walls_Now;
+            Zoned (Rows) := Square_Walls_State.Strip_Zoned;
+            Left_After := Left_After + Square_Walls_State.Stone_Left + Square_Walls_State.Dig_Left;
+            for Z in 1 .. Zone_Count loop
+               if Zone_At (Z).Kind = Habitation_Zone then
+                  Housing (Rows) := Housing (Rows) + Zone_At (Z).Blocks;
+               end if;
+            end loop;
+         end loop;
+         Check (Square_Strips_Now (3) = 1 and then (for all Rows in Pull_Rows => Zoned (Rows) = 0)
+                and then Housing (Both_Sides) > 200
+                and then (Housing (Side_Begun) = 0) /= (Housing (Other_Side) = 0)
+                and then Housing (Both_Sides) = Natural'Max (Housing (Side_Begun), Housing (Other_Side))
+                and then Left_After = 0,
+                "housing pulled along a walled side, a row this side, the other, and both: no block column of the"
+                & " strip is taken (" & Img (Zoned (Side_Begun)) & ", " & Img (Zoned (Other_Side)) & ", "
+                & Img (Zoned (Both_Sides)) & "); the row away from the square is zoned (" & Img (Housing (Both_Sides))
+                & " block columns), the row toward it has no ground, as beside a floor; the walls are built whole");
+      end;
+      --  a square founded with its walls inside keeps them there: saved, loaded under the rule
+      Rising_Land (Outside => False);
+      Found (38.1, 32.2, 0);
+      declare
+         P : constant Boolean := not Square_Is_Outside and then Square_Strips_Now = [0, 0, 0, 0];
+         W0 : Walls_View;
+         Ok : Boolean;
+      begin
+         Build_Camp_Now;
+         Build_Paths_Now;
+         W0 := Square_Walls_State;
+         declare
+            Data : constant Bytes := Save;
+         begin
+            Set_Square_Outside (True);
+            Load (Data, Ok);
+            Check (P and then Ok and then Save = Data and then not Square_Is_Outside and then Square_Walls_State = W0
+                   and then not W0.Outside and then W0.Columns > 100,
+                   "(with Set_Square_Outside off, --square-walls-inside: founded with its walls on its own edge,"
+                   & W0.Columns'Image & " block columns of its floor wall, ledge or stair; saved, and loaded under the"
+                   & " rule: the same bytes and the same plan: a square keeps the rule it was founded under)");
+         end;
+      end;
+      --  the path as laid asks more than was kept: a bank raised beside a square founded on level
+      --  ground (no strip on any side), and one raised higher beside a side with one ring kept
+      for Try in 1 .. 2 loop
+         Rising_Land (Rise_M => (if Try = 1 then 40.0 else 2.0));
+         Found ((if Try = 1 then 20.1 else 36.1), 32.2, 0);
+         declare
+            Mx : constant Float := (if Try = 1 then 20.0 else 36.0);
+            Kept : constant Square_Strips := Square_Strips_Now;
+            W0, W1 : Walls_View;
+            Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+         begin
+            --  (east of it, from its floor's edge out: the ground raised)
+            Fill (Mx + 5.5, 26.0, Mx + 9.0, 38.5, Ground_Row, Ground_Row + (if Try = 1 then 2 else 9), Dirt);
+            Changed_World;
+            Build_Camp_Now;
+            Build_Paths_Now;
+            W0 := Square_Walls_State;
+            Read_Plan;
+            Build_Walls_Now;
+            Run (2);
+            W1 := Square_Walls_State;
+            Compare (Mx, 32.25, False, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+            if Try = 1 then
+               Check (R.Done and then Kept = [0, 0, 0, 0] and then W0.Need (1) >= 1 and then W0.Unwalled > 20
+                      and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Inside = 0
+                      and then Floor_Off = 0 and then Floor_Stone = 0 and then Pits_By (Mx, 32.25) = 0,
+                      "a bank raised beside a square founded with no strip on that side: its path as laid asks"
+                      & W0.Need (1)'Image & " ring; the bank is left earth along" & W0.Unwalled'Image
+                      & " block columns of the floor's edge, nothing is counted as left to lay, and none of the floor"
+                      & " is taken for it (" & Img (Floor_Off) & " off its level, " & Img (Floor_Stone) & " stone)");
+            else
+               Check (R.Done and then Kept (1) in 1 .. 2 and then W0.Need (1) > Kept (1) and then W0.Short > 20
+                      and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Inside = 0 and then Off = 0
+                      and then Unlaid = 0 and then Floor_Off = 0 and then Floor_Stone = 0 and then Pits_By (Mx, 32.25) = 0,
+                      "a bank raised higher beside a side with" & Kept (1)'Image & " ring kept: its path as laid asks"
+                      & W0.Need (1)'Image & "; the wall stands steeper in the rings it has (" & Img (W0.Short)
+                      & " block columns of it take more than a lift), every column as planned, none of the floor taken,"
+                      & " no pit");
+            end if;
+         end;
+      end loop;
+      --  the band builds them
+      for Way in 0 .. 1 loop
+         Rising_Land (Sources => True, Diagonal => Way = 1);
+         Found (38.1, 32.2, Way);
+         declare
+            W0, W1 : Walls_View;
+            Done_At, No_Way, In_Wall, Pits, Wall_Hands_Most : Natural := 0;
+            Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+            Saved_Ok : Boolean := True;
+            Halfway  : Boolean := False;
+         begin
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Stoke (400.0);                             --  (its fire lit: the walls wait for that)
+            Run (1);
+            W0 := Square_Walls_State;
+            Read_Plan;
+            for S in 1 .. 14_000 loop
+               Run (1);
+               declare
+                  Hands : Natural := 0;
+               begin
+                  for I in 1 .. Members loop
+                     declare
+                        W : constant Vec3 := Where (I);
+                     begin
+                        if not Castle.Nav."=" (Castle.Nav.Plan (W, Stake).Result, Castle.Nav.Found) then
+                           No_Way := No_Way + 1;
+                        end if;
+                        if Get (B (W.X), B (W.Y), B (W.Z + 0.05) + 2) = Fieldstone
+                          or else Get (B (W.X), B (W.Y), B (W.Z + 0.05) + 3) = Fieldstone
+                        then
+                           In_Wall := In_Wall + 1;
+                        end if;
+                        if Ada.Strings.Fixed.Index (Status (I), "the square's wall") > 0 then
+                           Hands := Hands + 1;
+                        end if;
+                     end;
+                  end loop;
+                  Wall_Hands_Most := Natural'Max (Wall_Hands_Most, Hands);
+               end;
+               if S mod 20 = 0 then
+                  Pits := Pits + Pits_By (38.0, 32.25);
+               end if;
+               if not Halfway and then Walls_Left in 1 .. W0.Stone_Left / 2 then
+                  Halfway := True;
+                  declare
+                     Data : constant Bytes := Save;
+                     Left : constant Natural := Walls_Left;
+                     Ok   : Boolean;
+                  begin
+                     Load (Data, Ok);
+                     Saved_Ok := Ok and then Save = Data;
+                     Run (1);
+                     Saved_Ok := Saved_Ok and then Walls_Left <= Left and then Walls_Left + 4 * Wall_Per_Stone >= Left;
+                  end;
+               end if;
+               if Square_Walls_State.Stone_Left = 0 and then Square_Walls_State.Dig_Left = 0 then
+                  Done_At := S;
+                  exit;
+               end if;
+            end loop;
+            Run (30);
+            W1 := Square_Walls_State;
+            Compare (38.0, 32.25, Way = 1, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+            Check (R.Done and then W0.Outside and then W0.Stone_Left > 200 and then Done_At > 0 and then No_Way = 0
+                   and then In_Wall = 0 and then Pits = 0 and then W1.Stone_Left = 0 and then Off = 0 and then Unlaid = 0
+                   and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0 and then W1.Inside = 0
+                   and then Halfway and then Saved_Ok and then Wall_Hands_Most in 1 .. 6
+                   and then (for all I in 1 .. Members => Carried (I) = 0),
+                   (if Way = 0 then "squarely" else "aslant") & ", built by the band:" & W0.Stone_Left'Image
+                   & " blocks of stone laid in" & Done_At'Image & " colony seconds (" & Img (Wall_Hands_Most)
+                   & " at it at the most); at every second each of the six has a way to the fire (" & Img (No_Way)
+                   & " without) and none stands in a wall (" & Img (In_Wall) & "); every twenty seconds no spot by it is a pit ("
+                   & Img (Pits) & "); half laid, it is saved and loaded to the same bytes and goes on; at the end"
+                   & " every column stands as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid, "
+                   & Img (Stray) & " blocks of stone astray), all of its floor is floor, and nobody is left holding stone");
+         end;
+      end loop;
+
+      --  A square with a tree on it is planned at the level it is founded at.  (Found by the gate's
+      --  debug scan of real places, 2026-11-21: the founding's level, Choose_Level's, counts the
+      --  ground under a tree's foot, two blocks down under its roots, among what is to be filled;
+      --  the plan's did not.  So three squares of 320 on seed 1 were founded a block lower than the
+      --  level their strips had been judged against, and one of them had a side with no strip kept
+      --  where a wall was wanted.)  On the flat, three trees on the floor, the south of the floor
+      --  two blocks lower over a column more each time: the level drops a block at some size, and
+      --  at every size the plan says the level the square is then founded at.  (With the plan's
+      --  level reckoned without the trees' feet it fails at the three sizes from the drop on.)
+      declare
+         Tried, Same, High, Low, First_Low : Natural := 0;
+      begin
+         for Hollow in 470 .. 495 loop
+            Rising_Land (Rise_M => 100.0);            --  (no rise within the meadow: flat)
+            for N in 0 .. Hollow - 1 loop             --  (the floor is block columns 106 .. 149 each way)
+               Set (106 + N mod 44, 106 + N / 44, Ground_Row - 1, Air);       --  (the meadow's top row)
+               Set (106 + N mod 44, 106 + N / 44, Ground_Row - 2, Air);
+               Set (106 + N mod 44, 106 + N / 44, Ground_Row - 3, Grass);
+            end loop;
+            for Z in Ground_Row - 2 .. Ground_Row + 12 loop        --  (trunks, rooted as a tree's is)
+               Set (128, 142, Z, Log);
+               Set (136, 138, Z, Log);
+               Set (120, 138, Z, Log);
+            end loop;
+            Changed_World;
+            declare
+               Pl : constant Square_Plan := Plan_Square ((32.0, 32.0, Ground_M), 0);
+               Founded_Row : Integer;
+            begin
+               Found (32.0, 32.0, 0);
+               Founded_Row := Integer (Float'Rounding (Camp_State.Floor_Z * 4.0)) - 1;
+               Tried := Tried + 1;
+               if Pl.Ok and then R.Done and then Pl.Level_Row = Founded_Row then
+                  Same := Same + 1;
+               end if;
+               if Founded_Row = Ground_Row - 1 then
+                  High := High + 1;
+               elsif Founded_Row = Ground_Row - 2 then
+                  Low := Low + 1;
+                  if First_Low = 0 then
+                     First_Low := Hollow;
+                  end if;
+               end if;
+            end;
+         end loop;
+         Check (Same = Tried and then High > 0 and then Low > 0 and then High + Low = Tried,
+                "three trees on its floor, the south of the floor two blocks lower: at each of" & Tried'Image
+                & " sizes of the lower part the plan says the level it is founded at (" & Img (Same)
+                & "); within them the level drops a block (" & Img (High) & " at the meadow's," & Low'Image
+                & " a block lower, from" & First_Low'Image & " columns)");
+      end;
+
+      --  A square whose middle lies under a tree is founded on the ground its plan read (found 2026-11-21,
+      --  measuring the stockyard against 323 real squares).  The plan's middle has the height of the
+      --  highest floor there, a bough of the crown; the stake was asked for near that height.  A sheet
+      --  of timber five metres over the middle of the meadow, as a crown's boughs lie: over the fire's
+      --  own block column (the stake's place was put on it, and the band arrived up there with it), and
+      --  over all of the middle's cell but that column (no ground was found within four metres, and
+      --  the square its plan had shown as taken was refused).
+      for Case_N in 1 .. 2 loop
+         for On in reverse Boolean loop
+            Rising_Land (Rise_M => 100.0);
+            Set_Fire_Ground (On);
+            Fill (28.5, 28.5, 35.5, 35.5, Ground_Row + 19, Ground_Row + 19, Log);
+            if Case_N = 2 then
+               Set (128, 128, Ground_Row + 19, Air);
+            end if;
+            Changed_World;
+            declare
+               Pl   : constant Square_Plan := Plan_Square ((32.0, 32.0, Ground_M), 0);
+               High : Natural := 0;
+            begin
+               Found (32.0, 32.0, 0);
+               if R.Done then
+                  for I in 1 .. Members loop
+                     if Where (I).Z > Ground_M + 1.0 then
+                        High := High + 1;
+                     end if;
+                  end loop;
+               end if;
+               if On then
+                  Check (Pl.Ok and then R.Done and then abs (Stake.Z - Ground_M) < 0.01 and then High = 0
+                         and then Members = 6,
+                         (if Case_N = 1 then "a bough five metres over its fire's own place"
+                          else "a bough over the middle but not over the fire's own block column")
+                         & ": planned, and founded on the ground under it (the stake's place "
+                         & Img (Stake.Z - Ground_M, 2) & " m over the meadow), the band on the ground round it ("
+                         & Img (High) & " of them over a metre up)");
+               elsif Case_N = 1 then
+                  Check (Pl.Ok and then R.Done and then Stake.Z > Ground_M + 4.0 and then High > 0,
+                         "(with Set_Fire_Ground off, --no-fire-ground, as it was: the stake's place is on the bough, "
+                         & Img (Stake.Z - Ground_M, 2) & " m up, and " & Img (High) & " of the band arrive up there)");
+               else
+                  Check (Pl.Ok and then not R.Done,
+                         "(with it off, as it was: the plan says yes and the founding refuses, '"
+                         & Why_Not ((What => Raise_Stake, By => The_Player, Stake_At => (32.0, 32.0, Ground_M),
+                                     As_Square => True, Stake_Way => 0), R) & "')");
+               end if;
+            end;
+         end loop;
+      end loop;
+      Set_Fire_Ground (True);
+
+      --  and a tree whose foot stands on the fire's own block column (it is felled before anything is
+      --  made there): the stake's place is the ground beside its foot, not its top and not the ground
+      --  under its roots
+      for On in reverse Boolean loop
+         Rising_Land (Rise_M => 100.0);
+         Set_Fire_Ground (On);
+         for Z in Ground_Row - 2 .. Ground_Row + 12 loop        --  (a trunk, rooted as a tree's is)
+            Set (128, 128, Z, Log);
+         end loop;
+         Changed_World;
+         declare
+            Pl : constant Square_Plan := Plan_Square ((32.0, 32.0, Ground_M), 0);
+         begin
+            Found (32.0, 32.0, 0);
+            if On then
+               Check (Pl.Ok and then R.Done and then abs (Stake.Z - Ground_M) < 0.01
+                      and then (for all I in 1 .. Members => Where (I).Z < Ground_M + 1.0),
+                      "a tree's foot on its fire's own place: planned, and founded on the ground beside the foot (the"
+                      & " stake's place " & Img (Stake.Z - Ground_M, 2) & " m over the meadow)");
+            else
+               Check (Pl.Ok and then (not R.Done or else abs (Stake.Z - Ground_M) > 0.4),
+                      "(with Set_Fire_Ground off, as it was: "
+                      & (if R.Done then "the stake's place " & Img (Stake.Z - Ground_M, 2) & " m off the meadow's level)"
+                         else "refused after its plan said yes)"));
+            end if;
+         end;
+      end loop;
+      Set_Fire_Ground (True);
+
+      --  The square's path stepped with stone (John, 2026-11-21: "we need to do something about having
+      --  the .5m jumps in the path around the square too"; of the ways put to him, 2026-11-22: "Steps
+      --  of stone", and "The only thing left to fix on the square is the path jumps").
+      Put_Line ("the square's path stepped with stone:");
+      declare
+         --  How its path steps, as it stands (For_Square_Path_Slices): quarter metres read and those
+         --  at the floor's level; steps of two blocks or more from one to the next, and those of them
+         --  where a level one meets one that is not; quarter metres with a tread of stone, those of
+         --  them not all stone at one row, and their columns of stone.
+         type Path_Read is record
+            Slices, Level, Jumps, At_End, Stone_Sl, Stone_Part, Stone_Cols : Natural := 0;
+         end record;
+         function Read_Path return Path_Read is
+            None : constant := Integer'First;
+            type Row is array (0 .. 127) of Integer;
+            Mid, Lo, Hi : array (1 .. 4) of Row := [others => [others => None]];
+            Pr : Path_Read;
+            procedure Note
+              (Side : Positive; Slice, Slices : Natural; Columns : Positive; Lowest, Middle, Highest : Integer; Stone : Natural)
+            is
+               pragma Unreferenced (Slices);
+            begin
+               Mid (Side) (Slice) := Middle;
+               Lo (Side) (Slice) := Lowest;
+               Hi (Side) (Slice) := Highest;
+               Pr.Slices := Pr.Slices + 1;
+               if Lowest = 0 and then Highest = 0 then
+                  Pr.Level := Pr.Level + 1;
+               end if;
+               if Stone > 0 then
+                  Pr.Stone_Sl := Pr.Stone_Sl + 1;
+                  Pr.Stone_Cols := Pr.Stone_Cols + Stone;
+                  if Stone < Columns or else Lowest /= Highest then
+                     Pr.Stone_Part := Pr.Stone_Part + 1;
+                  end if;
+               end if;
+            end Note;
+         begin
+            For_Square_Path_Slices (Note'Access);
+            for Sd in 1 .. 4 loop
+               for K in 0 .. 126 loop
+                  if Mid (Sd) (K) /= None and then Mid (Sd) (K + 1) /= None
+                    and then abs (Mid (Sd) (K + 1) - Mid (Sd) (K)) >= 2
+                  then
+                     Pr.Jumps := Pr.Jumps + 1;
+                     if (Lo (Sd) (K) = 0 and then Hi (Sd) (K) = 0) /= (Lo (Sd) (K + 1) = 0 and then Hi (Sd) (K + 1) = 0) then
+                        Pr.At_End := Pr.At_End + 1;
+                     end if;
+                  end if;
+               end loop;
+            end loop;
+            return Pr;
+         end Read_Path;
+         --  The ground by the square as it stands: every block column's top and what it is of.
+         type World is array (Plan'Range (1), Plan'Range (2)) of Integer;
+         type World_Access is access World;
+         procedure Look (W : World_Access) is
+         begin
+            for Bx in W'Range (1) loop
+               for By in W'Range (2) loop
+                  W (Bx, By) := Top_B (Bx, By) * 64 + Material'Pos (Get (Bx, By, Top_B (Bx, By)));
+               end loop;
+            end loop;
+         end Look;
+         function Differ (A, C : World_Access) return Natural is
+            N : Natural := 0;
+         begin
+            for Bx in A'Range (1) loop
+               for By in A'Range (2) loop
+                  if A (Bx, By) /= C (Bx, By) then
+                     N := N + 1;
+                  end if;
+               end loop;
+            end loop;
+            return N;
+         end Differ;
+         Stone_Pos : constant Integer := Material'Pos (Fieldstone);
+         Path_Pos  : constant Integer := Material'Pos (Footpath);
+         W_Off, W_On, W_Bouts, W_Mixed, W_Back : constant World_Access := new World;
+      begin
+         --  squarely and aslant on ground rising a block a metre: with the steps off the path stands
+         --  two or three blocks off the level stretch's end at once; with them on it goes there a block
+         --  a quarter metre, every tread of stone; the levelled stretch, the stairs and everything
+         --  but the steps and the strips beside them are what they were
+         for Try in 1 .. 2 loop
+            declare
+               Aslant : constant Boolean := Try = 2;
+               Way    : constant Way_Index := (if Aslant then 1 else 0);
+               Mx     : constant Float := 38.0;
+               My     : constant Float := 32.25;
+               Pr     : array (Boolean) of Path_Read;
+               W0, W1 : array (Boolean) of Walls_View;
+               Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural := 99;
+               Pits   : array (Boolean) of Natural := [others => 99];
+               Treads, Changed, Far, Floor_Changed, Level_Changed : Natural := 0;
+            begin
+               for Steps in Boolean loop
+                  Rising_Land (Rise_M => 1.0, Diagonal => Aslant);
+                  Set_Path_Steps (Steps);
+                  Found (Mx + 0.1, My - 0.05, Way);
+                  Build_Camp_Now;
+                  Build_Paths_Now;
+                  W0 (Steps) := Square_Walls_State;
+                  Read_Plan;
+                  Build_Walls_Now;
+                  Run (2);
+                  W1 (Steps) := Square_Walls_State;
+                  Pr (Steps) := Read_Path;
+                  Pits (Steps) := Pits_By (Mx, My);
+                  if Steps then
+                     Compare (Mx, My, Aslant, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+                     Look (W_On);
+                  else
+                     Look (W_Off);
+                  end if;
+               end loop;
+               --  (what differs between the two: a tread, a path column of stone where one of trodden earth
+               --  was; anything else no further than two block columns from a tread; nothing of the floor;
+               --  no column of the path that stood at the floor's level)
+               for Bx in World'Range (1) loop
+                  for By in World'Range (2) loop
+                     if W_On (Bx, By) mod 64 = Stone_Pos and then W_Off (Bx, By) mod 64 = Path_Pos then
+                        Treads := Treads + 1;
+                        if W_Off (Bx, By) / 64 = Level then
+                           Level_Changed := Level_Changed + 1;
+                        end if;
+                     end if;
+                  end loop;
+               end loop;
+               for Bx in World'Range (1) loop
+                  for By in World'Range (2) loop
+                     if W_On (Bx, By) /= W_Off (Bx, By) then
+                        Changed := Changed + 1;
+                        if Zone_On ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25) = 1 then
+                           Floor_Changed := Floor_Changed + 1;
+                        end if;
+                        if not (for some Dx in -2 .. 2 =>
+                                  Bx + Dx in World'Range (1)
+                                  and then (for some Dy in -2 .. 2 =>
+                                              By + Dy in World'Range (2)
+                                              and then W_On (Bx + Dx, By + Dy) mod 64 = Stone_Pos
+                                              and then W_Off (Bx + Dx, By + Dy) mod 64 = Path_Pos))
+                        then
+                           Far := Far + 1;
+                        end if;
+                     end if;
+                  end loop;
+               end loop;
+               Check (R.Done and then Pr (False).At_End >= 2 and then Pr (False).Stone_Sl = 0
+                      and then W0 (False).Path_Steps = 0 and then W1 (False).Stone_Left = 0,
+                      (if Aslant then "aslant" else "squarely") & " on ground rising a block a metre, with the steps off"
+                      & " (--no-path-steps), as it was: of " & Img (Pr (False).Slices) & " quarter metres of its path "
+                      & Img (Pr (False).Level) & " lie at the floor's level, and the path stands two blocks or more off the"
+                      & " next quarter metre at " & Img (Pr (False).Jumps) & " places, " & Img (Pr (False).At_End)
+                      & " of them where a levelled stretch ends");
+               Check (W0 (True).Path_Steps > 0 and then W0 (True).Step_Slices > 0
+                      and then W1 (True).Stone_Left = 0 and then W1 (True).Dig_Left = 0 and then W1 (True).Path_Steps = 0
+                      and then Pr (True).At_End = 0 and then Pr (True).Jumps <= Pr (False).Jumps - Pr (False).At_End
+                      and then Pr (True).Level = Pr (False).Level and then Pr (True).Slices = Pr (False).Slices
+                      and then Pr (True).Stone_Sl = W0 (True).Step_Slices and then Pr (True).Stone_Part = 0
+                      and then Pr (True).Stone_Cols = W0 (True).Path_Steps and then Treads = Pr (True).Stone_Cols,
+                      "with them on: " & Img (W0 (True).Step_Slices) & " quarter metres are planned as steps ("
+                      & Img (W0 (True).Path_Steps) & " block columns), and built: the path stands two blocks or more off"
+                      & " the next quarter metre at " & Img (Pr (True).Jumps) & " places, " & Img (Pr (True).At_End)
+                      & " of them where a levelled stretch ends; every step all of stone at one row ("
+                      & Img (Pr (True).Stone_Sl) & " quarter metres, " & Img (Pr (True).Stone_Cols) & " treads); as many"
+                      & " quarter metres at the floor's level as before (" & Img (Pr (True).Level) & ")");
+               Check (Off = 0 and then Unlaid = 0 and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0
+                      and then Pits (True) = 0 and then Pits (False) = 0
+                      and then W0 (True).Stairs = W0 (False).Stairs and then W0 (True).Stair_At = W0 (False).Stair_At
+                      and then W1 (True).Stair_At = W0 (False).Stair_At and then W1 (False).Stair_At = W0 (False).Stair_At
+                      and then Floor_Changed = 0 and then Level_Changed = 0 and then Far = 0 and then Changed >= Treads,
+                      "built as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid, " & Img (Stray)
+                      & " astray), no pit; **the stairs stand where they stood** (" & Img (W0 (True).Stairs) & " of them),"
+                      & " no column of the floor differs from the square without the steps (" & Img (Floor_Changed)
+                      & "), none of the path that lay at the floor's level (" & Img (Level_Changed) & "); of "
+                      & Img (Changed) & " block columns that differ, " & Img (Treads) & " are treads and " & Img (Far)
+                      & " lie further than two block columns from one (the strips beside the steps go by them)");
+            end;
+         end loop;
+         --  no stair is made by the steps: the middle of a side, where its stair stands or would, is
+         --  left as the path lies.  (Whether a side has a stair is read from the path before its
+         --  middle metre: a bank of three blocks or more all across.  On the north side here the path
+         --  stands three blocks over the floor from a metre west of the middle on, but for one block
+         --  column before the middle that stands two: no stair.  A flight from the levelled stretch's
+         --  end reaches that quarter metre as its third; brought to one row, three, it made the bank
+         --  three all across, and a stair was planned at the middle of a side that had none, after the
+         --  steps were laid, with nothing counted as done: found at two of 323 real squares by
+         --  tools/square_sites.sh, whose walls then never came to an end.)
+         declare
+            W0, W1 : Walls_View;
+            Pr : Path_Read;
+            Mx : constant Float := 38.0;
+            My : constant Float := 32.25;
+         begin
+            Rising_Land (Rise_M => 100.0);
+            Set_Path_Steps (True);
+            for Bx in B (Mx - 1.0) .. B (Mx + 4.0) - 1 loop          --  (five metres of it, from a metre west of the middle)
+               for By in B (My + 5.5) .. B (My + 20.0) loop
+                  for Z in Ground_Row - 1 .. Ground_Row + 1 loop
+                     Set (Bx, By, Z, Dirt);
+                  end loop;
+                  Set (Bx, By, Ground_Row + 2, Grass);
+               end loop;
+            end loop;
+            Set (B (Mx - 0.5), B (My + 5.75), Ground_Row + 2, Air);          --  (one column a block lower, before the middle)
+            Set (B (Mx - 0.5), B (My + 5.75), Ground_Row + 1, Grass);
+            Changed_World;
+            Found (Mx + 0.1, My - 0.05, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            W0 := Square_Walls_State;
+            Build_Walls_Now;
+            Run (2);
+            W1 := Square_Walls_State;
+            Pr := Read_Path;
+            Check (R.Done and then Square_Strips_Now (3) = 1 and then W0.Stairs = 0 and then W0.Step_Slices = 4
+                   and then W1.Stairs = 0 and then W1.Stone_Left = 0 and then W1.Dig_Left = 0 and then W1.Path_Steps = 0
+                   and then Pr.Stone_Sl = 4 and then Pr.Stone_Part = 0 and then Pr.At_End = 0
+                   and then Get (B (Mx - 0.5), B (My + 5.75), Ground_Row + 1) = Footpath
+                   and then Get (B (Mx - 0.5), B (My + 5.75), Ground_Row + 2) = Air,
+                   "a bank of three blocks beside the middle of a side, one block column of it two: no stair before the"
+                   & " steps (" & Img (W0.Stairs) & "), a flight of two steps to it from either end (" & Img (Pr.Stone_Sl)
+                   & " quarter metres of stone), the quarter metre before the middle left as it lies, and no stair after they are laid ("
+                   & Img (W1.Stairs) & "); nothing left to lay (" & Img (W1.Stone_Left) & " blocks)");
+         end;
+         --  the same whoever builds what first: the walls and steps laid a stone at a time; the paths
+         --  laid last metre first; and the walls built when half the paths are laid, then the rest
+         declare
+            Pr_B, Pr_M, Pr_K : Path_Read;
+            Left_B, Left_M : Natural := 99;
+            D_Bouts, D_Mixed, D_Mixed_Off, D_Back, D_Back_Off : Natural := 0;
+            N : Natural := 0;
+         begin
+            --  (W_On holds the aslant square from the loop above: the square made squarely again, at once)
+            Rising_Land (Rise_M => 1.0);
+            Set_Path_Steps (True);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Build_Walls_Now;
+            Run (2);
+            Look (W_On);
+            Rising_Land (Rise_M => 1.0);
+            Set_Path_Steps (True);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            while N < 20_000 and then (Square_Walls_State.Stone_Left > 0 or else Square_Walls_State.Dig_Left > 0) loop
+               Build_Walls_Now (Most => 1);
+               N := N + 1;
+            end loop;
+            Run (2);
+            Left_B := Square_Walls_State.Stone_Left + Square_Walls_State.Dig_Left;
+            Pr_B := Read_Path;
+            Look (W_Bouts);
+            D_Bouts := Differ (W_On, W_Bouts);
+            --  half the paths, the walls, the rest, the walls
+            Rising_Land (Rise_M => 1.0);
+            Set_Path_Steps (True);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now (Most => 26);
+            Build_Walls_Now;
+            Build_Paths_Now;
+            Build_Walls_Now;
+            Run (2);
+            Left_M := Square_Walls_State.Stone_Left + Square_Walls_State.Dig_Left;
+            Pr_M := Read_Path;
+            Look (W_Mixed);
+            D_Mixed := Differ (W_On, W_Mixed);
+            --  the paths laid backward (and the same with the steps off, for what the path itself does)
+            Rising_Land (Rise_M => 1.0);
+            Set_Path_Steps (True);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now (Backward => True);
+            Build_Walls_Now;
+            Run (2);
+            Pr_K := Read_Path;
+            Look (W_Back);
+            D_Back := Differ (W_On, W_Back);
+            Rising_Land (Rise_M => 1.0);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now (Backward => True);
+            Build_Walls_Now;
+            Run (2);
+            Look (W_Back);
+            Rising_Land (Rise_M => 1.0);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Build_Walls_Now;
+            Run (2);
+            Look (W_Off);
+            D_Back_Off := Differ (W_Off, W_Back);
+            --  (and half the paths, the walls, the rest, with the steps off: what building a wall before
+            --  its corner's other path is laid does by itself)
+            Rising_Land (Rise_M => 1.0);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now (Most => 26);
+            Build_Walls_Now;
+            Build_Paths_Now;
+            Build_Walls_Now;
+            Run (2);
+            Look (W_Back);
+            D_Mixed_Off := Differ (W_Off, W_Back);
+            Check (Left_B = 0 and then D_Bouts = 0 and then Pr_B.At_End = 0 and then N > 50,
+                   "laid a stone at a time (" & Img (N) & " bouts: a step is dug only with the stone for its tread in"
+                   & " hand), the square stands as it does built at once: " & Img (D_Bouts) & " block columns differ");
+            Check (Left_M = 0 and then D_Mixed = D_Mixed_Off and then Pr_M.At_End = 0,
+                   "its walls built when half its path is laid, then the rest of the path and the rest of the walls: "
+                   & Img (D_Mixed) & " block columns differ from the square whose path was all laid first, as many as"
+                   & " with the steps off (" & Img (D_Mixed_Off) & ": a strip's corner walled by one side's path before"
+                   & " the other's is laid; the steps add nothing to it); no step of two blocks or more at a levelled"
+                   & " stretch's end (" & Img (Pr_M.At_End) & ")");
+            Check (D_Back = D_Back_Off and then Pr_K.At_End = 0,
+                   "its path laid last metre first: " & Img (D_Back) & " block columns differ from the square laid first"
+                   & " metre first, as many as with the steps off (" & Img (D_Back_Off) & ": the steps add nothing to what"
+                   & " the order of laying does to the path itself)");
+         end;
+         --  **a strip's column waits for the path it is planned against** (2026-11-22, later;
+         --  Set_Strip_Wait): the walls built when half the path's metres are laid, then the rest of
+         --  the path and the rest of the walls, against the square whose path was all laid first.  A
+         --  column of two sides' strips was walled by the side whose path was laid, and a column
+         --  beside a quarter metre that later became a step was capped a block over it; nothing
+         --  takes laid stone up.  Waiting, the square stands the same either way; and built in
+         --  order it is the square it was.
+         declare
+            D, Left : array (Boolean) of Natural := [others => 99];
+            D_Order : Natural := 99;
+         begin
+            for Wait in Boolean loop
+               Rising_Land (Rise_M => 1.0);
+               Set_Path_Steps (True);
+               Set_Strip_Wait (Wait);
+               Found (38.1, 32.2, 0);
+               Build_Camp_Now;
+               Build_Paths_Now;
+               Build_Walls_Now;
+               Run (2);
+               Look (if Wait then W_On else W_Off);
+               Rising_Land (Rise_M => 1.0);
+               Set_Path_Steps (True);
+               Set_Strip_Wait (Wait);
+               Found (38.1, 32.2, 0);
+               Build_Camp_Now;
+               Build_Paths_Now (Most => 26);
+               Build_Walls_Now;
+               Build_Paths_Now;
+               Build_Walls_Now;
+               Run (2);
+               Left (Wait) := Square_Walls_State.Stone_Left + Square_Walls_State.Dig_Left;
+               Look (W_Mixed);
+               D (Wait) := Differ ((if Wait then W_On else W_Off), W_Mixed);
+            end loop;
+            D_Order := Differ (W_On, W_Off);
+            Check (R.Done and then D (False) > 0 and then D (True) = 0 and then D_Order = 0
+                   and then Left (True) = 0 and then Left (False) = 0,
+                   "its walls built when half its path is laid, then the rest of the path and the rest of the walls: with"
+                   & " a strip's column walled as soon as one path beside it is laid (--no-strip-wait) " & Img (D (False))
+                   & " block columns differ from the square whose path was all laid first; **waiting for the path it is"
+                   & " planned against, none** (" & Img (D (True)) & "); nothing of the walls is left to lay either way, and"
+                   & " built in order the square is the square it was (" & Img (D_Order) & " block columns differ)");
+         end;
+         Set_Strip_Wait (False);
+         --  one standing on a quarter metre of path that is cut down to a step: on the step when the
+         --  bout is done (the laying has its guard, one who stands where a block goes; the digging
+         --  takes the ground from under whoever stands on it)
+         declare
+            Sx, Sy : Integer := 0;
+            Was, Planned : Integer := 0;
+            W : Vec3;
+         begin
+            Rising_Land (Rise_M => 1.0);
+            Set_Path_Steps (True);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Run (1);
+            Read_Plan;
+            for Bx in Plan'Range (1) loop
+               for By in Plan'Range (2) loop
+                  if Sx = 0 and then Plan (Bx, By).Top /= None and then Get (Bx, By, Top_B (Bx, By)) = Footpath
+                    and then Top_B (Bx, By) >= Plan (Bx, By).Top + 2
+                    and then Zone_On ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25) = 0
+                  then
+                     Sx := Bx;
+                     Sy := By;
+                     Was := Top_B (Bx, By);
+                     Planned := Plan (Bx, By).Top;
+                  end if;
+               end loop;
+            end loop;
+            Hold_Still (1, ((Float (Sx) + 0.5) * 0.25, (Float (Sy) + 0.5) * 0.25, Float (Was + 1) * 0.25), 600.0);
+            Build_Walls_Now;
+            W := Where (1);
+            Check (Sx > 0 and then Was - Planned = 2 and then Top_B (Sx, Sy) = Planned
+                   and then Get (Sx, Sy, Planned) = Fieldstone and then B (W.X) = Sx and then B (W.Y) = Sy
+                   and then abs (W.Z - Float (Planned + 1) * 0.25) < 0.01
+                   and then Castle.Nav."=" (Castle.Nav.Plan (W, Stake).Result, Castle.Nav.Found),
+                   "one standing on a quarter metre of path that is cut two blocks down to a step stands on the step"
+                   & " when the bout is done (" & Img (W.Z - Float (Planned + 1) * 0.25, 2) & " m over its tread), and has"
+                   & " its way to the fire");
+         end;
+         --  the band builds them, with the walls: stone prised off the boulder, a load at a time
+         --  (and again with the corners laid as one and stepped, 2026-11-22, later: the landings in
+         --  the square metres where two sides' paths cross are built by the band with the rest)
+         for Corners in Boolean loop
+         declare
+            W0, W1 : Walls_View;
+            Pr : Path_Read;
+            Done_At, No_Way, In_Wall, Pits : Natural := 0;
+            Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural;
+            Saved_Ok : Boolean := True;
+            Halfway  : Boolean := False;
+            Steps_0  : Natural := 0;
+            Far_Steps : Natural := 0;     --  (steps' columns 6.5 m or more east or north of the fire)
+            Landings, Part_Landings, Corner_Treads : Natural := 0;
+            W_Now : constant World_Access := new World;
+         begin
+            --  (rising a block every metre and a third to the north-east: banks, and strips, on all four
+            --  sides; the north and the east sides' paths lie past 6.5 m from the fire)
+            if Corners then
+               --  (level ground, the land beyond the floor's north-east corner three blocks higher: the east
+               --  and the north sides' levelled stretches run up to a corner that is not level, which is
+               --  made a landing a block up)
+               Rising_Land (Rise_M => 100.0, Sources => True);
+               Fill (Pond_X0 - 0.25, Pond_Y0 - 0.25, Pond_X1 + 0.25, Pond_Y1 + 0.25, Ground_Row - 1, Ground_Row - 1, Grass);
+               for Bx in B (38.0 + 5.5) .. B (38.0 + 9.0) loop     --  (the pond, which lies under this square, filled)
+                  for By in B (32.25 + 5.5) .. B (32.25 + 9.0) loop
+                     for Z in Ground_Row - 1 .. Ground_Row + 1 loop
+                        Set (Bx, By, Z, Dirt);
+                     end loop;
+                     Set (Bx, By, Ground_Row + 2, Grass);
+                  end loop;
+               end loop;
+               Changed_World;
+            else
+               Rising_Land (Rise_M => 1.3, Sources => True, Diagonal => True);
+            end if;
+            Set_Path_Steps (True);
+            Set_Corner_Whole (Corners);
+            Set_Corner_Steps (Corners);
+            Found (38.1, 32.2, 0);
+            Build_Camp_Now;
+            Build_Paths_Now;
+            Stoke (400.0);                             --  (its fire lit: the walls wait for that)
+            Run (1);
+            W0 := Square_Walls_State;
+            Steps_0 := W0.Path_Steps;
+            Read_Plan;
+            for Bx in Plan'Range (1) loop
+               for By in Plan'Range (2) loop
+                  if Plan (Bx, By).Top /= None and then Get (Bx, By, Top_B (Bx, By)) = Footpath
+                    and then Top_B (Bx, By) /= Plan (Bx, By).Top
+                    and then Zone_On ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25) = 0
+                    and then Float'Max ((Float (Bx) + 0.5) * 0.25 - 38.0, (Float (By) + 0.5) * 0.25 - 32.25) >= 6.5
+                  then
+                     Far_Steps := Far_Steps + 1;
+                  end if;
+               end loop;
+            end loop;
+            for S in 1 .. 14_000 loop
+               Run (1);
+               for I in 1 .. Members loop
+                  declare
+                     W : constant Vec3 := Where (I);
+                  begin
+                     if not Castle.Nav."=" (Castle.Nav.Plan (W, Stake).Result, Castle.Nav.Found) then
+                        No_Way := No_Way + 1;
+                     end if;
+                     if Get (B (W.X), B (W.Y), B (W.Z + 0.05) + 2) = Fieldstone
+                       or else Get (B (W.X), B (W.Y), B (W.Z + 0.05) + 3) = Fieldstone
+                     then
+                        In_Wall := In_Wall + 1;
+                     end if;
+                  end;
+               end loop;
+               if S mod 20 = 0 then
+                  Pits := Pits + Pits_By (38.0, 32.25);
+               end if;
+               --  (saved with some of its steps made and some not)
+               if not Halfway and then Square_Walls_State.Path_Steps in 1 .. Steps_0 - 4 then
+                  Halfway := True;
+                  declare
+                     Data : constant Bytes := Save;
+                     Left : constant Natural := Square_Walls_State.Path_Steps;
+                     Ok   : Boolean;
+                  begin
+                     Load (Data, Ok);
+                     Saved_Ok := Ok and then Save = Data and then Square_Walls_State.Path_Steps = Left;
+                  end;
+               end if;
+               if Square_Walls_State.Stone_Left = 0 and then Square_Walls_State.Dig_Left = 0 then
+                  Done_At := S;
+                  exit;
+               end if;
+            end loop;
+            Run (30);
+            W1 := Square_Walls_State;
+            Pr := Read_Path;
+            Compare (38.0, 32.25, False, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+            Look (W_Now);
+            for Cn in 1 .. 4 loop
+               declare
+                  N, Stone_N : Natural := 0;
+                  Lo : Integer := Integer'Last;
+                  Hi : Integer := Integer'First;
+               begin
+                  for Bx in World'Range (1) loop
+                     for By in World'Range (2) loop
+                        if Square_Crossing (Bx, By) = Cn then
+                           N := N + 1;
+                           Lo := Integer'Min (Lo, W_Now (Bx, By) / 64);
+                           Hi := Integer'Max (Hi, W_Now (Bx, By) / 64);
+                           if W_Now (Bx, By) mod 64 = Stone_Pos then
+                              Stone_N := Stone_N + 1;
+                           end if;
+                        end if;
+                     end loop;
+                  end loop;
+                  Corner_Treads := Corner_Treads + Stone_N;
+                  if Stone_N > 0 and then Stone_N = N and then Lo = Hi then
+                     Landings := Landings + 1;
+                  elsif Stone_N > 0 then
+                     Part_Landings := Part_Landings + 1;
+                  end if;
+               end;
+            end loop;
+            --  (the tools' count of stone takes a column in the inner quarter of a corner for both its
+            --  sides and one in the outer quarter for neither: with the corners stepped it is not the
+            --  count of treads)
+            Check (R.Done and then Steps_0 > 8 and then (Corners or else Far_Steps > 0) and then Done_At > 0 and then No_Way = 0
+                   and then In_Wall = 0 and then Pits = 0 and then W1.Stone_Left = 0 and then W1.Path_Steps = 0
+                   and then Pr.Stone_Sl = W0.Step_Slices and then (Corners or else Pr.Stone_Cols = Steps_0)
+                   and then Pr.Stone_Part = 0
+                   and then (if Corners then Landings >= 1 and then Part_Landings = 0 and then Pr.At_End = 0
+                             else Corner_Treads = 0)
+                   and then Off = 0 and then Unlaid = 0 and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0
+                   and then (Corners or else Halfway) and then Saved_Ok
+                   and then (for all I in 1 .. Members => Carried (I) = 0),
+                   (if Corners then "with the corners laid as one and stepped, on level ground with the land beyond one"
+                      & " corner three blocks higher (" & Img (Landings) & " of the corners a landing, "
+                      & Img (Corner_Treads) & " treads in it, none partly made: " & Img (Part_Landings) & "): "
+                    else "")
+                   & "built by the band, with the walls" & (if Corners then "" else ", on ground rising to the north-east")
+                   & ": its " & Img (Steps_0)
+                   & " treads in " & Img (W0.Step_Slices) & " quarter metres laid (" & Img (Pr.Stone_Cols) & " of stone; "
+                   & Img (Far_Steps) & " of them 6.5 m and more east or north of the fire, past the last square metre"
+                   & " the camp's ground is counted in), all done in" & Done_At'Image & " colony seconds; at"
+                   & " every second each of the six has a way to the fire (" & Img (No_Way) & " without) and none stands"
+                   & " in stone (" & Img (In_Wall) & "); every twenty seconds no spot by it is a pit (" & Img (Pits)
+                   & (if Corners then "); (a landing half made is saved in the corners' own check: here all of it is laid"
+                        & " between two looks)"
+                      else "); saved with some steps made and some not, it loads to the same bytes and the same steps still"
+                        & " to make")
+                   & "; at the end every column stands as planned, and nobody is left holding stone ("
+                   & Img (Pr.At_End) & " steps of two blocks or more left at a levelled stretch's end"
+                   & (if Corners then ")" else ": where two sides' paths cross)"));
+         end;
+         end loop;
+         Set_Corner_Whole (False);
+         Set_Corner_Steps (False);
+         --  **the square metre where two sides' paths cross laid as one** (2026-11-22, later;
+         --  Set_Corner_Whole): squarely and aslant on level ground with the land beyond one corner of
+         --  the floor a block higher and one block column of that corner's square metre three blocks
+         --  higher, the path laid first metre first and last metre first.  A quarter metre of each
+         --  side's at a time, as it was, the columns beside that one were level or not by whichever
+         --  side's metre reached them first; laid as one, it is the same square metre either way: all
+         --  of it at the floor's level, or all of it as the land lay.
+         for Try in 1 .. 2 loop
+            declare
+               Aslant : constant Boolean := Try = 2;
+               Way    : constant Way_Index := (if Aslant then 1 else 0);
+               Ex     : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 1.0);
+               Ey     : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 0.0);
+               W_Raw  : constant World_Access := new World;
+               D      : array (Boolean) of Natural := [others => 0];
+               Corners, Level_C, Land_C, Mixed_C, Unlaid : Natural := 0;
+               Hump_X, Hump_Y : Integer := 0;
+               Best   : Float := Float'Last;
+               Left_High : Natural := 99;
+               High_Top  : Material := Air;
+               procedure Corner_Land (Hump : Boolean; High : Boolean := False) is
+               begin
+                  Rising_Land (Rise_M => 100.0);
+                  for Bx in World'Range (1) loop
+                     for By in World'Range (2) loop
+                        declare
+                           Dx : constant Float := (Float (Bx) + 0.5) * 0.25 - 38.0;
+                           Dy : constant Float := (Float (By) + 0.5) * 0.25 - 32.25;
+                        begin
+                           if Dx * Ex + Dy * Ey >= 5.5 and then Dy * Ex - Dx * Ey >= 5.5
+                             and then Dx * Ex + Dy * Ey < 8.5 and then Dy * Ex - Dx * Ey < 8.5
+                           then
+                              --  (the meadow's top is the row under Ground_Row)
+                              for Z in -1 .. (if High then 7 else -1) loop
+                                 Set (Bx, By, Ground_Row + Z, Dirt);
+                              end loop;
+                              Set (Bx, By, Ground_Row + (if High then 8 else 0), Grass);
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+                  if Hump and then not High then
+                     Set (Hump_X, Hump_Y, Ground_Row, Dirt);
+                     Set (Hump_X, Hump_Y, Ground_Row + 1, Dirt);
+                     Set (Hump_X, Hump_Y, Ground_Row + 2, Grass);
+                  end if;
+                  Changed_World;
+               end Corner_Land;
+            begin
+               --  (which block column: the one of that corner's square metre nearest the square's middle)
+               Corner_Land (Hump => False);
+               Set_Corner_Whole (True);
+               Found (38.1, 32.2, Way);
+               Build_Camp_Now;
+               for Bx in World'Range (1) loop
+                  for By in World'Range (2) loop
+                     declare
+                        Dx : constant Float := (Float (Bx) + 0.5) * 0.25 - 38.0;
+                        Dy : constant Float := (Float (By) + 0.5) * 0.25 - 32.25;
+                     begin
+                        if Square_Crossing (Bx, By) > 0 and then Dx * Ex + Dy * Ey > 0.0 and then Dy * Ex - Dx * Ey > 0.0
+                          and then Dx * Dx + Dy * Dy < Best
+                        then
+                           Best := Dx * Dx + Dy * Dy;
+                           Hump_X := Bx;
+                           Hump_Y := By;
+                        end if;
+                     end;
+                  end loop;
+               end loop;
+               for Whole in Boolean loop
+                  for Back in Boolean loop
+                     Corner_Land (Hump => True);
+                     Set_Corner_Whole (Whole);
+                     Look (W_Raw);
+                     Found (38.1, 32.2, Way);
+                     Build_Camp_Now;
+                     Build_Paths_Now (Backward => Back);
+                     Run (1);
+                     Look (if Back then W_Back else W_On);
+                     if Whole and then not Back then
+                        Read_Plan;                             --  (for the floor's level)
+                        for Cn in 1 .. 4 loop
+                           declare
+                              N, At_Level, As_Land : Natural := 0;
+                           begin
+                              for Bx in World'Range (1) loop
+                                 for By in World'Range (2) loop
+                                    if Square_Crossing (Bx, By) = Cn then
+                                       N := N + 1;
+                                       if W_On (Bx, By) mod 64 /= Path_Pos then
+                                          Unlaid := Unlaid + 1;
+                                       end if;
+                                       if W_On (Bx, By) / 64 = Level then
+                                          At_Level := At_Level + 1;
+                                       end if;
+                                       if W_On (Bx, By) / 64 = W_Raw (Bx, By) / 64 then
+                                          As_Land := As_Land + 1;
+                                       end if;
+                                    end if;
+                                 end loop;
+                              end loop;
+                              if N > 0 then
+                                 Corners := Corners + 1;
+                                 if At_Level = N then
+                                    Level_C := Level_C + 1;
+                                 elsif As_Land = N then
+                                    Land_C := Land_C + 1;
+                                 else
+                                    Mixed_C := Mixed_C + 1;
+                                 end if;
+                              end if;
+                           end;
+                        end loop;
+                     end if;
+                  end loop;
+                  D (Whole) := Differ (W_On, W_Back);
+               end loop;
+               --  (and all the land beyond that corner two and a quarter metres over the floor's level, a
+               --  block out of the crossing's own reading and the last a stretch at the floor's level
+               --  finds: it is laid where it lies, as its stretch finds it, and its metre is not left to lay.
+               --  Passed over, the metre was counted again each second and somebody sent to it for ever:
+               --  found by tools/square_sites.sh, whose square saved half built ran on to another state.)
+               Corner_Land (Hump => True, High => True);
+               Set_Corner_Whole (True);
+               Found (38.1, 32.2, Way);
+               Build_Camp_Now;
+               Build_Paths_Now;
+               Run (3);
+               Left_High := Paths_To_Lay;
+               High_Top := Get (Hump_X, Hump_Y, Top_B (Hump_X, Hump_Y));
+               Check (R.Done and then Hump_X > 0 and then D (False) > 0 and then D (True) = 0 and then Corners = 4
+                      and then Mixed_C = 0 and then Unlaid = 0 and then Level_C = 3 and then Land_C = 1
+                      and then Left_High = 0 and then High_Top = Footpath,
+                      "the square metre where two sides' paths cross, " & (if Aslant then "aslant" else "squarely")
+                      & ", one block column of it three blocks over the floor's level and the rest one: laid a quarter"
+                      & " metre of each side's at a time (--no-corner-whole) the square stands otherwise at "
+                      & Img (D (False)) & " block columns with its path laid last metre first; **laid as one, at none** ("
+                      & Img (D (True)) & "); of its four corners " & Img (Level_C) & " lie all at the floor's level and "
+                      & Img (Land_C) & " all as the land lay, none partly (" & Img (Mixed_C) & "), every column of them"
+                      & " path (" & Img (Unlaid) & " not); with the land beyond that corner two and a quarter metres up"
+                      & " it is laid where it lies and no metre is left to lay (" & Img (Left_High) & ")");
+            end;
+         end loop;
+         --  **the steps run into and through the corners** (2026-11-22, later; Set_Corner_Steps, with
+         --  the corners laid as one): the square metre where two sides' paths cross is one step of a
+         --  flight, a landing, and a flight that comes to it along one side goes on along the other.
+         --  Squarely and aslant, on level ground with (1) the land beyond one corner of the floor
+         --  three blocks higher: both sides' levelled stretches run up to a corner that is not
+         --  level; (2) all the land beyond one side three blocks higher: the side before it runs
+         --  level up to the corner, the side beyond lies three blocks up all along.
+         for Try in 1 .. 4 loop
+            declare
+               Aslant : constant Boolean := Try mod 2 = 0;
+               Side_Up : constant Boolean := Try > 2;
+               Way    : constant Way_Index := (if Aslant then 1 else 0);
+               Ex     : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 1.0);
+               Ey     : constant Float := (if Aslant then 1.0 / Sqrt (2.0) else 0.0);
+               Pr     : array (Boolean) of Path_Read;
+               W0, W1 : array (Boolean) of Walls_View;
+               Pits   : array (Boolean) of Natural := [others => 99];
+               Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone : Natural := 99;
+               Landings, Part_Landings, Floor_Changed, D_Back, D_Bouts, N_Bouts, Left_B : Natural := 0;
+               Saved_Half, Saved_Ok : Boolean := False;
+               W_Fwd  : constant World_Access := new World;
+               procedure Corner_Land is
+               begin
+                  Rising_Land (Rise_M => 100.0);
+                  for Bx in World'Range (1) loop
+                     for By in World'Range (2) loop
+                        declare
+                           Dx : constant Float := (Float (Bx) + 0.5) * 0.25 - 38.0;
+                           Dy : constant Float := (Float (By) + 0.5) * 0.25 - 32.25;
+                           U  : constant Float := Dx * Ex + Dy * Ey;
+                           V  : constant Float := Dy * Ex - Dx * Ey;
+                        begin
+                           if V >= 5.5 and then V < 12.0 and then abs U < 12.0 and then (Side_Up or else U >= 5.5) then
+                              --  (the meadow's top is the row under Ground_Row)
+                              for Z in Ground_Row - 1 .. Ground_Row + 1 loop
+                                 Set (Bx, By, Z, Dirt);
+                              end loop;
+                              Set (Bx, By, Ground_Row + 2, Grass);
+                           end if;
+                        end;
+                     end loop;
+                  end loop;
+                  Changed_World;
+                  Set_Path_Steps (True);
+                  Set_Corner_Whole (True);
+               end Corner_Land;
+            begin
+               for Steps in Boolean loop
+                  Corner_Land;
+                  Set_Corner_Steps (Steps);
+                  Found (38.1, 32.2, Way);
+                  Build_Camp_Now;
+                  Build_Paths_Now;
+                  W0 (Steps) := Square_Walls_State;
+                  Read_Plan;
+                  Build_Walls_Now;
+                  Run (2);
+                  W1 (Steps) := Square_Walls_State;
+                  Pr (Steps) := Read_Path;
+                  Pits (Steps) := Pits_By (38.0, 32.25);
+                  if Steps then
+                     Compare (38.0, 32.25, Aslant, Off, Unlaid, Stray, Floor_Off, Floor_Stone, Strip_Stone);
+                     Look (W_On);
+                     for Cn in 1 .. 4 loop
+                        declare
+                           N, Stone_N : Natural := 0;
+                           Lo : Integer := Integer'Last;
+                           Hi : Integer := Integer'First;
+                        begin
+                           for Bx in World'Range (1) loop
+                              for By in World'Range (2) loop
+                                 if Square_Crossing (Bx, By) = Cn then
+                                    N := N + 1;
+                                    Lo := Integer'Min (Lo, W_On (Bx, By) / 64);
+                                    Hi := Integer'Max (Hi, W_On (Bx, By) / 64);
+                                    if W_On (Bx, By) mod 64 = Stone_Pos then
+                                       Stone_N := Stone_N + 1;
+                                    end if;
+                                 end if;
+                              end loop;
+                           end loop;
+                           if Stone_N > 0 and then Stone_N = N and then Lo = Hi then
+                              Landings := Landings + 1;
+                           elsif Stone_N > 0 then
+                              Part_Landings := Part_Landings + 1;
+                           end if;
+                        end;
+                     end loop;
+                  else
+                     Look (W_Off);
+                  end if;
+               end loop;
+               for Bx in World'Range (1) loop
+                  for By in World'Range (2) loop
+                     if W_On (Bx, By) /= W_Off (Bx, By)
+                       and then Zone_On ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25) = 1
+                     then
+                        Floor_Changed := Floor_Changed + 1;
+                     end if;
+                  end loop;
+               end loop;
+               --  (laid last metre first, and a stone at a time: the same square)
+               Corner_Land;
+               Set_Corner_Steps (True);
+               Found (38.1, 32.2, Way);
+               Build_Camp_Now;
+               Build_Paths_Now (Backward => True);
+               Build_Walls_Now;
+               Run (2);
+               Look (W_Back);
+               D_Back := Differ (W_On, W_Back);
+               Corner_Land;
+               Set_Corner_Steps (True);
+               Found (38.1, 32.2, Way);
+               Build_Camp_Now;
+               Build_Paths_Now;
+               while N_Bouts < 20_000 and then (Square_Walls_State.Stone_Left > 0 or else Square_Walls_State.Dig_Left > 0) loop
+                  Build_Walls_Now (Most => 1);
+                  N_Bouts := N_Bouts + 1;
+                  --  (saved with a landing half made: it loads to the same bytes and the same steps still to make)
+                  if not Saved_Half and then Square_Walls_State.Path_Steps > 0
+                    and then (for some Bx in World'Range (1) =>
+                                (for some By in World'Range (2) =>
+                                   Square_Crossing (Bx, By) > 0 and then Get (Bx, By, Top_B (Bx, By)) = Fieldstone))
+                    and then (for some Bx in World'Range (1) =>
+                                (for some By in World'Range (2) =>
+                                   Square_Crossing (Bx, By) > 0 and then Get (Bx, By, Top_B (Bx, By)) = Footpath
+                                   and then Top_B (Bx, By) /= Level))
+                  then
+                     Saved_Half := True;
+                     declare
+                        Data : constant Bytes := Save;
+                        Left : constant Natural := Square_Walls_State.Path_Steps;
+                        Ok   : Boolean;
+                     begin
+                        Load (Data, Ok);
+                        Saved_Ok := Ok and then Save = Data and then Square_Walls_State.Path_Steps = Left;
+                     end;
+                  end if;
+               end loop;
+               Run (2);
+               Left_B := Square_Walls_State.Stone_Left + Square_Walls_State.Dig_Left;
+               Look (W_Fwd);
+               D_Bouts := Differ (W_On, W_Fwd);
+               --  (beyond one corner: both levelled stretches end at the corner, two jumps at a levelled
+               --  stretch's end, each said to be at a crossing; beyond one side: the side before it steps
+               --  up a block beside the strip's end and stands two blocks under the corner)
+               Check (R.Done and then Pr (False).Jumps >= 1 and then Pr (True).Jumps = 0 and then Pr (True).At_End = 0
+                      and then (Side_Up or else (Pr (False).At_End >= 2 and then W0 (False).Steps_Barred (At_Crossing) >= 2))
+                      and then Landings >= 1 and then Part_Landings = 0 and then Pr (True).Stone_Part = 0
+                      and then Pr (True).Stone_Sl = W0 (True).Step_Slices and then W0 (True).Path_Steps > W0 (False).Path_Steps
+                      and then W1 (True).Stone_Left = 0 and then W1 (True).Dig_Left = 0 and then W1 (True).Path_Steps = 0
+                      and then W0 (True).Steps_Barred (At_Crossing) = 0,
+                      (if Aslant then "aslant" else "squarely") & ", "
+                      & (if Side_Up then "all the land beyond one side" else "the land beyond one corner of the floor")
+                      & " three blocks higher: with no step where two sides' paths cross (--no-corner-steps) the path"
+                      & " stands two blocks or more off the next quarter metre at " & Img (Pr (False).Jumps) & " places ("
+                      & Img (Pr (False).At_End) & " of them a levelled stretch's end, "
+                      & Img (W0 (False).Steps_Barred (At_Crossing)) & " said to be at a crossing); **with the steps run"
+                      & " into the corners, at none** (" & Img (Pr (True).Jumps) & "): " & Img (Landings)
+                      & " of the corners are landings, every column of stone at one row, none partly ("
+                      & Img (Part_Landings) & "); " & Img (W0 (True).Path_Steps) & " treads planned for "
+                      & Img (W0 (False).Path_Steps) & ", all laid");
+               Check (Off = 0 and then Unlaid = 0 and then Stray = 0 and then Floor_Off = 0 and then Floor_Stone = 0
+                      and then Pits (True) = 0 and then Pits (False) = 0 and then Floor_Changed = 0
+                      and then W0 (True).Stairs = W0 (False).Stairs and then W0 (True).Stair_At = W0 (False).Stair_At
+                      and then W1 (True).Stair_At = W0 (False).Stair_At
+                      and then D_Back = 0 and then D_Bouts = 0 and then Left_B = 0 and then N_Bouts > 10
+                      and then Saved_Half and then Saved_Ok,
+                      "built as planned (" & Img (Off) & " off, " & Img (Unlaid) & " rows unlaid, " & Img (Stray)
+                      & " astray), no pit; the stairs stand where they stood (" & Img (W0 (True).Stairs) & " of them), no"
+                      & " column of the floor differs (" & Img (Floor_Changed) & "); **its path laid last metre first, the"
+                      & " square stands the same** (" & Img (D_Back) & " block columns differ), and laid a stone at a time ("
+                      & Img (N_Bouts) & " bouts, " & Img (D_Bouts) & " differ), saved and loaded with a landing half made"
+                      & " (the same bytes, the same steps still to make)");
+            end;
+         end loop;
+         Set_Corner_Steps (False);
+         Set_Corner_Whole (False);
+      end;
+      Set_Path_Steps (False);
+   end;
+
+   --  a metre of path under a bough (found 2026-11-21 on the path round a square of eleven metres on
+   --  sloping ground: a tree beside it, not felled for it, a bough of it over one metre of the path;
+   --  whoever was to lay that metre was sent to the bough, found no way up, and the metre was never
+   --  laid; the square's wall, which waits for its path, had a gap a metre wide there)
+   Put_Line ("a metre of path under a bough that can be stood on:");
+   for On in Boolean loop
+      Set_Up (With_Stockpile => False, With_Labour => True, With_Bushes => False);
+      Set_Metre_Ground (On);
+      declare
+         Laid : Natural;
+         Left : Natural;
+         Up   : Float;
+      begin
+         Fill (29.0, 39.5, 30.5, 41.0, Ground_Row + 11, Ground_Row + 11, Log);       --  a bough 2.75 m over a metre of it
+         --  and beside the path a bank two metres high, a stair of the land up its far side: nearer the
+         --  bough's top than the ground under it is (a way that ends there ends a metre and a half off)
+         Fill (27.0, 41.5, 32.0, 44.0, Ground_Row, Ground_Row + 7, Dirt);
+         for K in 0 .. 6 loop
+            Fill (27.0, 44.0 + 0.5 * Float (K), 32.0, 44.5 + 0.5 * Float (K), Ground_Row, Ground_Row + 6 - K, Dirt);
+         end loop;
+         Changed_World;
+         Lay_Path ((24.0, 40.0, Ground_M), (36.0, 40.0, Ground_M), Laid);
+         Run (1);
+         Up := Castle.Nav.Surface_Z (29.6, 40.1) - Ground_M;
+         for S in 1 .. 900 loop
+            Run (1);
+            exit when Paths_To_Lay = 0;
+         end loop;
+         Left := Paths_To_Lay;
+         if On then
+            Check (Laid > 0 and then Left = 0
+                   and then Count_In (B (24.0), B (39.5), B (36.0) - 1, B (40.5) - 1, Ground_Row - 1, Ground_Row - 1, Footpath) = 192,
+                   "every metre of a path that passes under a bough a serf could stand on is laid: the one under"
+                   & " it is gone to on the ground (" & Img (Left) & " m left)");
+         else
+            Check (Left > 0 and then Get (B (29.6), B (40.1), Ground_Row - 1) = Grass,
+                   "(with Set_Metre_Ground off the metre under it is never laid, as it was: " & Img (Left)
+                   & " m left after fifteen minutes, its ground still grass; the bough's top " & Img (Up, 2) & " m up)");
+         end if;
+      end;
+      Set_Metre_Ground (True);
+   end loop;
+
+   --  a path's end under a bough four and three quarter metres up (found 2026-11-22 under the paths of
+   --  stockyards put down whole: the line's end was given the bough's height, and the metres by that
+   --  end looked for their ground up there and found none: never counted, never laid)
+   for On in Boolean loop
+      Set_Up (With_Stockpile => False, With_Labour => True, With_Bushes => False);
+      Set_Line_Ground (On);
+      declare
+         Laid : Natural;
+         A, C, C2 : Vec3;
+         Paved : Natural;
+      begin
+         Fill (35.0, 39.0, 37.0, 41.0, Ground_Row + 19, Ground_Row + 19, Log);
+         Changed_World;
+         Run (1);
+         A := Path_Line_Start ((24.0, 40.0, Ground_M));
+         C := Path_Line_End (A, (36.0, 40.0, Ground_M));
+         C2 := Path_Line_End (A, C);
+         Lay_Path (A, C, Laid);
+         for S in 1 .. 900 loop
+            Run (1);
+            exit when Paths_To_Lay = 0;
+         end loop;
+         Paved := Count_In (B (24.0), B (39.5), B (36.0) - 1, B (40.5) - 1, Ground_Row - 1, Ground_Row - 1, Footpath);
+         if On then
+            Check (abs (C.Z - Ground_M) < 0.01 and then abs (A.Z - Ground_M) < 0.01 and then Paved = 192
+                   and then abs (C2.X - C.X) < 0.001 and then abs (C2.Y - C.Y) < 0.001 and then abs (C2.Z - C.Z) < 0.001,
+                   "a path's line that ends under a bough 4.75 m up ends at the ground's height (" & Img (C.Z - Ground_M, 2)
+                   & " m over it), every block column of its twelve metres is laid (" & Img (Paved) & " of 192), and the"
+                   & " end given back to the line is the end it was");
+         else
+            Check (C.Z - Ground_M > 4.0 and then Paved < 192 and then Paths_To_Lay = 0,
+                   "(with Set_Line_Ground off the end is the bough's top, " & Img (C.Z - Ground_M, 2) & " m up, as it"
+                   & " was: " & Img (192 - Paved) & " block columns by that end are never laid and none of them is"
+                   & " counted as left)");
+         end if;
+      end;
+      Set_Line_Ground (True);
+   end loop;
+
+   --  the stockyard put down whole (John, 2026-11-21: "For the stockyard, lets expand the zones to 20x20"; his
+   --  design of 2026-11-20 for zones put down with their paths)
+   Put_Line ("the stockyard put down whole, twenty metres square:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      function Has (S, Part : String) return Boolean is (Ada.Strings.Fixed.Index (S, Part) > 0);
+      function Same (A, C : Placement) return Boolean is
+        (A.Ok = C.Ok and then A.Way = C.Way and then A.Along_B = C.Along_B and then Flat (A.From, C.From) < 0.001
+         and then Flat (A.To, C.To) < 0.001 and then Flat (A.Front, C.Front) < 0.001);
+      function Closed_N (Of_Zone : Natural) return Natural is
+         N : Natural := 0;
+      begin
+         for K in 1 .. Cell_Count loop
+            if Cell_At (K).Closed and then Zone_Of_Cell (K) = Of_Zone then
+               N := N + 1;
+            end if;
+         end loop;
+         return N;
+      end Closed_N;
+      --  The meadow, the stake at 20 20, the path along y = 17.5 from 20.5 to 40; with Asked, the second
+      --  morning come and the storehouse asked for, so that a stockyard put down has its storehouse begun
+      --  at once and how it lies can be read.
+      procedure Fresh (Asked : Boolean := True) is
+      begin
+         Set_Up (With_Stockpile => False, With_Bushes => False);
+         Set_Box_Place (True);
+         Set_Yard_Box (True);
+         Set_Storehouse (True);
+         if Asked then
+            Run (1);
+            Hours := 17.0 * 24.0 + 7.5;
+            Run (2);
+         end if;
+      end Fresh;
+   begin
+      --  held on open ground, every way it can be turned, and off the whole metre by each quarter
+      declare
+         Whole, Lies, Own, Back, Quiet : Natural := 0;
+         Tried : Natural := 0;
+         Front_Lo : Natural := Natural'Last;
+         Front_Hi : Natural := 0;
+      begin
+         for W in Way_Index loop
+            for Off in 0 .. 3 loop
+               Fresh;
+               declare
+                  Mid  : constant Vec3 := (40.1 + 0.25 * Float (Off), 42.3 + 0.25 * Float (Off), Ground_M);
+                  Before : constant Bytes := Save;
+                  P    : constant Placement := Box_At (Stockyard_Box, Mid, W);
+                  Plan : constant Box_Plan := Plan_Box (Stockyard_Box, Mid, W);
+                  Paths_0 : constant Natural := Path_Count;
+                  Cells : Natural;
+                  C     : Box_Count;
+                  L     : Store_Lie;
+                  Z     : Natural;
+               begin
+                  --  (holding it, with its storehouse tried on the planned ground, changes nothing)
+                  if Plan.Lot.Ok and then Save = Before then
+                     Quiet := Quiet + 1;
+                  end if;
+                  Place_Box (Stockyard_Box, Mid, W, Cells);
+                  Z := Stockyard;
+                  Tried := Tried + 1;
+                  if Z > 0 then
+                     C := Box_Counts (Z);
+                     L := Storehouse_Lie;
+                  end if;
+                  if P.Ok and then P.Snap = Free and then Plan.Lot.Ok and then Plan.Lot.Cells = 400 and then Cells = 400
+                    and then Z = Zone_Count and then Z > 0 and then Zone_At (Z).Placed and then Zone_At (Z).Yard
+                    and then Zone_At (Z).Way = W and then Zone_At (Z).Along_B = (if W mod 2 = 0 then 80 else 57)
+                    and then Flat (Zone_At (Z).From, P.Front) < 0.001 and then Path_Count = Paths_0 + 1
+                    and then Closed_N (Z) = 400 and then C.Box > 6_390 and then C.Its_Own = C.Box
+                  then
+                     Whole := Whole + 1;
+                  end if;
+                  if Same (Box_At (Stockyard_Box, Box_Middle (P), W), P) and then Flat (Box_Middle (P), Mid) < 0.2 then
+                     Back := Back + 1;
+                  end if;
+                  if Storehouse > 0 and then L.W = 40 and then L.D = 20
+                    and then L.Behind = 80 - Castle.Buildings.Store_Yard_B - 20 and then L.Left + L.Right = 40
+                    and then abs (L.Left - L.Right) <= 2
+                  then
+                     Lies := Lies + 1;
+                     Front_Lo := Natural'Min (Front_Lo, L.Front_Least);
+                     Front_Hi := Natural'Max (Front_Hi, L.Front_Most);
+                  end if;
+                  if L.Own_Front then
+                     Own := Own + 1;
+                  end if;
+               end;
+            end loop;
+         end loop;
+         Check (Tried = 32 and then Whole = 32 and then Back = 32 and then Lies = 32 and then Own = 32 and then Quiet = 32
+                and then Front_Lo = Castle.Buildings.Store_Yard_B and then Front_Hi <= Castle.Buildings.Store_Yard_B + 1,
+                "held on open ground at each of the eight ways and with its middle on each quarter of a metre: four"
+                & " hundred places every time (" & Img (Whole) & " of 32), all closed, every block column of its box"
+                & " its ground, its path laid with it; held by its own middle it lies as it lay (" & Img (Back)
+                & "); its storehouse stands in the middle of its front, " & Img (Float (Front_Lo) * 0.25, 2) & " to "
+                & Img (Float (Front_Hi) * 0.25, 2) & " m from its path's edge, with "
+                & Img (Float (80 - Castle.Buildings.Store_Yard_B - 20) * 0.25, 2) & " m of yard behind it ("
+                & Img (Lies) & "), and fronts its own path (" & Img (Own) & "); held and not put down it changes"
+                & " nothing of the colony (the same bytes saved, " & Img (Quiet) & ")");
+      end;
+
+      --  its storehouse raised on the spot, at each way: the places inside it are all fitted out (found
+      --  2026-11-21, after the box was committed: turned east or north, a column or a row of them was
+      --  judged to lie under the wall and kept clear)
+      declare
+         Right, Tried : Natural := 0;
+         Least : Natural := Natural'Last;
+      begin
+         for W in Way_Index loop
+            Fresh;
+            declare
+               Cells : Natural;
+               Floor_N, Barrel_N, Shelf_N : Natural := 0;
+            begin
+               Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), W, Cells);
+               Build_Homes_Now;
+               Tried := Tried + 1;
+               for K in 1 .. Cell_Count loop
+                  if Zone_Of_Cell (K) = Stockyard and then not Cell_At (K).Closed then
+                     case Cell_At (K).Fit is
+                        when Floor => Floor_N := Floor_N + 1;
+                        when Meat_Barrel | Water_Barrel => Barrel_N := Barrel_N + 1;
+                        when Shelf => Shelf_N := Shelf_N + 1;
+                        when others => null;
+                     end case;
+                  end if;
+               end loop;
+               Least := Natural'Min (Least, Floor_N);
+               if Cells = 400 and then Storehouse > 0 and then House_At (Storehouse).Phase = Standing
+                 and then Floor_N = 18 and then Barrel_N = 8 and then Shelf_N = 2 * Shelf_Places
+               then
+                  Right := Right + 1;
+               end if;
+            end;
+         end loop;
+         Check (Tried = 8 and then Right = 8,
+                "its storehouse raised on the spot, at each of the eight ways: eighteen places on its floor, eight"
+                & " barrels' and six shelves' (" & Img (Right) & " of 8; the fewest on a floor " & Img (Least) & ")");
+      end;
+
+      --  one, placed once: the plan says so too
+      Fresh;
+      Check (Storehouse = 0 and then Has (Storehouse_Note, "wants a stockyard, 20 m by 20 m with its path")
+             and then Storehouse_Note'Length <= Castle.Text.Max_Line,
+             "asked for with none there, the note says what to put down: '" & Storehouse_Note & "'");
+      declare
+         Cells, More : Natural;
+         Plan : Box_Plan;
+      begin
+         Place_Box (Stockyard_Box, (40.0, 42.0, Ground_M), 0, Cells);
+         Plan := Plan_Box (Stockyard_Box, (12.0, 50.0, Ground_M), 0);
+         Check (Cells = 400 and then not Plan.Lot.Ok and then Has (Box_Refusal, "placed once"),
+                "a second is refused in the plan already: '" & Box_Refusal & "'");
+         Place_Box (Stockyard_Box, (12.0, 50.0, Ground_M), 0, More);
+         Check (More = 0 and then Has (Box_Refusal, "placed once") and then Stockyard = Zone_Count,
+                "and by the click");
+      end;
+
+      --  its front is the side its own path lies along, whatever other path is as near another side
+      for Case_N in 1 .. 2 loop
+         Fresh;
+         declare
+            Laid, Cells : Natural;
+            Mid : constant Vec3 := (if Case_N = 1 then (30.25, 28.0, Ground_M) else (29.5, 28.2, Ground_M));
+            W   : constant Way_Index := (if Case_N = 1 then 4 else 2);
+            P   : Placement;
+            Plan : Box_Plan;
+            L   : Store_Lie;
+            V   : House_View;
+            Front_Mid : Vec3;
+         begin
+            if Case_N = 2 then
+               --  (the path lengthened to 40 17.5 ends there; a box turned north with its front begun at that end
+               --  has the old path along its south side as near as its own is along its east)
+               null;
+            end if;
+            Lay_Path ((20.5, 17.5, Ground_M), (40.0, 17.5, Ground_M), Laid);
+            P := Box_At (Stockyard_Box, Mid, W);
+            Plan := Plan_Box (Stockyard_Box, Mid, W);
+            Place_Box (Stockyard_Box, Mid, W, Cells);
+            L := Storehouse_Lie;
+            if Storehouse > 0 then
+               V := House_At (Storehouse);
+               Front_Mid := (V.Corner (1) + V.Corner (2)) * 0.5;
+            end if;
+            if Case_N = 1 then
+               --  (turned west, its path along its north side, laid with it; the path that was there runs
+               --  flush along its back)
+               Check (P.Ok and then P.Snap = Free and then Plan.Lot.Ok and then Cells = 400 and then Storehouse > 0
+                      and then L.Own_Front and then L.Front_Least = Castle.Buildings.Store_Yard_B
+                      and then abs (P.From.Y - 38.5) < 0.01 and then abs (Front_Mid.Y - (38.0 - 4.5)) < 0.3,
+                      "with another path flush along its back, as near its back's middle as its own is its front's:"
+                      & " its storehouse fronts its own path (its front wall "
+                      & (if Storehouse > 0 then Img (38.0 - Front_Mid.Y, 2) else "?") & " m from that path's edge)");
+            else
+               Check (P.Ok and then P.Snap = At_End and then Plan.Lot.Ok and then Cells = 400 and then Storehouse > 0
+                      and then L.Own_Front and then L.Front_Least = Castle.Buildings.Store_Yard_B
+                      and then abs (P.From.X - 40.0) < 0.01 and then abs (Front_Mid.X - (39.5 - 4.5)) < 0.3,
+                      "turned north with its front begun at the end of the path that is there, that path along its"
+                      & " south side: its storehouse fronts its own path, east of it (its front wall "
+                      & (if Storehouse > 0 then Img (39.5 - Front_Mid.X, 2) else "?") & " m from that path's edge)");
+            end if;
+         end;
+      end loop;
+
+      --  where no storehouse could stand nothing is laid: on ground that rises a block a metre the lot can
+      --  all be taken (a ledge a block high every metre), and it falls five metres from end to end
+      Fresh (Asked => False);
+      declare
+         Cells : Natural;
+         Plan  : Box_Plan;
+         Paths_0, Zones_0 : Natural;
+         Before : Bytes := Save;
+      begin
+         for K in 1 .. 33 loop
+            Fill (30.0 + Float (K), 20.0, 64.0, 64.0, Ground_Row + K - 2, Ground_Row + K - 2, Dirt);
+            Fill (30.0 + Float (K), 20.0, 64.0, 64.0, Ground_Row + K - 1, Ground_Row + K - 1, Grass);
+         end loop;
+         Changed_World;
+         Before := Save;
+         Paths_0 := Path_Count;
+         Zones_0 := Zone_Count;
+         Plan := Plan_Box (Stockyard_Box, (44.0, 42.0, Ground_M + 3.0), 0);
+         Check (Plan.Where.Ok and then not Plan.Lot.Ok and then Has (Box_Refusal, "will not take the storehouse"),
+                "on ground that rises five metres under it the plan refuses it: '" & Box_Refusal & "'");
+         Place_Box (Stockyard_Box, (44.0, 42.0, Ground_M + 3.0), 0, Cells);
+         Check (Cells = 0 and then Path_Count = Paths_0 and then Zone_Count = Zones_0 and then Stockyard = 0
+                and then Save = Before,
+                "and the click lays no path for it and takes nothing (the colony is as it was, to the byte)");
+      end;
+      Fresh (Asked => False);
+      declare
+         Cells : Natural;
+         Plan  : Box_Plan;
+      begin
+         Fill (38.0, 40.0, 41.0, 43.0, Ground_Row - 1, Ground_Row - 1, Water);
+         Changed_World;
+         Plan := Plan_Box (Stockyard_Box, (40.0, 42.0, Ground_M), 0);
+         Place_Box (Stockyard_Box, (40.0, 42.0, Ground_M), 0, Cells);
+         Check (not Plan.Lot.Ok and then Cells = 0 and then Has (Box_Refusal, "cannot all be taken") and then Stockyard = 0,
+                "with a pond in it: '" & Box_Refusal & "' (a stockyard is all of its lot)");
+      end;
+
+      --  over the lord's cart, where it stands on the first morning: refused by name, in the plan and by the
+      --  click; with the cart gone the same place is taken
+      Set_Up (With_Stockpile => False, With_Bushes => False, With_Curing => True);
+      Set_Box_Place (True);
+      Set_Yard_Box (True);
+      Set_Storehouse (True);
+      Run (1);
+      declare
+         C : constant Cart_View := Cart;
+         Mid : constant Vec3 := (C.At_P.X + 8.0, C.At_P.Y + 8.0, Ground_M);
+         Plan : Box_Plan;
+         Cells, After : Natural;
+         Paths_0 : constant Natural := Path_Count;
+         Before : constant Bytes := Save;
+         Why : Castle.Text.Line;
+      begin
+         Plan := Plan_Box (Stockyard_Box, Mid, 2);
+         Why := Castle.Text.To_Line (Box_Refusal);
+         Place_Box (Stockyard_Box, Mid, 2, Cells);
+         Check (C.Here and then not C.Towed and then Plan.Where.Ok and then not Plan.Lot.Ok
+                and then Has (Castle.Text.Str (Why), "cart") and then Cells = 0 and then Has (Box_Refusal, "cart")
+                and then Path_Count = Paths_0 and then Stockyard = 0 and then Save = Before,
+                "held over the lord's cart where it stands: '" & Castle.Text.Str (Why)
+                & "', in the plan and by the click, nothing laid");
+         Take_Cart_Away;
+         Place_Box (Stockyard_Box, Mid, 2, After);
+         Check (After = 400 and then Stockyard > 0,
+                "with the cart gone the same place takes it (" & Img (After) & " places)");
+      end;
+
+      --  saved and loaded; the player's order; the ground's menu
+      Fresh;
+      declare
+         M : Menu;
+         Ok : Boolean;
+         L0 : Store_Lie;
+      begin
+         M := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (40.0, 42.0, Ground_M)));
+         Check ((for some K in 1 .. M.N => M.Items (K).Todo.What = Place_Stockyard and then M.Items (K).Two_Point)
+                and then (for all K in 1 .. M.N => M.Items (K).Todo.What /= Zone_Stockyard),
+                "the ground's menu offers the stockyard as a box to take in hand (and not from two corners)");
+         Perform ((What => Place_Stockyard, By => The_Player, Pile_At => (40.0, 42.0, Ground_M), Pile_Way => 3), R);
+         L0 := Storehouse_Lie;
+         Check (R.Done and then R.Count = 400 and then Stockyard > 0 and then Zone_At (Stockyard).Way = 3
+                and then Storehouse > 0 and then L0.Own_Front,
+                "by the player's order, turned north-west: four hundred places, its storehouse begun at once (it was"
+                & " asked for already)");
+         M := Menu_For (The_Player, (Kind => The_Ground, Index => 0, Point => (12.0, 50.0, Ground_M)));
+         Check ((for all K in 1 .. M.N => M.Items (K).Todo.What not in Place_Stockyard | Zone_Stockyard),
+                "after that the ground offers no second one");
+         Perform ((What => Place_Stockyard, By => The_Player, Pile_At => (12.0, 50.0, Ground_M), Pile_Way => 0), R);
+         Check (not R.Done and then Has (Why_Not ((What => Place_Stockyard, By => The_Player,
+                                                   Pile_At => (12.0, 50.0, Ground_M), Pile_Way => 0), R), "placed once"),
+                "and an order for one is refused with its reason");
+         declare
+            Data : constant Bytes := Save;
+            Z    : constant Natural := Stockyard;
+            V0   : constant Zone_View := Zone_At (Z);
+         begin
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Stockyard = Z and then Zone_At (Z).Placed and then Zone_At (Z).Yard
+                   and then Zone_At (Z).Way = V0.Way and then Zone_At (Z).Along_B = V0.Along_B
+                   and then Flat (Zone_At (Z).From, V0.From) < 0.001 and then Storehouse_Lie = L0,
+                   "saved and loaded to the same bytes: the zone keeps its frame, its storehouse lies as it lay");
+         end;
+      end;
+      Set_Yard_Box (False);
+      Set_Storehouse (False);
+   end;
+
+   --  the storehouse's size and place (John, 2026-11-21: "bring the storehouse forward 3m towards the path so
+   --  that the fenced area becomes 3m deeper, add 2m to the width of the storehouse, so that it is now 8x12")
+   Put_Line ("the storehouse eight metres by twelve, a metre and a half from its path:");
+   declare
+      function Has (S, Part : String) return Boolean is (Ada.Strings.Fixed.Index (S, Part) > 0);
+      type Count_Of is array (Fitting) of Natural;
+      function Places (Closed : Boolean) return Count_Of is
+         N : Count_Of := [others => 0];
+      begin
+         for K in 1 .. Cell_Count loop
+            if Cell_At (K).Closed = Closed and then Zone_Of_Cell (K) = Stockyard then
+               N (Cell_At (K).Fit) := N (Cell_At (K).Fit) + 1;
+            end if;
+         end loop;
+         return N;
+      end Places;
+      --  The meadow, the stake at 20 20, the path along y = 17.5 from 20.5 to 40, the second morning
+      --  come: a stockyard put down has its storehouse begun at once, of the size said.
+      procedure Fresh (Long_B, Deep_B, Staging_B : Positive; Curing : Boolean := False) is
+      begin
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Curing => Curing);
+         Set_Box_Place (True);
+         Set_Yard_Box (True);
+         Set_Storehouse (True);
+         Set_Store_Size (Long_B, Deep_B, Staging_B);
+         Run (1);
+         Hours := 17.0 * 24.0 + 7.5;
+         Run (2);
+      end Fresh;
+   begin
+      --  at each way: its walls, its staging, its yard behind, its own blocks all on its own ground
+      declare
+         Sq, As, Own, Whole, Fronts : Natural := 0;
+         Stage_Sq, Stage_As : Natural := 0;
+      begin
+         for W in Way_Index loop
+            Fresh (48, 32, 6);
+            declare
+               Cells : Natural;
+               L : Store_Lie;
+            begin
+               Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), W, Cells);
+               L := Storehouse_Lie;
+               if Cells = 400 and then Storehouse > 0 and then L.W = 48 and then L.D = 32 then
+                  Whole := Whole + 1;
+               end if;
+               if L.Own_Front then
+                  Fronts := Fronts + 1;
+               end if;
+               if L.Own_Out = 0 and then L.Own_On_Path = 0 then
+                  Own := Own + 1;
+               end if;
+               if W mod 2 = 0 then
+                  Stage_Sq := Natural'Max (Stage_Sq, L.Front_Least);
+                  if L.Front_Least = 6 and then L.Front_Most = 6 and then L.Behind = 80 - 6 - 32 and then L.Left + L.Right = 32 then
+                     Sq := Sq + 1;
+                  end if;
+               else
+                  Stage_As := Natural'Max (Stage_As, L.Front_Least);
+                  if L.Front_Least = 14 and then L.Front_Most <= 15 and then L.Behind = 80 - 14 - 32 and then L.Left + L.Right = 32 then
+                     As := As + 1;
+                  end if;
+               end if;
+            end;
+         end loop;
+         Check (Whole = 8 and then Fronts = 8 and then Own = 8 and then Sq = 4 and then As = 4,
+                "on a stockyard put down whole, at each of the eight ways: walls 12 m along its front and 8 m back ("
+                & Img (Whole) & " of 8), fronting its own path; squarely " & Img (Float (Stage_Sq) * 0.25, 2)
+                & " m from its path's edge with 10.50 m of yard behind it (" & Img (Sq) & " of 4); beside a path at"
+                & " 45 degrees " & Img (Float (Stage_As) * 0.25, 2) & " m from it with 8.50 m behind (" & Img (As)
+                & " of 4): no nearer, so that every block column its own blocks stand in is its stockyard's ("
+                & Img (Own) & " of 8)");
+      end;
+      --  raised on the spot at each way: its places inside, seven rows of eleven, fitted out
+      declare
+         Right : Natural := 0;
+         Least : Natural := Natural'Last;
+      begin
+         for W in Way_Index loop
+            Fresh (48, 32, 6);
+            declare
+               Cells : Natural;
+               N : Count_Of;
+            begin
+               Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), W, Cells);
+               Build_Homes_Now;
+               N := Places (Closed => False);
+               Least := Natural'Min (Least, N (Floor));
+               if Cells = 400 and then Storehouse > 0 and then House_At (Storehouse).Phase = Standing
+                 and then N (Floor) = 57 and then N (Meat_Barrel) + N (Water_Barrel) = 8
+                 and then N (Water_Barrel) = Water_Barrels and then N (Shelf) = 2 * Shelf_Places
+               then
+                  Right := Right + 1;
+               end if;
+            end;
+         end loop;
+         Check (Right = 8,
+                "raised on the spot at each of the eight ways: fifty-seven places on its floor (seven rows of eleven,"
+                & " less the three its door opens onto at each end, eight barrels' and six shelves'; " & Img (Right)
+                & " of 8, the fewest on a floor " & Img (Least) & ")");
+      end;
+
+      --  the storehouse of before, asked 3 m nearer, beside a path at 45 degrees: 3.5 m all the same
+      Fresh (40, 20, 6);
+      declare
+         Cells : Natural;
+         L : Store_Lie;
+      begin
+         Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), 1, Cells);
+         L := Storehouse_Lie;
+         Check (Cells = 400 and then L.W = 40 and then L.D = 20 and then L.Front_Least = 14 and then L.Own_Out = 0,
+                "the storehouse of before, 10 m by 5 m, asked a metre and a half from a path at 45 degrees: "
+                & Img (Float (L.Front_Least) * 0.25, 2) & " m from it, its own blocks on its own ground ("
+                & Img (L.Own_Out) & " columns off it; at a metre and a half 28 stood off it, 25 of them on the path)");
+      end;
+      Fresh (40, 20, 18);
+      declare
+         Cells : Natural;
+         L : Store_Lie;
+      begin
+         Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), 1, Cells);
+         L := Storehouse_Lie;
+         Check (Cells = 400 and then L.W = 40 and then L.D = 20 and then L.Front_Least = 18 and then L.Own_Out = 0,
+                "and with 4.5 m asked it stands there, as it did (" & Img (Float (L.Front_Least) * 0.25, 2) & " m)");
+      end;
+
+      --  a storehouse keeps what it was begun with
+      Fresh (48, 32, 6);
+      declare
+         Cells : Natural;
+         Ok : Boolean;
+         L0 : Store_Lie;
+      begin
+         Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), 0, Cells);
+         L0 := Storehouse_Lie;
+         Set_Store_Size (40, 20, 18);
+         declare
+            Data : constant Bytes := Save;
+         begin
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Natural (Data (0)) = 46 and then Storehouse_Lie = L0
+                   and then L0.W = 48 and then L0.D = 32 and then L0.Front_Least = 6,
+                   "begun 12 m by 8 m, then the size said otherwise: saved (as 44) and loaded to the same bytes, it"
+                   & " keeps its walls and its place");
+         end;
+      end;
+
+      --  built by the band on the box, beside the path that is there: what stands, its places, the cart
+      Fresh (48, 32, 6, Curing => True);
+      Set_Demand_Chain (True);
+      Set_Stockman (True);
+      Set_Carpenter (True);
+      Set_Cart_Search (True);
+      declare
+         Pile, Cells, Placed : Natural;
+         Up_At : Natural := 0;
+      begin
+         Zone_Stockpile (22.0, 13.0, 32.0, 17.0, Pile);              --  (a stockpile south of the path)
+         --  (the stockyard on open ground north-east of it, clear of the lord's cart, with a path of its own)
+         Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), 0, Cells);
+         Supply (Berries, 600, Placed);
+         Supply (Wood, 80, Placed);
+         Supply (Straw, 130, Placed);
+         Set_Job (3, Forester);
+         Set_Job (4, Porter);
+         Set_Job (5, Porter);
+         Set_Skill (5, Portering, 0.9);
+         for S in 1 .. 30_000 loop
+            Run (1);
+            if Storehouse > 0 and then House_At (Storehouse).Phase = Standing then
+               Up_At := S;
+               exit;
+            end if;
+         end loop;
+         Set_Cart_Search (False);        --  (for the next check but one: the cart's one place of before)
+         Run (2);
+         declare
+            V : constant House_View := (if Storehouse > 0 then House_At (Storehouse) else (others => <>));
+            Open : constant Count_Of := Places (Closed => False);
+            Shut : constant Count_Of := Places (Closed => True);
+            L : constant Store_Lie := Storehouse_Lie;
+            Inside_Clear : Natural := 0;
+         begin
+            --  (the places kept clear inside it: by its doors)
+            for K in 1 .. Cell_Count loop
+               if Zone_Of_Cell (K) = Stockyard and then Cell_At (K).Fit = Kept_Clear
+                 and then abs (Cell_At (K).Centre.Y - (V.Corner (1).Y + V.Corner (3).Y) / 2.0) < 3.6
+                 and then abs (Cell_At (K).Centre.X - (V.Corner (1).X + V.Corner (3).X) / 2.0) < 5.6
+               then
+                  Inside_Clear := Inside_Clear + 1;
+               end if;
+            end loop;
+            Check (Pile = 40 and then Cells = 400 and then Up_At > 0 and then V.Got (Wood) = V.Takes (Wood)
+                   and then V.Got (Straw) = V.Takes (Straw) and then L.W = 48 and then L.D = 32
+                   and then Flat (V.Corner (1), V.Corner (2)) in 11.9 .. 12.1
+                   and then Flat (V.Corner (2), V.Corner (3)) in 7.9 .. 8.1
+                   and then L.Front_Least = 6 and then L.Front_Most = 6,
+                   "built by the band on a stockyard put down whole: 12 m by 8 m, its front wall 1.50 m from its path's"
+                   & " edge (" & Img (V.Takes (Wood)) & " logs, " & Img (V.Takes (Straw)) & " sheaves; standing after "
+                   & Img (Float (Up_At) / 1_440.0, 1) & " days)");
+            Check (Open (Floor) = 57 and then Open (Shelf) = 2 * Shelf_Places
+                   and then Open (Meat_Barrel) + Open (Water_Barrel) = 8 and then Inside_Clear = 6
+                   and then Open (Cover) >= 6 and then Shut (Kept_Clear) > 0,
+                   "its places: " & Img (Open (Floor)) & " on its floor (seven rows of eleven, less the three by each"
+                   & " door, the barrels' eight and the shelves' six), " & Img (Open (Cover)) & " under the coverings; "
+                   & Img (Inside_Clear) & " kept clear by its doors");
+         end;
+         declare
+            Salt_0 : constant Natural := Cart.Salt;
+            Before : Boolean;
+         begin
+            --  (with the cart's one place of before, across the staging: a metre and a half does not take it)
+            Run (3_000);
+            Before := Cart_At_Storehouse;
+            Check (not Before and then Cart.Salt = Salt_0 and then Salt_0 > 0 and then Stockman > 0
+                   and then Has (Storehouse_Note, "on the stockyard"),
+                   "(with Set_Cart_Search off the cart has its one place, across the staging, as it had: a metre and"
+                   & " a half does not take it, and fifty game minutes on the cart is where it was, its"
+                   & Salt_0'Image & " lb of salt in it)");
+            Set_Cart_Search (True);
+            for S in 1 .. 8_000 loop
+               Run (1);
+               exit when Cart_At_Storehouse and then Cart.Salt = 0;
+            end loop;
+            declare
+               V : constant House_View := House_At (Storehouse);
+               C : constant Cart_View := Cart;
+               Front_Y : constant Float := Float'Min (V.Corner (1).Y, V.Corner (3).Y);
+            begin
+               Check (Cart_At_Storehouse and then C.Salt = 0 and then C.Along_X
+                      and then C.At_P.Y > Front_Y - 1.5 and then C.At_P.Y < Front_Y
+                      and then C.At_P.X > Float'Min (V.Corner (1).X, V.Corner (3).X) - 0.5
+                      and then C.At_P.X < Float'Max (V.Corner (1).X, V.Corner (3).X) + 0.5,
+                      "with the search on the stockman brings it before the storehouse, along its front (its middle "
+                      & Img (Front_Y - C.At_P.Y, 2) & " m before the wall), and carries its salt in");
+            end;
+         end;
+      end;
+      Set_Store_Size (40, 20, 18);
+      Set_Cart_Search (False);
+      Set_Yard_Box (False);
+      Set_Storehouse (False);
+      Set_Stockman (True);
+      Set_Carpenter (True);
+   end;
+
+   --  food and full barrels stacked in the storehouse (John, 2026-11-21: "Allow food and full barrels to be
+   --  stacked in the storehouse")
+   Put_Line ("food and full barrels stacked in the storehouse:");
+   declare
+      --  The meadow at the second morning, a stockpile south of the path, a stockyard put down whole with
+      --  its storehouse raised on the spot; a forester (the carpenter) and two porters (one the stockman).
+      procedure Fresh (Stacks : Boolean) is
+         Pile, Cells : Natural;
+      begin
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Curing => True);
+         Set_Box_Place (True);
+         Set_Yard_Box (True);
+         Set_Storehouse (True);
+         Set_Store_Size (48, 32, 6);
+         Set_Store_Stacks (Stacks);
+         Set_Demand_Chain (True);
+         Set_Stockman (True);
+         Set_Carpenter (True);
+         Run (1);
+         Hours := 17.0 * 24.0 + 7.5;
+         Run (2);
+         Zone_Stockpile (22.0, 13.0, 32.0, 17.0, Pile);
+         Place_Box (Stockyard_Box, (40.1, 42.3, Ground_M), 0, Cells);
+         Build_Homes_Now;
+         Set_Job (3, Forester);
+         Set_Job (4, Porter);
+         Set_Job (5, Porter);
+         Set_Skill (5, Portering, 0.9);
+      end Fresh;
+      function First_Of (F : Fitting) return Natural is
+      begin
+         for K in 1 .. Cell_Count loop
+            if Cell_At (K).Fit = F and then not Cell_At (K).Closed and then Zone_Of_Cell (K) = Stockyard then
+               return K;
+            end if;
+         end loop;
+         return 0;
+      end First_Of;
+      --  the most of Kind in one place fitted out as F, and how much of it they hold together
+      procedure Held (F : Fitting; Kind : Item_Kind; Most, Sum : out Natural) is
+      begin
+         Most := 0;
+         Sum := 0;
+         for K in 1 .. Cell_Count loop
+            if Cell_At (K).Fit = F and then Cell_At (K).Kind = Kind then
+               Most := Natural'Max (Most, Cell_At (K).Count);
+               Sum := Sum + Cell_At (K).Count;
+            end if;
+         end loop;
+      end Held;
+      function Seconds return Natural is
+         N : Natural := 0;
+      begin
+         for K in 1 .. Cell_Count loop
+            if Cell_At (K).Second then
+               N := N + 1;
+            end if;
+         end loop;
+         return N;
+      end Seconds;
+      Placed : Natural;
+   begin
+      --  what a place holds
+      Fresh (Stacks => True);
+      declare
+         Fl : constant Natural := First_Of (Floor);
+         Gr : constant Natural := First_Of (Ground);
+         Mb : constant Natural := First_Of (Meat_Barrel);
+         Wb : constant Natural := First_Of (Water_Barrel);
+         On : Boolean;
+      begin
+         On := Fl > 0 and then Gr > 0 and then Mb > 0 and then Wb > 0
+           and then Place_Limit (Fl, Berries) = Floor_Stack * Cell_Limit (Berries)
+           and then Place_Limit (Fl, Vegetables) = Floor_Stack * Cell_Limit (Vegetables)
+           and then Place_Limit (Fl, Apples) = Floor_Stack * Cell_Limit (Apples)
+           and then Place_Limit (Fl, Grain) = Floor_Stack * Cell_Limit (Grain)
+           and then Place_Limit (Fl, Salt) = Cell_Limit (Salt)
+           and then Place_Limit (Gr, Berries) = Cell_Limit (Berries)
+           and then Place_Limit (Mb, Meat) = Barrel_Meat_Lb and then Place_Limit (Wb, Water) = Barrel_Pails;
+         Set_Store_Stacks (False);
+         Check (On and then Place_Limit (Fl, Berries) = Cell_Limit (Berries)
+                and then Place_Limit (Fl, Vegetables) = Cell_Limit (Vegetables)
+                and then Place_Limit (Mb, Meat) = Barrel_Meat_Lb,
+                "a place on the storehouse's floor holds its baskets of food three high ("
+                & Img (Natural'(Floor_Stack * Cell_Limit (Berries)))
+                & " berries for " & Img (Cell_Limit (Berries)) & "; salt, a place in the yard and a barrel as they were), and"
+                & " with Set_Store_Stacks off a place's own");
+      end;
+      --  the stockman, with 600 berries in the stockpile: as before he puts each load in the nearest place
+      --  that keeps it, so with a higher place they stand in fewer
+      declare
+         Most_On, Sum_On, Most_Off, Sum_Off : Natural := 0;
+         Used_On, Used_Off : Natural := 0;
+         procedure Go (Stacks : Boolean; Most, Sum, Used : out Natural) is
+         begin
+            Fresh (Stacks);
+            Supply (Berries, 600, Placed);
+            for T in 1 .. 6_000 loop
+               Run (1);
+               Held (Floor, Berries, Most, Sum);
+               exit when Sum = Placed;
+            end loop;
+            Used := 0;
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Fit = Floor and then Cell_At (K).Kind = Berries and then Cell_At (K).Count > 0 then
+                  Used := Used + 1;
+               end if;
+            end loop;
+         end Go;
+      begin
+         Go (True, Most_On, Sum_On, Used_On);
+         Go (False, Most_Off, Sum_Off, Used_Off);
+         Check (Sum_On = 600 and then Most_On > Cell_Limit (Berries) and then Most_On <= Floor_Stack * Cell_Limit (Berries)
+                and then Used_On < Used_Off
+                and then Sum_Off = 600 and then Most_Off = Cell_Limit (Berries) and then Used_Off >= 5,
+                "the stockman carries 600 berries in: stacked, " & Img (Most_On) & " in the fullest place, in "
+                & Img (Used_On) & " places; with the stacks off " & Img (Most_Off) & " at the most, in " & Img (Used_Off));
+      end;
+      --  the carpenter, with meat for more than the six barrels: a second barrel on one that is full
+      declare
+         procedure Go (Stacks : Boolean; Twos, Most, Sum : out Natural) is
+         begin
+            Fresh (Stacks);
+            Supply (Wood, 40, Placed);
+            Supply (Meat, 480, Placed);
+            Twos := 0;
+            for T in 1 .. 12_000 loop
+               Run (1);
+               Twos := Seconds;
+               Held (Meat_Barrel, Meat, Most, Sum);
+               exit when (Stacks and then Twos >= 1 and then Most > Barrel_Meat_Lb)
+                 or else (not Stacks and then Sum = 6 * Barrel_Meat_Lb and then T > 9_000);
+            end loop;
+         end Go;
+         Twos_On, Most_On, Sum_On, Twos_Off, Most_Off, Sum_Off : Natural := 0;
+      begin
+         Go (True, Twos_On, Most_On, Sum_On);
+         declare
+            Data : constant Bytes := Save;
+            Two_At : Natural := 0;
+            Ok : Boolean;
+         begin
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Second then
+                  Two_At := K;
+               end if;
+            end loop;
+            Check (Twos_On >= 1 and then Most_On > Barrel_Meat_Lb and then Most_On <= Barrel_Stack * Barrel_Meat_Lb
+                   and then Two_At > 0 and then Cell_At (Two_At).Fit = Meat_Barrel
+                   and then Place_Limit (Two_At, Meat) = Barrel_Stack * Barrel_Meat_Lb,
+                   "a barrel that is full has a second made on it by the carpenter, and takes another barrel's worth ("
+                   & Img (Twos_On) & " two high, " & Img (Most_On) & " lb in the fullest place for " & Img (Natural'(Barrel_Meat_Lb))
+                   & ")");
+            Reset;
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Natural (Data (0)) = 46 and then Two_At > 0
+                   and then Cell_At (Two_At).Second and then Seconds = Twos_On,
+                   "and it comes back from a save (2 in its place's byte), to the same bytes");
+         end;
+         Go (False, Twos_Off, Most_Off, Sum_Off);
+         Check (Twos_Off = 0 and then Most_Off = Barrel_Meat_Lb and then Sum_Off = 6 * Barrel_Meat_Lb,
+                "with the stacks off the six barrels fill and none has a second (" & Img (Sum_Off) & " lb in them, "
+                & Img (Most_Off) & " at the most)");
+      end;
+      Set_Store_Stacks (False);
+      Set_Store_Size (40, 20, 18);
+      Set_Yard_Box (False);
+      Set_Storehouse (False);
+      Set_Stockman (True);
+      Set_Carpenter (True);
+   end;
+
+   --  The stockyard's stair in a corner of the zone (John, 2026-11-21: "The path level at one corner is
+   --  great, move the stair to the opposite corner instead of the center, if a stair is to be had it's
+   --  to be at the corner of the zone", and, when that had been read of the square: "I was talking
+   --  about the stockyard having the stair in the corner rather than the middle").
+   Put_Line ("the stockyard's stair in a corner of the zone:");
+   declare
+      type Profile is access function (T : Float) return Integer;
+      Front_Beg, Front_End : Vec3 := (0.0, 0.0, 0.0);   --  (the two front corners of the zone the scene put down)
+      --  The meadow, the stake at 20 20, the second morning come, the storehouse 12 m by 8 m asked
+      --  for; the land along where a stockyard held at 40.1 42.3 turned W will front its path (from
+      --  3 m before its front to a metre and a quarter into it) raised or cut by Bank (T) blocks, T
+      --  metres along its front from its beginning; then the stockyard put down whole there.
+      --  (Low: its floor at its path's level at the lower corner of its front, the rule of 2026-11-22)
+      procedure Scene
+        (Bank : Profile; W : Way_Index; Corner : Boolean; Cells : out Natural; Levelled : Boolean := True;
+         Low : Boolean := False)
+      is
+         Mid : constant Vec3 := (40.1, 42.3, Ground_M);
+      begin
+         Set_Up (With_Stockpile => False, With_Bushes => False);
+         Set_Yard_Level (Levelled);
+         Set_Box_Place (True);
+         Set_Yard_Box (True);
+         Set_Storehouse (True);
+         Set_Store_Size (48, 32, 6);
+         Set_Yard_Stair_Corner (Corner);
+         Set_Yard_Floor_Low (Low);
+         declare
+            P  : constant Placement := Box_At (Stockyard_Box, Mid, W);
+            L  : constant Float := Flat (P.Corner (1), P.Corner (2));
+            Ax : constant Float := (P.Corner (2).X - P.Corner (1).X) / L;
+            Ay : constant Float := (P.Corner (2).Y - P.Corner (1).Y) / L;
+            Ix : constant Float := (P.Corner (4).X - P.Corner (1).X) / Flat (P.Corner (1), P.Corner (4));
+            Iy : constant Float := (P.Corner (4).Y - P.Corner (1).Y) / Flat (P.Corner (1), P.Corner (4));
+         begin
+            Front_Beg := P.Corner (1);
+            Front_End := P.Corner (2);
+            for Bx in B (4.0) .. B (60.0) loop
+               for By in B (4.0) .. B (60.0) loop
+                  declare
+                     X : constant Float := (Float (Bx) + 0.5) * 0.25 - P.Corner (1).X;
+                     Y : constant Float := (Float (By) + 0.5) * 0.25 - P.Corner (1).Y;
+                     T : constant Float := X * Ax + Y * Ay;
+                     D : constant Float := X * Ix + Y * Iy;
+                  begin
+                     if D in -3.0 .. 1.25 and then T in -4.0 .. L + 4.0 then
+                        declare
+                           H : constant Integer := Bank (Float'Max (0.0, Float'Min (L, T)));
+                        begin
+                           if H > 0 then
+                              for Z in Ground_Row - 1 .. Ground_Row + H - 2 loop
+                                 Set (Bx, By, Z, Dirt);
+                              end loop;
+                              Set (Bx, By, Ground_Row + H - 1, Grass);
+                           elsif H < 0 then
+                              for Z in Ground_Row + H .. Ground_Row - 1 loop
+                                 Set (Bx, By, Z, Air);
+                              end loop;
+                              Set (Bx, By, Ground_Row + H - 1, Grass);
+                           end if;
+                        end;
+                     end if;
+                  end;
+               end loop;
+            end loop;
+         end;
+         Changed_World;
+         Index_All;
+         Run (1);
+         Hours := 17.0 * 24.0 + 7.5;
+         Run (2);
+         Place_Box (Stockyard_Box, Mid, W, Cells);
+      end Scene;
+      --  (the land rising from the front's beginning to its end: level for five metres, then a block
+      --  every two metres, seven from seventeen on; the same falling; three blocks over all along; two over
+      --  for its first half and four for its second; a hump at its middle alone)
+      function Rising (T : Float) return Integer is (Integer'Max (0, Integer'Min (7, Integer (Float'Floor ((T - 3.0) / 2.0)))));
+      function Falling (T : Float) return Integer is (-Rising (T));
+      function Even_3 (T : Float) return Integer is (if T >= 0.0 then 3 else 3);
+      function Even_2 (T : Float) return Integer is (if T >= 0.0 then 2 else 2);
+      function Two_Four (T : Float) return Integer is (if T < 10.0 then 2 else 4);
+      function Hump (T : Float) return Integer is (if T in 6.0 .. 14.0 then 3 else 0);
+      --  (and rising a block every two metres to ten, two and a half metres, at its end)
+      function Steep (T : Float) return Integer is (Integer'Max (0, Integer'Min (10, Integer (Float'Floor (T / 1.9)))));
+      --  (and three over all along but for its first quarter metre, a block over: a step up to it from the meadow,
+      --  beyond the corner; with Even_3 the path is a causeway three blocks sheer on every side, which nobody climbs)
+      function Raised (T : Float) return Integer is (if T < 0.3 then 1 else 3);
+      --  The top of the ground at a block column (nothing of timber, daub or thatch is ground).
+      function Ground_Top (Bx, By : Integer) return Integer is
+      begin
+         for Z in reverse 1 .. 60 loop
+            if Class_Of (Get (Bx, By, Z)) = Solid and then Get (Bx, By, Z) not in Log | Plank | Daub | Thatch | Shingle | Trunk then
+               return Z;
+            end if;
+         end loop;
+         return 0;
+      end Ground_Top;
+      --  The stockyard's ground against its plan, as it stands: columns whose top is not where it
+      --  was planned (but under the storehouse's own floor), rows of stone not laid; and its stair:
+      --  its steps' columns, how many of them are treads of stone, the most rows a step stands off
+      --  the floor, and how many lie on or past the line of the storehouse's front wall.
+      Off, Unlaid, Steps, Treads, Deepest, Past_Front, Way_Cols : Natural := 0;
+      Floor_Row : Integer := 0;
+      Stair_Mid : Vec3 := (0.0, 0.0, 0.0);          --  (the middle of its steps' columns, on the ground plan)
+      procedure Compare is
+         V : constant House_View := House_At (Storehouse);
+         --  (into the storehouse from its front wall: a column that far in or further is past its line)
+         Lf : constant Float := Flat (V.Corner (1), V.Corner (4));
+         Ix : constant Float := (V.Corner (4).X - V.Corner (1).X) / Lf;
+         Iy : constant Float := (V.Corner (4).Y - V.Corner (1).Y) / Lf;
+         procedure Look (Bx, By, Top, Stone, Floor : Integer; Way, Stair : Boolean) is
+         begin
+            Floor_Row := Floor;
+            if Get (Bx, By, Top) not in Log | Plank and then Ground_Top (Bx, By) /= Top then
+               Off := Off + 1;
+            end if;
+            for Z in Stone .. Top loop
+               if Get (Bx, By, Z) /= Fieldstone then
+                  Unlaid := Unlaid + 1;
+               end if;
+            end loop;
+            if Way then
+               Way_Cols := Way_Cols + 1;
+            end if;
+            if Stair then
+               Steps := Steps + 1;
+               Stair_Mid := Stair_Mid + ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25, 0.0);
+               Deepest := Natural'Max (Deepest, abs (Top - Floor));
+               if Get (Bx, By, Top) = Fieldstone then
+                  Treads := Treads + 1;
+               end if;
+               if not V.Yard_Turned
+                 and then ((Float (Bx) + 0.5) * 0.25 - V.Corner (1).X) * Ix + ((Float (By) + 0.5) * 0.25 - V.Corner (1).Y) * Iy > 0.0
+               then
+                  Past_Front := Past_Front + 1;
+               end if;
+            end if;
+         end Look;
+      begin
+         Off := 0;  Unlaid := 0;  Steps := 0;  Treads := 0;  Deepest := 0;  Past_Front := 0;  Way_Cols := 0;
+         Stair_Mid := (0.0, 0.0, 0.0);
+         For_Yard_Plan (Look'Access);
+         if Steps > 0 then
+            Stair_Mid := Stair_Mid * (1.0 / Float (Steps));
+         end if;
+      end Compare;
+      --  Spots on its ground and two metres round it that can be got to from the fire and not back.
+      function Pits return Natural is
+         X0, Y0 : Integer := Integer'Last;
+         X1, Y1 : Integer := Integer'First;
+         procedure Bounds (Bx, By, Top, Stone, Floor : Integer; Way, Stair : Boolean) is
+            pragma Unreferenced (Top, Stone, Floor, Way, Stair);
+         begin
+            X0 := Integer'Min (X0, Bx);  X1 := Integer'Max (X1, Bx);
+            Y0 := Integer'Min (Y0, By);  Y1 := Integer'Max (Y1, By);
+         end Bounds;
+         N : Natural := 0;
+         Px, Py : Float;
+      begin
+         For_Yard_Plan (Bounds'Access);
+         Px := Float (X0) * 0.25 - 2.0 + 0.125;
+         while Px <= Float (X1 + 1) * 0.25 + 2.0 loop
+            Py := Float (Y0) * 0.25 - 2.0 + 0.125;
+            while Py <= Float (Y1 + 1) * 0.25 + 2.0 loop
+               declare
+                  Pz : constant Float := Castle.Nav.Surface_Z (Px, Py);
+               begin
+                  if Pz >= 0.0 and then Castle.Nav."=" (Castle.Nav.Plan (Stake, (Px, Py, Pz)).Result, Castle.Nav.Found)
+                    and then not Castle.Nav."=" (Castle.Nav.Plan ((Px, Py, Pz), Stake).Result, Castle.Nav.Found)
+                  then
+                     N := N + 1;
+                  end if;
+               end;
+               Py := Py + 0.5;
+            end loop;
+            Px := Px + 0.5;
+         end loop;
+         return N;
+      end Pits;
+      --  From the fire to the middle of the storehouse's floor and back, metres (under 0: no way).
+      function Way_In return Float is
+         V : constant House_View := House_At (Storehouse);
+         C : constant Lot_Corners := (if V.Yard_Turned then V.Drawn else V.Corner);
+         Mx : constant Float := (C (1).X + C (2).X + C (3).X + C (4).X) / 4.0;
+         My : constant Float := (C (1).Y + C (2).Y + C (3).Y + C (4).Y) / 4.0;
+         Mz : constant Float := C (1).Z;          --  (its floor: the highest floor there is its roof)
+      begin
+         declare
+            To   : constant Castle.Nav.Route := Castle.Nav.Plan (Stake, (Mx, My, Mz));
+            Back : constant Castle.Nav.Route := Castle.Nav.Plan ((Mx, My, Mz), Stake);
+         begin
+            return (if Castle.Nav."=" (To.Result, Castle.Nav.Found) and then Castle.Nav."=" (Back.Result, Castle.Nav.Found)
+                    then Castle.Nav.Length (To) + Castle.Nav.Length (Back) else -1.0);
+         end;
+      end Way_In;
+      function End_Word (E : Natural) return String is
+        (case E is when 0 => "the middle of the storehouse's front", when 1 => "the low end of its front",
+                   when others => "the high end of its front");
+      --  (what stands within three metres of a corner of the zone's front: every block column's top
+      --  and what it is of)
+      type Corner_Look is array (-12 .. 11, -12 .. 11) of Integer;
+      function Look_At (P : Vec3) return Corner_Look is
+         L : Corner_Look;
+      begin
+         for I in L'Range (1) loop
+            for J in L'Range (2) loop
+               declare
+                  Bx : constant Integer := B (P.X) + I;
+                  By : constant Integer := B (P.Y) + J;
+                  T  : Integer := 60;
+               begin
+                  while T > 1 and then Class_Of (Get (Bx, By, T)) /= Solid loop
+                     T := T - 1;
+                  end loop;
+                  L (I, J) := T * 64 + Material'Pos (Get (Bx, By, T));
+               end;
+            end loop;
+         end loop;
+         return L;
+      end Look_At;
+   begin
+      --  squarely: the path level at one corner of the front and seven blocks over the floor at the
+      --  other.  With the stair at the middle (as it was): two steps across the staging.  In the
+      --  corner: at the end away from the level one, seven steps, on past the line of the front wall
+      --  beside the storehouse's end.  The floor's level is the same, and by the level corner every
+      --  block is what it was.
+      declare
+         type Looks is array (Boolean) of Corner_Look;
+         L     : Looks;
+         W     : array (Boolean) of Yard_Walls;
+         Fr    : array (Boolean) of Yard_Front;
+         Floor : array (Boolean) of Integer := [others => 0];
+         Offs, Unlaids, Pit_N, Stepped, Past, Tread_N, Deep : array (Boolean) of Natural := [others => 99];
+         Ways, Far : array (Boolean) of Float := [others => -9.0];
+         Whole : array (Boolean) of Boolean := [others => False];
+         Cells : Natural;
+         Differ : Natural := 0;
+         Level_Corner : Vec3 := (0.0, 0.0, 0.0);
+      begin
+         for Corner in Boolean loop
+            Scene (Rising'Access, 0, Corner, Cells);
+            W (Corner) := Stockyard_Walls;
+            Fr (Corner) := Stockyard_Front;
+            Whole (Corner) := Yard_Stair_Whole;
+            Build_Paths_Now;
+            Build_Homes_Now (As_Laid => True);
+            Compare;
+            Floor (Corner) := Floor_Row;
+            Offs (Corner) := Off;
+            Unlaids (Corner) := Unlaid;
+            Stepped (Corner) := Steps;
+            Tread_N (Corner) := Treads;
+            Deep (Corner) := Deepest;
+            Past (Corner) := Past_Front;
+            Pit_N (Corner) := Pits;
+            Ways (Corner) := Way_In;
+            Far (Corner) := Flat (Stair_Mid, Front_End);
+            Level_Corner := Front_Beg;          --  (where its path comes in level: its front's beginning)
+            L (Corner) := Look_At (Level_Corner);
+         end loop;
+         for I in Corner_Look'Range (1) loop
+            for J in Corner_Look'Range (2) loop
+               if L (True) (I, J) /= L (False) (I, J) then
+                  Differ := Differ + 1;
+               end if;
+            end loop;
+         end loop;
+         Check (Cells = 400 and then W (False).Way_End = 0 and then W (False).Stair > 0 and then abs W (False).Rise in 2 .. 3
+                and then W (False).Rise < 0 and then Stepped (False) = W (False).Stair and then Past (False) = 0
+                and then Offs (False) = 0 and then Unlaids (False) = 0 and then Pit_N (False) = 0 and then Ways (False) > 0.0,
+                "squarely, its path level at one corner of its front and seven blocks over its floor at the other:"
+                & " with the stair at the middle (Set_Yard_Stair_Corner off) its way in is across the staging at "
+                & End_Word (W (False).Way_End) & ", a stair of" & Natural'Image (abs W (False).Rise) & " steps down from the"
+                & " path, " & Img (Stepped (False)) & " block columns of it, none past the front wall's line; built on the"
+                & " spot as planned, no pit; from the fire into the storehouse and back " & Img (Ways (False), 1) & " m");
+         Check (W (True).Way_End in 1 .. 2 and then W (True).Rise = -7 and then W (True).Stair = 7 * 8
+                and then W (True).Way_Deep = 6
+                and then abs (Fr (True) ((if W (True).Way_End = 1 then High_End else Low_End)).Mid) <= 1
+                and then Fr (True) ((if W (True).Way_End = 1 then Low_End else High_End)).Mid = 7
+                and then Stepped (True) = 56 and then Tread_N (True) = 56 and then Deep (True) = 7
+                and then Past (True) = 8 and then Whole (True) and then Whole (False)
+                and then Far (True) < 2.0 and then Far (False) > 8.0,
+                "in the corner: its way in is at " & End_Word (W (True).Way_End) & ", the end away from the level one, the"
+                & " opposite corner (the middle of its steps " & Img (Far (True), 2) & " m from that corner of the zone, "
+                & Img (Far (False), 2) & " with the stair at the middle): a stair of" & Natural'Image (abs W (True).Rise)
+                & " steps down from the path, two metres"
+                & " wide, a block a step from the path's edge (" & Img (Stepped (True)) & " block columns, every one a tread of"
+                & " stone, the highest " & Img (Deep (True)) & " rows over the floor), " & Img (Past (True))
+                & " of them on past the line of the front wall, beside the storehouse's end; its steps' patches hold"
+                & " nothing beside the way");
+         Check (Offs (True) = 0 and then Unlaids (True) = 0 and then Pit_N (True) = 0 and then Ways (True) > 0.0
+                and then Floor (True) = Floor (False),
+                "built on the spot: every column of its ground stands as planned (" & Img (Offs (True)) & " off, "
+                & Img (Unlaids (True)) & " rows of stone unlaid), no spot on it or by it is a pit, from the fire into the"
+                & " storehouse and back " & Img (Ways (True), 1) & " m (" & Img (Ways (False), 1) & " by the stair at the"
+                & " middle); its floor at the level it has with the stair at the middle (row " & Img (Floor (True)) & ")");
+         Check (Differ = 0,
+                "what he praised is the measure: within three metres of the corner where the path comes in level every"
+                & " block column stands as high and of the same stuff as with the stair at the middle (" & Img (Differ)
+                & " of 576 differ)");
+      end;
+      --  the path under the floor: the stair goes up from it, cut into the floor's corner
+      declare
+         Cells : Natural;
+         W  : Yard_Walls;
+         Fr : Yard_Front;
+      begin
+         Scene (Falling'Access, 0, True, Cells);
+         W := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Cells = 400 and then W.Way_End in 1 .. 2 and then W.Rise = 7 and then W.Stair = 56
+                and then abs (Fr ((if W.Way_End = 1 then High_End else Low_End)).Mid) <= 1
+                and then Off = 0 and then Unlaid = 0 and then Treads = 56 and then Pits = 0 and then Way_In > 0.0
+                and then Yard_Stair_Whole,
+                "its path level at one corner and seven blocks under its floor at the other: the stair at "
+                & End_Word (W.Way_End) & ", seven steps up from the path, cut into the floor's corner; built as planned ("
+                & Img (Off) & " off, " & Img (Unlaid) & " unlaid), no pit, a way from the fire into the storehouse and back");
+      end;
+      --  a bank at both ends: the lower; of two as high, the end nearer the homestake
+      declare
+         Cells : Natural;
+         W_Even, W_Low : Yard_Walls;
+         Fr : Yard_Front;
+         Near_End : Natural;
+         Off_Even, Pit_Even : Natural;
+         By_Near : Float;
+      begin
+         Scene (Even_3'Access, 0, True, Cells);
+         W_Even := Stockyard_Walls;
+         --  (which end of its front is nearer the stake at 20 20: the box lies east of it)
+         Near_End := (if Flat (Front_Beg, Stake) < Flat (Front_End, Stake) then 1 else 2);
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Off_Even := Off + Unlaid;
+         Pit_Even := Pits;
+         By_Near := Flat (Stair_Mid, (if Near_End = 1 then Front_Beg else Front_End));
+         Scene (Two_Four'Access, 0, True, Cells);
+         W_Low := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Check (Cells = 400 and then W_Even.Way_End in 1 .. 2 and then abs W_Even.Rise = 3 and then W_Even.Stair = 24
+                and then Off_Even = 0 and then Pit_Even = 0 and then By_Near < 2.0
+                and then W_Low.Way_End in 1 .. 2 and then abs W_Low.Rise = 2
+                and then abs (Fr ((if W_Low.Way_End = 1 then Low_End else High_End)).Mid) = 2
+                and then abs (Fr ((if W_Low.Way_End = 1 then High_End else Low_End)).Mid) = 4,
+                "a bank at both ends of its front: three blocks at each, the stair at " & End_Word (W_Even.Way_End)
+                & " (the end nearer the homestake, its front's " & (if Near_End = 1 then "beginning" else "end")
+                & ": the middle of its steps " & Img (By_Near, 2) & " m from that corner of the zone), three steps, built as"
+                & " planned, no pit; two blocks at one end and four at the other, at the lower: "
+                & End_Word (W_Low.Way_End) & ", two steps");
+      end;
+      --  level at both ends, a bank at the middle of the front alone: no stair; the way in is a level end
+      declare
+         Cells : Natural;
+         W, W_Mid : Yard_Walls;
+         Rim_Stone : Natural := 0;
+      begin
+         Scene (Hump'Access, 0, False, Cells);
+         W_Mid := Stockyard_Walls;
+         Scene (Hump'Access, 0, True, Cells);
+         W := Stockyard_Walls;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Rim_Stone := W.Side (1).Stone;
+         Check (Cells = 400 and then W_Mid.Way_End = 0 and then W_Mid.Stair > 0 and then W.Way_End in 1 .. 2
+                and then W.Stair = 0 and then abs W.Rise <= 1 and then Steps = 0 and then Rim_Stone > 20
+                and then Off = 0 and then Unlaid = 0 and then Pits = 0 and then Way_In > 0.0,
+                "its path level at both corners and three blocks over its floor along the middle of its front (a stair of"
+                & Natural'Image (abs W_Mid.Rise) & " steps there, as it was): no stair is to be had at a corner, and none"
+                & " is built; its way in is " & End_Word (W.Way_End) & ", level, and the middle of its front is wall ("
+                & Img (Rim_Stone) & " columns of stone on its front's rim); no pit, a way from the fire into the storehouse"
+                & " and back");
+      end;
+      --  along a path at 45 degrees: the yard laid out turned, the stair in the corner of its design
+      declare
+         Cells : Natural;
+         W  : Yard_Walls;
+         Fr : Yard_Front;
+      begin
+         Scene (Rising'Access, 1, True, Cells);
+         W := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Cells = 400 and then House_At (Storehouse).Yard_Turned and then W.Way_End in 1 .. 2 and then W.Stair > 0
+                and then abs W.Rise in 5 .. 8 and then W.Rise < 0
+                and then abs (Fr ((if W.Way_End = 1 then High_End else Low_End)).Mid) <= 1
+                and then Off = 0 and then Unlaid = 0 and then Treads = Steps and then Pits = 0 and then Way_In > 0.0
+                and then Yard_Stair_Whole,
+                "along a path at 45 degrees, level at one corner of its front and rising to the other: the stair at "
+                & End_Word (W.Way_End) & ", " & Img (Natural'(abs W.Rise)) & " steps down from the path ("
+                & Img (Steps) & " block columns as the turn puts them, every one a tread of stone, "
+                & Img (W.Way_Deep) & " columns of staging there); built as planned (" & Img (Off) & " off, " & Img (Unlaid)
+                & " unlaid), no pit, a way from the fire into the storehouse and back");
+      end;
+      --  only of a stockyard that is levelled: with Set_Yard_Level off a storehouse's ground is its
+      --  own pad and the yard before its front, the ends of the stockyard's front are not its ground to
+      --  make, and its way in stays across the staging (moved all the same, it had no way in at all)
+      declare
+         Cells : Natural;
+         W : Yard_Walls;
+      begin
+         Scene (Even_2'Access, 0, True, Cells, Levelled => False);
+         W := Stockyard_Walls;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Storehouse > 0 and then W.Way_End = 0 and then W.Stair > 0 and then abs W.Rise = 2 and then Steps = W.Stair
+                and then Off = 0 and then Unlaid = 0 and then Way_In > 0.0,
+                "(with the stockyard's levelling off, --no-yard-level: its way in stays at "
+                & End_Word (W.Way_End) & ", a stair of" & Natural'Image (abs W.Rise) & " steps there, built as planned, a way"
+                & " from the fire into the storehouse and back)");
+         Set_Yard_Level (True);
+      end;
+      --  a storehouse keeps the way it was begun with: saved, and loaded where the rule is off; and
+      --  one begun with the stair at the middle stays so where the rule is on
+      declare
+         Cells : Natural;
+         W0 : Yard_Walls;
+         Ok : Boolean;
+      begin
+         Scene (Rising'Access, 0, True, Cells);
+         W0 := Stockyard_Walls;
+         declare
+            Data : constant Bytes := Save;
+         begin
+            Set_Yard_Stair_Corner (False);
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then Natural (Data (0)) = 46 and then W0.Way_End in 1 .. 2
+                   and then Stockyard_Walls.Way_End = W0.Way_End and then Stockyard_Walls.Stair = W0.Stair,
+                   "saved and loaded where a stockyard's stair is at the middle: the same bytes, its way"
+                   & " in at " & End_Word (Stockyard_Walls.Way_End) & " still: a storehouse keeps the way it was begun with");
+         end;
+         Scene (Rising'Access, 0, False, Cells);
+         W0 := Stockyard_Walls;
+         declare
+            Data : constant Bytes := Save;
+         begin
+            Set_Yard_Stair_Corner (True);
+            Load (Data, Ok);
+            Check (Ok and then Save = Data and then W0.Way_End = 0 and then W0.Stair > 0
+                   and then Stockyard_Walls.Way_End = 0 and then Stockyard_Walls.Stair = W0.Stair,
+                   "and one begun with its stair at the middle, loaded where the rule is on, has it at the middle still");
+         end;
+      end;
+      Set_Yard_Stair_Corner (False);
+
+      --  The stockyard's floor at its path's level at the lower corner of its front (John,
+      --  2026-11-22: "Set the floors level of the stockyard to the path level at the lower corner, the
+      --  higher corner along the path gets the stairs", and "After 2m no stair built").
+      Put_Line ("the stockyard's floor at its path's level at the lower corner of its front:");
+      --  the path level at one corner and seven blocks over the meadow at the other: the floor was
+      --  at the level corner's already, and nothing moves (his praise of that corner is the measure)
+      declare
+         type Looks is array (Boolean) of Corner_Look;
+         L      : Looks;
+         W      : array (Boolean) of Yard_Walls;
+         Floor  : array (Boolean) of Integer := [others => 0];
+         Bad    : array (Boolean) of Natural := [others => 99];
+         Cells  : Natural;
+         Differ : Natural := 0;
+      begin
+         for Low in Boolean loop
+            Scene (Rising'Access, 0, True, Cells, Low => Low);
+            W (Low) := Stockyard_Walls;
+            Build_Paths_Now;
+            Build_Homes_Now (As_Laid => True);
+            Compare;
+            Floor (Low) := Floor_Row;
+            Bad (Low) := Off + Unlaid + Pits;
+            L (Low) := Look_At (Front_Beg);
+         end loop;
+         for I in Corner_Look'Range (1) loop
+            for J in Corner_Look'Range (2) loop
+               if L (True) (I, J) /= L (False) (I, J) then
+                  Differ := Differ + 1;
+               end if;
+            end loop;
+         end loop;
+         Check (Cells = 400 and then Floor (True) = Floor (False) and then W (True).Way_End = W (False).Way_End
+                and then W (True).Rise = -7 and then W (True).Stair = 56 and then W (True).Floor_Row = Ground_Row - 1
+                and then Bad (True) = 0 and then Bad (False) = 0 and then Differ = 0,
+                "its path level at one corner and seven blocks over the meadow at the other: its floor at the level"
+                & " corner's row (" & Img (Floor (True)) & ", as the land chose it: " & Img (Floor (False)) & "), the stair"
+                & " at the higher corner, seven steps down from the path; within three metres of the level corner "
+                & Img (Differ) & " of 576 block columns differ from the rule before; built as planned, no pit");
+      end;
+      --  the path falling from the meadow's level to seven blocks under it: the floor was the
+      --  meadow's, the stair cut up into its corner; now the floor is at the lower corner's row, seven
+      --  blocks under the meadow, and the stair comes down to it at the other
+      declare
+         Cells  : Natural;
+         W, W0  : Yard_Walls;
+         Fr     : Yard_Front;
+         Floor0 : Integer;
+      begin
+         Scene (Falling'Access, 0, True, Cells);
+         W0 := Stockyard_Walls;
+         Floor0 := W0.Floor_Row;
+         Scene (Falling'Access, 0, True, Cells, Low => True);
+         W := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Cells = 400 and then W0.Rise = 7 and then W.Floor_Row = Floor0 - 7 and then W.Rise = -7
+                and then W.Way_End in 1 .. 2 and then W.Way_End /= W0.Way_End and then W.Stair = 56
+                and then Fr ((if W.Way_End = 1 then High_End else Low_End)).Mid = 0
+                and then Fr ((if W.Way_End = 1 then Low_End else High_End)).Mid = 7
+                and then Off = 0 and then Unlaid = 0 and then Treads = 56 and then Pits = 0 and then Way_In > 0.0
+                and then Yard_Stair_Whole and then W.Side (2).Highest >= 7,
+                "its path falling from the meadow to seven blocks under it: the floor lies at the lower corner's row ("
+                & Img (W.Floor_Row) & ", seven under the meadow: " & Img (Floor0) & " by the land, with a stair of"
+                & Natural'Image (abs W0.Rise) & " up at " & End_Word (W0.Way_End) & "), the path comes in level there, and"
+                & " the stair stands at the higher corner, " & End_Word (W.Way_End) & ", seven steps down; the meadow"
+                & " behind it held back by a wall " & Img (W.Side (2).Highest) & " blocks high; built as planned ("
+                & Img (Off) & " off, " & Img (Unlaid) & " unlaid), no pit, a way from the fire into the storehouse and back");
+      end;
+      --  a floor over the land: the path three blocks over the meadow all along.  The floor was the
+      --  meadow's with a stair of three; now it is the path's, filled and held up, and no stair
+      declare
+         Cells  : Natural;
+         W, W0  : Yard_Walls;
+         Fr     : Yard_Front;
+      begin
+         Scene (Raised'Access, 0, True, Cells);
+         W0 := Stockyard_Walls;
+         Scene (Raised'Access, 0, True, Cells, Low => True);
+         W := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Cells = 400 and then abs W0.Rise = 3 and then W0.Stair > 0 and then W.Floor_Row = W0.Floor_Row + 3
+                and then W.Way_End = 0 and then W.Stair = 0 and then W.Rise = 0 and then Steps = 0
+                and then Fr (Low_End).Mid = 0 and then Fr (Front_Middle).Mid = 0 and then Fr (High_End).Mid = 0
+                and then W.Side (2).Up > 60 and then W.Side (2).Highest = 3
+                and then Off = 0 and then Unlaid = 0 and then Pits = 0 and then Way_In > 0.0,
+                "its path three blocks over the meadow all along: the floor lies at the path's row (" & Img (W.Floor_Row)
+                & ", three over the meadow, which no floor stood before: " & Img (W0.Floor_Row) & " by the land, with a"
+                & " stair of" & Natural'Image (abs W0.Rise) & "), filled and held up behind by a wall "
+                & Img (W.Side (2).Highest) & " blocks high (" & Img (W.Side (2).Up) & " columns of it); no stair, its way"
+                & " in across the staging at " & End_Word (W.Way_End) & "; built as planned (" & Img (Off) & " off, "
+                & Img (Unlaid) & " unlaid), " & Img (Pits) & " spots that are pits, from the fire into the storehouse and"
+                & " back " & Img (Way_In, 1) & " m");
+      end;
+      --  two blocks over at one end and four at the other: the floor at the lower, two steps at the higher
+      declare
+         Cells : Natural;
+         W, W0 : Yard_Walls;
+         Fr    : Yard_Front;
+      begin
+         Scene (Two_Four'Access, 0, True, Cells);
+         W0 := Stockyard_Walls;
+         Scene (Two_Four'Access, 0, True, Cells, Low => True);
+         W := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Cells = 400 and then W.Floor_Row = W0.Floor_Row + 2 and then W.Way_End in 1 .. 2 and then W.Rise = -2
+                and then W.Stair = 16 and then W.Way_End /= W0.Way_End
+                and then Fr ((if W.Way_End = 1 then High_End else Low_End)).Mid = 0
+                and then Fr ((if W.Way_End = 1 then Low_End else High_End)).Mid = 2
+                and then Off = 0 and then Unlaid = 0 and then Treads = 16 and then Pits = 0 and then Way_In > 0.0,
+                "two blocks over the meadow at one corner and four at the other: the floor at the lower corner's row,"
+                & " the stair at the higher, " & End_Word (W.Way_End) & ", two steps down (by the land: the stair at the"
+                & " lower bank, " & End_Word (W0.Way_End) & ", two steps up); built as planned, no pit, a way in");
+      end;
+      --  over two metres at the higher corner: no stair is built; the level corner is the way in
+      declare
+         Cells : Natural;
+         W     : Yard_Walls;
+         Fr    : Yard_Front;
+         Front_Stone : Natural;
+      begin
+         Scene (Steep'Access, 0, True, Cells, Low => True);
+         W := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Front_Stone := W.Side (1).Stone;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (Cells = 400 and then W.Floor_Row = Ground_Row - 1 and then W.Way_End in 1 .. 2 and then W.Stair = 0
+                and then W.Rise = 0 and then Steps = 0
+                and then Fr ((if W.Way_End = 1 then Low_End else High_End)).Mid = 0
+                and then Fr ((if W.Way_End = 1 then High_End else Low_End)).Mid >= 9
+                and then Front_Stone > 40 and then W.Side (1).Highest >= 9
+                and then Off = 0 and then Unlaid = 0 and then Pits = 0 and then Way_In > 0.0,
+                "its path rising to " & Img (Fr ((if W.Way_End = 1 then High_End else Low_End)).Mid) & " blocks over the"
+                & " floor at the higher corner, over two metres: no stair is built there; its way in is "
+                & End_Word (W.Way_End) & ", where the path comes in level, and the front is wall where the path stands over"
+                & " it (" & Img (Front_Stone) & " columns of stone on its front's rim, the highest "
+                & Img (W.Side (1).Highest) & " blocks); built as planned, no pit, a way from the fire into the storehouse"
+                & " and back");
+      end;
+      --  level at both corners and a hump at the middle alone: no stair, a level corner the way in
+      --  (as the rule before had it); and along a path at 45 degrees
+      declare
+         Cells : Natural;
+         W, Wt : Yard_Walls;
+         Fr    : Yard_Front;
+         Hump_Bad, Hump_Steps : Natural;
+      begin
+         Scene (Hump'Access, 0, True, Cells, Low => True);
+         W := Stockyard_Walls;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Hump_Bad := Off + Unlaid + Pits;
+         Hump_Steps := Steps;
+         Scene (Rising'Access, 1, True, Cells, Low => True);
+         Wt := Stockyard_Walls;
+         Fr := Stockyard_Front;
+         Build_Paths_Now;
+         Build_Homes_Now (As_Laid => True);
+         Compare;
+         Check (W.Way_End in 1 .. 2 and then W.Stair = 0 and then W.Floor_Row = Ground_Row - 1 and then Hump_Bad = 0
+                and then Hump_Steps = 0
+                and then Cells = 400 and then House_At (Storehouse).Yard_Turned and then Wt.Way_End in 1 .. 2
+                and then Wt.Stair > 0 and then Wt.Rise in -8 .. -5 and then Wt.Floor_Row = Ground_Row - 1
+                and then Fr ((if Wt.Way_End = 1 then High_End else Low_End)).Mid = 0
+                and then Fr ((if Wt.Way_End = 1 then Low_End else High_End)).Mid = -Wt.Rise
+                and then Off = 0 and then Unlaid = 0 and then Treads = Steps and then Pits = 0 and then Way_In > 0.0
+                and then Yard_Stair_Whole,
+                "a hump at the middle of its front alone: no stair, its way in a level corner; and along a path at 45"
+                & " degrees, level at one corner and rising to the other: the floor at the level corner's row, the stair"
+                & " at the higher, " & End_Word (Wt.Way_End) & ", " & Img (Natural'(abs Wt.Rise)) & " steps down, as long as"
+                & " the path stands over the floor there (" & Img (Steps) & " block columns, every one a tread of stone);"
+                & " built as planned, no pit, a way from the fire into the storehouse and back");
+      end;
+      --  one row, read once, and kept: saved where the rule is on and loaded where it is off (and
+      --  where the stair is at the middle), the same bytes, the same floor and way
+      declare
+         Cells : Natural;
+         W0 : Yard_Walls;
+         Ok : Boolean;
+      begin
+         Scene (Falling'Access, 0, True, Cells, Low => True);
+         W0 := Stockyard_Walls;
+         declare
+            Data : constant Bytes := Save;
+            Same_1, Same_2 : Boolean;
+         begin
+            Set_Yard_Floor_Low (False);
+            Load (Data, Ok);
+            Same_1 := Ok and then Save = Data and then Stockyard_Walls.Floor_Row = W0.Floor_Row
+              and then Stockyard_Walls.Way_End = W0.Way_End and then Stockyard_Walls.Stair = W0.Stair;
+            Set_Yard_Stair_Corner (False);
+            Load (Data, Ok);
+            Same_2 := Ok and then Save = Data and then Stockyard_Walls.Floor_Row = W0.Floor_Row
+              and then Stockyard_Walls.Way_End = W0.Way_End and then Stockyard_Walls.Stair = W0.Stair;
+            Check (Same_1 and then Same_2 and then Natural (Data (0)) = 46 and then W0.Stair = 56,
+                   "saved, and loaded where a stockyard's floor is chosen from the land, and where its stair is at the"
+                   & " middle: the same bytes, the same floor, way and stair: a storehouse keeps what it"
+                   & " was begun with");
+         end;
+      end;
+      Set_Yard_Floor_Low (False);
+      Set_Yard_Stair_Corner (False);
+      Set_Store_Size (40, 20, 18);
+      Set_Yard_Box (False);
+      Set_Storehouse (False);
+   end;
+
+   --  What a save leaves out and the loader makes again (2026-11-21: found when two of twenty-one
+   --  saves of one colony did not run on as the straight run did, and the older fault of a colony
+   --  with housing saved in its first days was traced with them).
+   Put_Line ("what a save leaves out, made again on load:");
+   Set_Up (With_Bushes => False, With_Labour => True);
+   declare
+      Laid, Lots : Natural;
+   begin
+      Set_Roof_Timbers (True);
+      Set_Window_Timber (True);
+      Build_Paths_Now;
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 56.0, Lots);
+      Run (3);                                            --  (the first is begun)
+      declare
+         N     : constant Natural := Lot_Count;
+         Was   : array (1 .. N) of Castle.Buildings.House;
+         Begun : constant Natural := House_Count;
+         Data  : constant Bytes := Save;
+         Ok    : Boolean;
+         Same, Timbered : Natural := 0;
+      begin
+         for K in 1 .. N loop
+            Was (K) := Lot_Design (K);
+         end loop;
+         Reset;
+         Load (Data, Ok);
+         for K in 1 .. Natural'Min (N, Lot_Count) loop
+            if Castle.Buildings."=" (Lot_Design (K), Was (K)) then
+               Same := Same + 1;
+            end if;
+         end loop;
+         Check (Ok and then N >= 2 and then Lot_Count = N and then Same = N,
+                "a lot laid out before a save is the very house it was laid out as after the load, its timbers too ("
+                & Img (Same) & " of " & Img (N) & " lots the same design, whole)");
+         Build_Homes_Now;
+         for H in 1 .. House_Count loop
+            if House_Has_Timbers (H) then
+               Timbered := Timbered + 1;
+            end if;
+         end loop;
+         Check (House_Count > Begun + 1 and then Timbered = House_Count,
+                "and the houses begun from them after the load have their roof's timbers (" & Img (Timbered) & " of "
+                & Img (House_Count) & " hovels; " & Img (Begun) & " begun before the save)");
+      end;
+   end;
+   Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);   --  (said here too: this section is run alone as well)
+   Set_Up (With_Bushes => False, With_Trees => True);
+   Hours := 30.0 * 24.0 + 7.0;               --  autumn
+   declare
+      Tree : Natural := 0;
+   begin
+      Run (1);
+      Set_Job (1, Gatherer);
+      for T in 1 .. 600 loop
+         Run (1);
+         for K in 1 .. Tree_Count loop
+            if Tree_Reserved_By (K) = 1 then
+               Tree := K;
+            end if;
+         end loop;
+         exit when Tree > 0;
+      end loop;
+      declare
+         Data : constant Bytes := Save;
+         Said : constant String := (if Tree > 0 then Status (1) else "");
+         Ok   : Boolean;
+      begin
+         Reset;
+         Load (Data, Ok);
+         Check (Ok and then Tree > 0 and then Tree_At (Tree).Kind = Apple and then Tree_Reserved_By (Tree) = 1,
+                "an apple tree a gatherer is on its way to is still that gatherer's after a load (" & Said
+                & "; held by " & Img (if Tree > 0 then Tree_Reserved_By (Tree) else 0) & ")");
+      end;
+   end;
+
+   ------------------------------------------------------------------ his notes of 2026-11-23
+   --  "the stockpile zones just disappeared at some point": housing joined to housing packed every
+   --  zone's strips again in the zones' order, in place, though a zone whose ground has been read
+   --  again (or had some taken out) has its strips last in the list: it was written over the
+   --  strips of the zones after it.  (Proved by putting the packing in place back: this fails.)
+   Put_Line ("zones keep their ground when housing is joined to housing:");
+   Set_Up (With_Bushes => False, With_Labour => True);
+   declare
+      Laid, Lots, Cells, Columns, Marked : Natural;
+      H0, S2, H1 : Natural;
+      S2_Blocks, H0_Blocks, S1_Blocks, H1_Blocks : Natural;
+      --  (Zones_Sound is of stockpiles and the camp alone: it was written before there was housing)
+      function Places_On_Their_Ground return Boolean is
+        (for all K in 1 .. Cell_Count => Zone_On (Cell_At (K).Centre.X, Cell_At (K).Centre.Y) = Zone_Of_Cell (K));
+   begin
+      Lay_Path ((44.0, 4.0, Ground_M), (44.0, 62.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 6.0, 55.0, 22.0, Lots);
+      H0 := Zone_Count;
+      Zone_Stockpile (39.0, 26.0, 43.0, 30.0, Cells);
+      S2 := Zone_Count;
+      Zone_Housing (44.6, 34.0, 55.0, 44.0, Lots);
+      H1 := Zone_Count;
+      --  the far end of the first housing taken out: its strips are made again, last in the list
+      Unzone_Housing (44.0, 16.0, 60.0, 23.0, Columns, Marked);
+      S1_Blocks := Zone_At (1).Blocks;
+      H0_Blocks := Zone_At (H0).Blocks;
+      S2_Blocks := Zone_At (S2).Blocks;
+      H1_Blocks := Zone_At (H1).Blocks;
+      Check (H0 = 2 and then S2 = 3 and then H1 = 4 and then Cells > 0 and then Columns > 0 and then Places_On_Their_Ground
+             and then Zone_On (41.0, 28.0) = S2 and then Zone_On (50.0, 10.0) = H0 and then Zone_On (50.0, 38.0) = H1
+             and then Zone_On (50.0, 19.0) = 0,
+             "housing, a second stockpile and more housing along a path; the end of the first housing taken out again ("
+             & Img (Columns) & " block columns)");
+      --  housing pulled on from the second housing: joined to it, every zone's strips packed again
+      Zone_Housing (44.6, 42.0, 55.0, 58.0, Lots);
+      Check (Housing_Joined = 1 and then Zone_Count = H1 and then Places_On_Their_Ground
+             and then Zone_At (1).Blocks = S1_Blocks and then Zone_At (S2).Blocks = S2_Blocks
+             and then Zone_At (H0).Blocks = H0_Blocks and then Zone_At (H1).Blocks > H1_Blocks
+             and then Zone_On (22.0, 16.0) = 1 and then Zone_On (41.0, 28.0) = S2 and then Zone_On (50.0, 10.0) = H0
+             and then Zone_On (50.0, 38.0) = H1 and then Zone_On (50.0, 54.0) = H1 and then Zone_On (50.0, 19.0) = 0,
+             "housing pulled on to the second housing is joined to it, and every zone has the ground it had: the first"
+             & " stockpile " & Img (Zone_At (1).Blocks) & " block columns, the second " & Img (Zone_At (S2).Blocks)
+             & ", the first housing " & Img (Zone_At (H0).Blocks) & "; every place is on its own stockpile's ground");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then Places_On_Their_Ground and then Zone_At (S2).Blocks = S2_Blocks
+                and then Zone_On (41.0, 28.0) = S2,
+                "saved and loaded: the same bytes, the same ground");
+      end;
+   end;
+
+   --  "the builder is standing on the blocks their placing and when the place them they fall
+   --  through, maybe extend their reach a little bit, on top of that they walk back and fourth
+   --  like a typewriter instead of a zigzag": the stockyard up the made-up hillside above, its
+   --  ground made ready with the two rules and without them.  Counted from what its builder says
+   --  and where it stands each second: a piece is worked from on it when its builder stands
+   --  within the square metre round the middle of the work.
+   Put_Line ("a site's ground worked from beside it, and a storehouse's there and back:");
+   declare
+      type Counts is record
+         Pieces, On_It, Hops : Natural := 0;
+         Hop_M   : Float := 0.0;
+         No_Way, Looked : Natural := 0;
+         Stood   : Natural := 0;
+         Done    : Boolean := False;
+      end record;
+      Got : array (Boolean) of Counts;
+   begin
+      for Rules in Boolean loop
+         Reset;
+         Set_Beds (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (True);
+         Set_Storehouse (True);
+         Set_Reach_Out (Rules);
+         Set_Zigzag (Rules);
+         Meadow;
+         for X in B (22.0) .. B (48.0) loop
+            for Y in B (0.0) .. B (63.0) loop
+               declare
+                  Up : constant Integer :=
+                    Integer'Min (22, Integer (Float (X - B (22.0)) / 14.0 * (1.0 + Float (Integer'Max (0, Y - B (24.0))) / 48.0)));
+               begin
+                  for Z in Ground_Row - 1 .. Ground_Row - 2 + Up loop
+                     Set (X, Y, Z, Dirt);
+                  end loop;
+                  if Up > 0 then
+                     Set (X, Y, Ground_Row - 1 + Up, Grass);
+                  end if;
+               end;
+            end loop;
+         end loop;
+         Hours := 16.0 * 24.0;
+         Place_Stake (Stake_P, 6, 42);
+         declare
+            Cells, Pile, Placed, Laid : Natural;
+            Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+            C : Counts renames Got (Rules);
+            Was_Level : Boolean := False;
+            Last_Spot : Vec3 := (0.0, 0.0, 0.0);
+            Last_S    : Integer := -1_000;
+            function Says (Part : String) return Boolean is (Ada.Strings.Fixed.Index (Status (3), Part) > 0);
+         begin
+            Lay_Path ((20.5, 17.5, Ground_M), (40.0, 17.5, Ground_M), Laid);
+            Lay_Path ((20.5, 17.5, Ground_M), (20.5, 40.0, Ground_M), Laid);
+            Lay_Path ((20.5, 40.0, Ground_M), (40.0, 52.0, Ground_M + 3.0), Laid);
+            Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Pile);
+            Zone_Stockyard (24.0, 41.0, 39.0, 26.0, Cells);
+            Index_All;
+            Supply (Wood, 80, Placed);
+            Supply (Straw, 80, Placed);
+            Supply (Stone, 200, Placed);
+            Set_Job (3, Forester);
+            while Hours < Morning + 0.5 loop
+               Run (60);
+            end loop;
+            for S in 1 .. 40_000 loop
+               Run (1);
+               exit when Storehouse > 0 and then House_At (Storehouse).Phase /= Ground;
+               if Storehouse > 0 and then Site_Of (3) = Storehouse then
+                  declare
+                     Level : constant Boolean := Says ("levelling the ground");
+                     W     : constant Vec3 := Where (3);
+                     Spot  : constant Vec3 := Work_Spot (3);
+                  begin
+                     if Level and then not Was_Level then
+                        C.Pieces := C.Pieces + 1;
+                        if abs (W.X - Spot.X) < 0.5 and then abs (W.Y - Spot.Y) < 0.5 then
+                           C.On_It := C.On_It + 1;
+                        end if;
+                        if S - Last_S <= 60 then
+                           C.Hops := C.Hops + 1;
+                           C.Hop_M := C.Hop_M + Flat (Spot, Last_Spot);
+                        end if;
+                     end if;
+                     if Level then
+                        Last_Spot := Spot;
+                        Last_S := S;
+                     end if;
+                     Was_Level := Level;
+                  end;
+                  if S mod 20 = 0 then
+                     C.Looked := C.Looked + 1;
+                     if not Castle.Nav."=" (Castle.Nav.Plan (Where (3), Stake_P).Result, Castle.Nav.Found) then
+                        C.No_Way := C.No_Way + 1;
+                     end if;
+                  end if;
+               end if;
+            end loop;
+            C.Done := Storehouse > 0 and then House_At (Storehouse).Phase /= Ground;
+            C.Stood := Stood_On_Fill;
+         end;
+      end loop;
+      declare
+         function Mean (C : Counts) return Float is (C.Hop_M / Float (Natural'Max (1, C.Hops)));
+      begin
+         Check (Got (False).Done and then Got (False).Pieces > 150 and then Got (False).On_It * 2 > Got (False).Pieces
+                and then Mean (Got (False)) > 2.5 and then Got (False).Stood = 0,
+                "as it was (both rules off): of" & Got (False).Pieces'Image & " square metres of a stockyard's ground,"
+                & Got (False).On_It'Image & " were worked from on them; one was " & Img (Mean (Got (False)), 2)
+                & " m from the one before on the average");
+         Check (Got (True).Done and then Got (True).Pieces > 150 and then Got (True).On_It * 20 <= Got (True).Pieces
+                and then Mean (Got (True)) < Mean (Got (False)) * 0.7,
+                "with the rules:" & Got (True).On_It'Image & " of" & Got (True).Pieces'Image
+                & " worked from on them (no place beside them to be got to and back from); one was "
+                & Img (Mean (Got (True)), 2) & " m from the one before on the average (this stockyard's way in is at"
+                & " the middle of its front, so each row is two arms and its builder crosses between them once a row);"
+                & Got (True).Stood'Image & " times someone was stood on earth filled in round it");
+         Check (Got (True).No_Way = 0 and then Got (True).Looked > 50 and then Got (False).No_Way = 0,
+                "its builder had a way back to the stake at every look, either way (" & Img (Got (True).Looked) & " and "
+                & Img (Got (False).Looked) & " looks)");
+      end;
+   end;
+
+   --  "we need to figure out a way to handle how paths and zone buildings meet up, we have blocks
+   --  that aren't knocked down ... we have the .5m jumps where a path is extended from square".
+   --  Counted as the runner counts it (--seam-stats): pairs of block columns side by side, both
+   --  with footpath on top, their tops two blocks or more apart.
+   Put_Line ("a path stepped where it meets trodden ground, and a door's way made again to its path:");
+   declare
+      function Trod_Top (X, Y : Integer) return Integer is
+      begin
+         for Z in reverse Ground_Row - 10 .. Ground_Row + 12 loop
+            if Get (X, Y, Z) in Dirt | Grass | Footpath | Fieldstone then
+               return (if Get (X, Y, Z) = Footpath then Z else -1);
+            end if;
+         end loop;
+         return -1;
+      end Trod_Top;
+      function Jumps (X0, Y0, X1, Y1 : Integer) return Natural is
+         N : Natural := 0;
+      begin
+         for X in X0 .. X1 loop
+            for Y in Y0 .. Y1 loop
+               if Trod_Top (X, Y) >= 0 then
+                  if Trod_Top (X + 1, Y) >= 0 and then abs (Trod_Top (X, Y) - Trod_Top (X + 1, Y)) >= 2 then
+                     N := N + 1;
+                  end if;
+                  if Trod_Top (X, Y + 1) >= 0 and then abs (Trod_Top (X, Y) - Trod_Top (X, Y + 1)) >= 2 then
+                     N := N + 1;
+                  end if;
+               end if;
+            end loop;
+         end loop;
+         return N;
+      end Jumps;
+      Path_Jumps, Path_Stepped : array (Boolean) of Natural := [others => 0];
+      Door_Jumps, Door_Remade  : array (Boolean) of Natural := [others => 0];
+      Stood : array (Boolean) of Boolean := [others => False];
+   begin
+      --  a path laid over a bank two blocks high: its own line keeps the bank's step
+      for Rule in Boolean loop
+         Set_Up (With_Stockpile => False, With_Bushes => False, With_Labour => True);
+         Set_Path_Level (True);
+         Set_Paths_Meet (Rule);
+         for X in B (40.0) .. B (58.0) loop
+            for Y in B (24.0) .. B (36.0) loop
+               Set (X, Y, Ground_Row - 1, Dirt);
+               Set (X, Y, Ground_Row, Dirt);
+               Set (X, Y, Ground_Row + 1, Grass);
+            end loop;
+         end loop;
+         declare
+            Laid : Natural;
+         begin
+            Lay_Path ((30.0, 30.0, Ground_M), (50.0, 30.0, Ground_M + 0.5), Laid);
+            Build_Paths_Now;
+            Path_Jumps (Rule) := Jumps (B (29.0), B (28.0), B (51.0), B (32.0));
+            Path_Stepped (Rule) := Path_Columns_Stepped;
+         end;
+      end loop;
+      Check (Path_Jumps (False) >= 4 and then Path_Stepped (False) = 0,
+             "as it was (--no-paths-meet): a path laid over a bank two blocks high lies half a metre off itself there,"
+             & Path_Jumps (False)'Image & " pairs of its block columns side by side");
+      Check (Path_Jumps (True) = 0 and then Path_Stepped (True) in 4 .. 16,
+             "with the rule: none;" & Path_Stepped (True)'Image & " blocks were cut off the upper side, and the bank is two"
+             & " steps of a block a quarter metre apart");
+      --  a path laid two blocks under trodden ground that is a zone's (a row of a stockpile's ground
+      --  made up for it): the zone's is never moved, the path beside it is raised to a step
+      declare
+         Held_Jumps : array (Boolean) of Natural := [others => 0];
+         Zone_Kept  : array (Boolean) of Boolean := [others => False];
+      begin
+         for Rule in Boolean loop
+            Set_Up (With_Bushes => False, With_Labour => True);
+            Set_Path_Level (True);
+            Set_Paths_Meet (Rule);
+            for X in B (21.0) .. B (25.0) - 1 loop
+               Set (X, B (17.0) - 1, Ground_Row - 1, Dirt);
+               Set (X, B (17.0) - 1, Ground_Row, Dirt);
+               Set (X, B (17.0) - 1, Ground_Row + 1, Footpath);
+            end loop;
+            Build_Paths_Now;
+            Held_Jumps (Rule) := Jumps (B (20.0), B (16.0), B (26.0), B (18.5));
+            Zone_Kept (Rule) := (for all X in B (21.0) .. B (25.0) - 1 => Get (X, B (17.0) - 1, Ground_Row + 1) = Footpath
+                                                                       and then Get (X, B (17.0) - 1, Ground_Row + 2) = Air);
+         end loop;
+         Check (Held_Jumps (False) >= 8 and then Held_Jumps (True) = 0 and then Zone_Kept (True) and then Zone_Kept (False),
+                "a path laid two blocks under trodden ground of a zone's:" & Held_Jumps (False)'Image
+                & " pairs half a metre apart as it was, none with the rule; the zone's ground is not moved, the path"
+                & " beside it has a block of earth put under it");
+      end;
+      --  a hovel placed beside a path that comes to lie two blocks lower before it is built
+      for Rule in Boolean loop
+         Set_Up (With_Bushes => False, With_Demand => True, With_Labour => True);
+         Set_Path_Level (True);
+         Set_Paths_Meet (Rule);
+         Set_Door_Meet (Rule);
+         declare
+            Laid, Lots, Placed : Natural;
+         begin
+            Build_Paths_Now;
+            Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+            Build_Paths_Now;
+            Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+            Supply (Wood, 20, Placed);
+            Supply (Straw, 60, Placed);
+            Supply (Stone, 60, Placed);
+            Set_Job (3, Forester);
+            Set_Job (2, Gatherer);
+            for S in 1 .. 2_000 loop
+               Run (1);
+               exit when House_Count > 0;
+            end loop;
+            --  (the path before its lot two blocks lower, as a path brought to its line after the hovel was placed)
+            for X in B (43.5) .. B (44.5) - 1 loop
+               for Y in B (20.0) .. B (58.0) - 1 loop
+                  if Get (X, Y, Ground_Row - 1) = Footpath then
+                     Set (X, Y, Ground_Row - 1, Air);
+                     Set (X, Y, Ground_Row - 2, Air);
+                     Set (X, Y, Ground_Row - 3, Footpath);
+                  end if;
+               end loop;
+            end loop;
+            for S in 1 .. 40_000 loop
+               Run (1);
+               exit when House_Count > 0 and then House_At (1).Phase = Standing;
+            end loop;
+            Stood (Rule) := House_Count > 0 and then House_At (1).Phase = Standing;
+            Door_Jumps (Rule) := Jumps (B (42.0), B (20.0), B (56.0), B (42.0));
+            Door_Remade (Rule) := Door_Columns_Remade;
+         end;
+      end loop;
+      Check (Stood (False) and then Door_Jumps (False) >= 2 and then Door_Remade (False) = 0,
+             "as it was (--no-door-meet): a hovel's way planned level to a path that then came to lie two blocks lower"
+             & " ends half a metre over it," & Door_Jumps (False)'Image & " pairs of block columns");
+      Check (Stood (True) and then Door_Jumps (True) = 0 and then Door_Remade (True) >= 2,
+             "with the rule: none;" & Door_Remade (True)'Image & " columns of its way were made again, a step of a block"
+             & " between its landing and the path");
+   end;
+
+   --  "let's also have builders who finish their project help finish larger projects together": a
+   --  storehouse on a stockyard with three foresters and no hovel to build, with the rule and without
+   Put_Line ("builders with no house of their own help at a larger one:");
+   declare
+      type Outcome is record
+         Stood_At, Most, Help_S, Roof_Help_S : Natural := 0;
+         Way_Lost : Boolean := False;
+      end record;
+      Got : array (Boolean) of Outcome;
+   begin
+      for Rule in Boolean loop
+         Set_Up (With_Stockpile => False, With_Bushes => False);
+         Set_Storehouse (True);
+         Set_Demand_Chain (True);
+         Set_Build_Help (Rule);
+         declare
+            Pile, Cells, Placed : Natural;
+            Morning : constant Long_Float := 17.0 * 24.0 + 7.0;
+            O : Outcome renames Got (Rule);
+         begin
+            Zone_Stockpile (22.0, 18.0, 32.0, 22.0, Pile);
+            Zone_Stockyard (21.0, 17.0, 36.0, 2.0, Cells);
+            Supply (Wood, 60, Placed);
+            Supply (Straw, 120, Placed);
+            Supply (Stone, 60, Placed);
+            Set_Job (3, Forester);
+            Set_Job (4, Forester);
+            Set_Job (5, Forester);
+            while Hours < Morning + 0.5 loop
+               Run (60);
+            end loop;
+            for S in 1 .. 60_000 loop
+               Run (1);
+               if Storehouse > 0 then
+                  O.Most := Natural'Max (O.Most, Builders_At (Storehouse));
+                  for I in 3 .. 5 loop
+                     if Helping (I) then
+                        O.Help_S := O.Help_S + 1;
+                        if House_At (Storehouse).Phase in Roofing | Trimming then
+                           O.Roof_Help_S := O.Roof_Help_S + 1;
+                        end if;
+                     end if;
+                  end loop;
+                  if S mod 30 = 0 then
+                     for I in 3 .. 5 loop
+                        O.Way_Lost := O.Way_Lost
+                          or else not Castle.Nav."=" (Castle.Nav.Plan (Where (I), Stake_P).Result, Castle.Nav.Found);
+                     end loop;
+                  end if;
+                  if House_At (Storehouse).Phase = Standing then
+                     O.Stood_At := S;
+                     exit;
+                  end if;
+               end if;
+            end loop;
+         end;
+      end loop;
+      Check (Got (False).Stood_At > 0 and then Got (False).Most = 1 and then Got (False).Help_S = 0,
+             "as it was (--no-build-help): the storehouse has one builder, and stands " & Img (Got (False).Stood_At)
+             & " game minutes after the morning it was asked for; the other two foresters fell");
+      Check (Got (True).Stood_At > 0 and then Got (True).Most in 2 .. 1 + Help_Most and then Got (True).Help_S > 600
+             and then Got (True).Stood_At < Got (False).Stood_At and then Got (True).Roof_Help_S <= 60
+             and then not Got (True).Way_Lost and then not Got (False).Way_Lost,
+             "with the rule the other two help: " & Img (Got (True).Most) & " builders at the most, " & Img (Got (True).Help_S)
+             & " serf-seconds of help (" & Img (Got (True).Roof_Help_S) & " of them while its roof is thatched), and it stands "
+             & Img (Got (True).Stood_At) & " game minutes on; all three had a way back to the stake at every look");
+   end;
+
+   --  "the stockpile zones just disappeared at some point, let the player remove them if they want
+   --  to": the order, through the action table; what lies on it carried off first; taken back; an
+   --  empty one; the stockyard never
+   Put_Line ("the player removes a stockpile:");
+   declare
+      use Castle.Actions;
+      R : Result;
+      Cells_2, Cells_3, Placed, Straw_Was, Places_Was : Natural;
+      Gone_At : Natural := 0;
+      function Row (Label : String) return Boolean is
+         M : constant Menu := Menu_For (The_Player, (Kind => A_Stockpile, Index => 1, Point => (22.0, 16.0, Ground_M)));
+      begin
+         return (for some K in 1 .. M.N => Str (M.Items (K).Label) = Label);
+      end Row;
+      function Places_On_Their_Ground return Boolean is
+        (for all K in 1 .. Cell_Count => Zone_On (Cell_At (K).Centre.X, Cell_At (K).Centre.Y) = Zone_Of_Cell (K));
+   begin
+      Set_Up (With_Bushes => False);
+      Set_Job (2, Porter);
+      Supply (Straw, 2 * Cell_Limit (Straw), Placed);         --  (into the stockpile by the stake, zone 1)
+      Zone_Stockpile (27.0, 15.0, 31.0, 17.0, Cells_2);
+      Straw_Was := Stored (Straw);
+      Places_Was := Cell_Count;
+      Check (Zone_At (1).Holds (Straw) = Straw_Was and then Straw_Was > 0 and then Cells_2 = 8 and then Row ("Remove this stockpile")
+             and then not Row ("Keep this stockpile"),
+             "two stockpiles, straw on the first; its menu offers to remove it");
+      Perform ((What => Remove_Stockpile, By => The_Player, Pile => 9, Remove => True), R);
+      Check (not R.Done, "there is none to remove where there is no stockpile");
+      Perform ((What => Remove_Stockpile, By => The_Player, Pile => 1, Remove => True), R);
+      Check (R.Done and then Zone_At (1).Leaving and then Zone_At (1).Cells = 0 and then Zone_At (1).Blocks > 0
+             and then Stored (Straw) = Straw_Was and then Row ("Keep this stockpile") and then not Row ("Remove this stockpile"),
+             "ordered removed: its places are closed, what lies on it lies there still, and its menu offers to keep it");
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then Zone_At (1).Leaving, "saved and loaded: the same bytes, the order kept");
+      end;
+      for S in 1 .. 3_000 loop
+         Run (1);
+         if Stockpiles_Removed = 1 then
+            Gone_At := S;
+            exit;
+         end if;
+      end loop;
+      Check (Gone_At > 0 and then Zone_At (1).Blocks = 0 and then not Zone_At (1).Leaving and then Zone_On (22.0, 16.0) = 0
+             and then Cell_Count = Places_Was - 8 and then Stored (Straw) + Carried_All = Straw_Was
+             and then Zone_At (2).Holds (Straw) + Carried_All = Straw_Was and then Places_On_Their_Ground
+             and then Zone_Count = 2,
+             "a porter carries the straw to the other stockpile, and " & Img (Gone_At) & " game minutes on the first is gone:"
+             & " its ground no zone's, its places no more, every sheaf stored or carried, the other's places its own");
+      --  another zoned, ordered removed and the order taken back; then removed empty
+      Zone_Stockpile (21.0, 15.0, 25.0, 17.0, Cells_3);
+      Perform ((What => Remove_Stockpile, By => The_Player, Pile => Zone_Count, Remove => True), R);
+      Perform ((What => Remove_Stockpile, By => The_Player, Pile => Zone_Count, Remove => False), R);
+      Check (R.Done and then Cells_3 = 8 and then not Zone_At (Zone_Count).Leaving and then Zone_At (Zone_Count).Cells = 8,
+             "the order taken back: its places are open again");
+      Run (3);
+      Check (Stockpiles_Removed = 1 and then Zone_At (Zone_Count).Blocks > 0, "and it stays");
+      Perform ((What => Remove_Stockpile, By => The_Player, Pile => Zone_Count, Remove => True), R);
+      Run (2);
+      Check (R.Done and then Stockpiles_Removed = 2 and then Zone_At (Zone_Count).Blocks = 0
+             and then Cell_Count = Places_Was - 8 and then Places_On_Their_Ground,
+             "an empty one ordered removed is gone at the next colony second");
+   end;
+
+   --  "a hunter placed the deer in the stockpile without quatering it, I have only seen it happen
+   --  once, and I don't know what caused it": one way made to happen (the hunter given another job
+   --  as it carries its kill), as it was and with the rule
+   Put_Line ("a deer is butchered by whoever carries it home:");
+   declare
+      Lay, Meat_In, Dropped : array (Boolean) of Boolean := [others => False];
+      Got : array (Boolean) of Boolean := [others => False];
+      function A_Kill_Lies return Boolean is
+        (for some K in 1 .. Carcass_Count => Carcass_Used (K) and then Carcass_At (K).Lying);
+   begin
+      for Rule in Boolean loop
+         Set_Up (With_Bushes => False);
+         Set_Kill_Home (Rule);
+         Hours := 16.0 * 24.0 + 7.0;
+         Set_Job (1, Hunter);
+         for S in 1 .. 3_600 loop
+            Run (1);
+            exit when Carrying (1) = Carcass;
+         end loop;
+         Got (Rule) := Carrying (1) = Carcass;
+         Run (5);
+         Set_Job (1, Porter);                      --  (the player gives it another job, the deer on its shoulders)
+         for S in 1 .. 900 loop
+            Run (1);
+            Lay (Rule) := Lay (Rule) or else A_Kill_Lies;
+            exit when Stored (Meat) > 0;
+         end loop;
+         Meat_In (Rule) := Stored (Meat) > 0 and then Stored (Hide) >= 1 and then Job_Of (1) = Porter;
+         Dropped (Rule) := Carcasses_Dropped (No_Hunter_Now) > 0;
+      end loop;
+      Check (Got (False) and then Lay (False) and then Dropped (False) and then not Meat_In (False),
+             "as it was (--no-kill-home): a hunter given another job with a deer on its shoulders puts it down where it"
+             & " stands, and with no other hunter it lies there whole");
+      Check (Got (True) and then not Lay (True) and then not Dropped (True) and then Meat_In (True),
+             "with the rule it brings the deer home and butchers it, a porter now: the meat and the hide are stored and"
+             & " the deer never lay");
+   end;
+
+   --  "the straw half in the ground and half outside, I don't know what the solution for that is,
+   --  we might have to flatten stockpiles", and "some clipping issues where the cart or goods are
+   --  placed on top of each other": a stockpile zoned over a step in the ground, something put on
+   --  some of its places; and the lord's cart in a stockpile that is then filled
+   Put_Line ("a stockpile's place made level when something is put on it, and room round the cart:");
+   declare
+      Uneven_Used, Uneven_Empty, Levelled, Stored_N : array (Boolean) of Natural := [others => 0];
+      --  the block columns of the square metre round place K whose top is not at the place's own level
+      function Off_Level (K : Positive) return Natural is
+         C  : constant Cell_View := Cell_At (K);
+         Zr : constant Integer := B (C.Centre.Z + 0.01) - 1;
+         N  : Natural := 0;
+      begin
+         for X in B (C.Centre.X - 0.5 + 0.01) .. B (C.Centre.X - 0.5 + 0.01) + 3 loop
+            for Y in B (C.Centre.Y - 0.5 + 0.01) .. B (C.Centre.Y - 0.5 + 0.01) + 3 loop
+               if Get (X, Y, Zr) not in Grass | Dirt or else Get (X, Y, Zr + 1) in Grass | Dirt then
+                  N := N + 1;
+               end if;
+            end loop;
+         end loop;
+         return N;
+      end Off_Level;
+   begin
+      for Rule in Boolean loop
+         Set_Up (With_Stockpile => False, With_Bushes => False);
+         Set_Place_Level (Rule);
+         for X in B (20.0) .. B (32.0) loop                --  (the ground a block higher from y = 18.5 on: a step
+            for Y in B (18.5) .. B (26.0) loop             --  through the middle of the first row of places)
+               Set (X, Y, Ground_Row - 1, Dirt);
+               Set (X, Y, Ground_Row, Grass);
+            end loop;
+         end loop;
+         declare
+            Cells, Placed : Natural;
+         begin
+            Zone_Stockpile (22.0, 18.0, 28.0, 21.0, Cells);
+            Supply (Straw, 2 * Cell_Limit (Straw), Placed);
+            Run (3);
+            Stored_N (Rule) := Stored (Straw);
+            for K in 1 .. Cell_Count loop
+               if Cell_At (K).Count > 0 then
+                  Uneven_Used (Rule) := Uneven_Used (Rule) + (if Off_Level (K) > 0 then 1 else 0);
+               else
+                  Uneven_Empty (Rule) := Uneven_Empty (Rule) + (if Off_Level (K) > 0 then 1 else 0);
+               end if;
+            end loop;
+            Levelled (Rule) := Places_Levelled;
+         end;
+      end loop;
+      Check (Stored_N (False) > 0 and then Uneven_Used (False) >= 1 and then Levelled (False) = 0,
+             "as it was (--no-place-level): straw put on a stockpile zoned over a step of a block lies on"
+             & Uneven_Used (False)'Image & " places with block columns off the place's level");
+      Check (Stored_N (True) = Stored_N (False) and then Uneven_Used (True) = 0 and then Levelled (True) >= 1
+             and then Uneven_Empty (True) = Uneven_Empty (False) and then Uneven_Empty (True) >= 1,
+             "with the rule every place that holds something is level (" & Img (Levelled (True)) & " made so); the"
+             & Uneven_Empty (True)'Image & " uneven places nothing was put on are as they were");
+      --  the cart in a stockpile, and the stockpile filled
+      declare
+         Empty, Far : array (Boolean) of Natural := [others => 0];
+         In_Pile    : array (Boolean) of Boolean := [others => False];
+      begin
+         for Rule in Boolean loop
+            Set_Up (With_Stockpile => False, With_Curing => True, With_Labour => True, With_Bushes => False);
+            Set_Cart_Pull (True);                 --  (the checks' Reset holds the pull off)
+            Set_Cart_Room (Rule);
+            declare
+               Cells, Placed : Natural;
+            begin
+               Zone_Stockpile (22.0, 18.0, 30.0, 24.0, Cells);
+               for S in 1 .. 600 loop
+                  Run (1);
+                  exit when Cart_In_Stockpile and then not Cart.Towed;
+               end loop;
+               Run (5);
+               In_Pile (Rule) := Cart_In_Stockpile and then Cells = 48;
+               Supply (Berries, 50_000, Placed);
+               declare
+                  C  : constant Cart_View := Cart;
+               begin
+                  for K in 1 .. Cell_Count loop
+                     if Cell_At (K).Count = 0 then
+                        Empty (Rule) := Empty (Rule) + 1;
+                        declare
+                           Dx : constant Float := Cell_At (K).Centre.X - C.At_P.X;
+                           Dy : constant Float := Cell_At (K).Centre.Y - C.At_P.Y;
+                           A  : constant Float := Dx * Cos (C.Turn) + Dy * Sin (C.Turn);
+                           Sd : constant Float := Dy * Cos (C.Turn) - Dx * Sin (C.Turn);
+                        begin
+                           if not ((abs Sd <= 0.6 and then A in -1.1 .. Cart_Shaft_M + 0.3)
+                                   or else (abs Sd <= 1.25 and then abs A <= 1.25))
+                           then
+                              Far (Rule) := Far (Rule) + 1;
+                           end if;
+                        end;
+                     end if;
+                  end loop;
+               end;
+            end;
+         end loop;
+         Check (In_Pile (False) and then Empty (False) = 2 and then Far (False) = 0,
+                "as it was (--no-cart-room): with the stockpile filled, the two places under the cart's bed are empty"
+                & " and no other");
+         Check (In_Pile (True) and then Empty (True) in 5 .. 8 and then Far (True) = 0,
+                "with the rule" & Empty (True)'Image & " are: those under its bed, beside its wheels and under its shafts,"
+                & " and none further off");
+      end;
+   end;
+
+   --  "can we extend the truss to the end of the wall? make it symmetrical, either add another
+   --  support if the length is even?": four hundred hovels and the storehouse, each drawn with its
+   --  timbers as they were and with the fuller truss, and the two compared block by block
+   Put_Line ("the truss to the ends of its wall, the same either side of its middle:");
+   declare
+      package CB renames Castle.Buildings;
+      type Cell is record
+         M  : Material := Air;
+         On : Boolean := False;
+      end record;
+      type Grid is array (0 .. 63, 0 .. 47, 0 .. 47) of Cell;
+      type Grid_Access is access Grid;
+      Was, Now : constant Grid_Access := new Grid;
+      Into : Grid_Access := Was;
+      Straw_Seen, Timber_First, In_Order, Twice : Boolean;
+      Last_S : CB.Stage;
+      N_Timber : Natural;
+      procedure Put (Bx, By, Bz : Integer; M : Material; S : CB.Stage; State : Natural) is
+         pragma Unreferenced (State);
+         use type CB.Stage;
+      begin
+         In_Order := In_Order and then S >= Last_S;
+         Last_S := S;
+         if S >= CB.Dress then
+            return;
+         end if;
+         if M in Thatch | Daub then
+            Straw_Seen := True;
+         elsif M in Log | Plank then
+            Timber_First := Timber_First and then not Straw_Seen;
+            N_Timber := N_Timber + 1;
+         end if;
+         if Bx in Grid'Range (1) and then By in Grid'Range (2) and then Bz in Grid'Range (3) then
+            Twice := Twice or else Into (Bx, By, Bz).On;
+            Into (Bx, By, Bz) := (M, True);
+         end if;
+      end Put;
+      procedure Draw is new CB.Blueprint (Put);
+      procedure Draw_Both (H : in out CB.House; Timber_Was, Timber_Now : out Natural) is
+      begin
+         H.Fx := 4;  H.Fy := 4;  H.Pad := 4;
+         H.Ux := 1;  H.Uy := 0;  H.Vx := 0;  H.Vy := 1;
+         H.Truss := True;  H.Sill := True;  H.Jambs := False;  H.Ridge := True;
+         for Pass in Boolean loop
+            Into := (if Pass then Now else Was);
+            Into.all := [others => [others => [others => <>]]];
+            H.Full := Pass;
+            Straw_Seen := False;
+            Last_S := CB.Site;
+            N_Timber := 0;
+            Draw (H);
+            if Pass then
+               Timber_Now := N_Timber;
+            else
+               Timber_Was := N_Timber;
+            end if;
+         end loop;
+      end Draw_Both;
+      Same_But, New_Timber, Even_Sides, Was_Uneven, Feet : Boolean := True;
+      Uneven_Was, Evens : Natural := 0;
+      Odd_More_Hi, Even_More_Lo : Natural := 0;
+      Even_More_Hi : Natural := 0;
+      T_Was, T_Now : Natural;
+      --  the gable end at Along (0: the first; else the last) of H: what is at place Across, row Z
+      function Gable (G : Grid_Access; H : CB.House; Last : Boolean; Across, Z : Integer) return Material is
+        (if H.Ridge_Along_U then G (4 + (if Last then H.W - 1 else 0), 4 + Across, Z).M
+         else G (4 + Across, 4 + (if Last then H.D - 1 else 0), Z).M);
+   begin
+      Timber_First := True;
+      In_Order := True;
+      Twice := False;
+      Even_More_Lo := Natural'Last;
+      for Seed in 1 .. 400 loop
+         declare
+            H    : CB.House := CB.Design (Castle.Hash.Mix (Castle.Hash.U64 (Seed)));
+            Top  : constant Integer := 4 + H.Wall_H;
+            Span : constant Integer := (if H.Ridge_Along_U then H.D else H.W);
+            Uneven : Boolean := False;
+         begin
+            Draw_Both (H, T_Was, T_Now);
+            if Span mod 2 = 0 then
+               Evens := Evens + 1;
+               Even_More_Lo := Natural'Min (Even_More_Lo, T_Now - T_Was);
+               Even_More_Hi := Natural'Max (Even_More_Hi, T_Now - T_Was);
+            else
+               Odd_More_Hi := Natural'Max (Odd_More_Hi, T_Now - T_Was);
+            end if;
+            for X in Grid'Range (1) loop
+               for Y in Grid'Range (2) loop
+                  for Z in Grid'Range (3) loop
+                     if Was (X, Y, Z).On then
+                        Same_But := Same_But and then Now (X, Y, Z).On
+                          and then (Now (X, Y, Z).M = Was (X, Y, Z).M
+                                    or else (Was (X, Y, Z).M = Daub and then Now (X, Y, Z).M = Log));
+                     elsif Now (X, Y, Z).On then
+                        New_Timber := New_Timber and then Now (X, Y, Z).M = Log and then Z >= Top;
+                     end if;
+                  end loop;
+               end loop;
+            end loop;
+            for Last in Boolean loop
+               for Z in Top .. Top + Span loop
+                  for A in 0 .. Span - 1 loop
+                     Even_Sides := Even_Sides
+                       and then (Gable (Now, H, Last, A, Z) = Log) = (Gable (Now, H, Last, Span - 1 - A, Z) = Log);
+                     Uneven := Uneven or else (Gable (Was, H, Last, A, Z) = Log) /= (Gable (Was, H, Last, Span - 1 - A, Z) = Log);
+                  end loop;
+               end loop;
+               --  the rafter's foot in each top corner of the gable's wall: never daub now
+               Feet := Feet and then Gable (Now, H, Last, 1, Top - 2) /= Daub and then Gable (Now, H, Last, 1, Top - 3) /= Daub
+                 and then Gable (Now, H, Last, 2, Top - 2) /= Daub
+                 and then Gable (Now, H, Last, Span - 2, Top - 2) /= Daub and then Gable (Now, H, Last, Span - 2, Top - 3) /= Daub
+                 and then Gable (Now, H, Last, Span - 3, Top - 2) /= Daub;
+            end loop;
+            if Uneven then
+               Uneven_Was := Uneven_Was + 1;
+            end if;
+            Was_Uneven := Was_Uneven and then (Uneven = (Span mod 2 = 0));
+         end;
+      end loop;
+      Check (In_Order and then Timber_First and then not Twice,
+             "four hundred hovels with the fuller truss: in the order of building still, all the timber before anything"
+             & " of straw, no block laid twice");
+      Check (Same_But and then New_Timber,
+             "block for block the hovel it was: daub turned to timber in the gables' top corners, and new timber only"
+             & " from the wall's top beam up");
+      Check (Even_Sides and then Was_Uneven and then Uneven_Was = Evens and then Evens > 50,
+             "over its wall's top beam every gable's timber is the same either side of its middle; as it was," & Uneven_Was'Image
+             & " of the four hundred were not (every one whose span is an even number of blocks:" & Evens'Image & ")");
+      Check (Feet,
+             "the rafters' line goes on down through each top corner of a gable's wall to its corner post: no daub there");
+      Check (Odd_More_Hi = 12 and then Even_More_Lo >= 30 and then Even_More_Hi <= 60,
+             "it takes 12 blocks of timber more where the span is odd, " & Img (Even_More_Lo) & " to " & Img (Even_More_Hi)
+             & " where it is even (a log is" & Integer'Image (Planks_Per_Log) & ")");
+      declare
+         G    : CB.House := CB.Storehouse_Design;
+         Top  : constant Integer := 4 + G.Wall_H;
+         Mid  : constant Integer := (G.D - 1) / 2;
+         Posts : Boolean := True;
+         N_Ties : Natural := 0;
+      begin
+         G.Yard_U0 := -8;  G.Yard_U1 := G.W + 7;  G.Yard_V0 := -4;  G.Yard_V1 := G.D + 12;
+         Draw_Both (G, T_Was, T_Now);
+         for U in 1 .. G.W - 2 loop
+            if Now (4 + U, 4 + 1, Top - 1).M = Log then
+               N_Ties := N_Ties + 1;
+               Posts := Posts and then Now (4 + U, 4 + Mid, Top).M = Log
+                 and then (Now (4 + U, 4 + Mid + 1, Top).M = Log) = (G.D mod 2 = 0);
+            end if;
+         end loop;
+         Check (Posts and then N_Ties >= 3 and then T_Now > T_Was and then not Twice,
+                "the storehouse (" & Img (G.D) & " blocks across): " & (if G.D mod 2 = 0 then "two king posts" else "one king post")
+                & " on each of its " & Img (N_Ties) & " tie beams and in each gable (" & Img (T_Now - T_Was)
+                & " blocks of timber more)");
+      end;
+   end;
+   --  (a hovel begun with the fuller truss, saved at its frame and loaded: its blueprint's count is its
+   --  own still.  A load measured each house before it had read which truss the house has: found
+   --  2026-11-23, after the truss's commit; "the same bytes" does not show it, the count is not saved)
+   Set_Up (With_Bushes => False, With_Demand => True, With_Labour => True);
+   Set_Roof_Timbers (True);
+   Set_Window_Timber (True);
+   Set_Full_Truss (True);
+   declare
+      Laid, Lots, Placed, Blocks_Was : Natural;
+      Takes_Was : Per_Kind;
+   begin
+      Build_Paths_Now;
+      Lay_Path ((44.0, 20.0, Ground_M), (44.0, 58.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (44.6, 22.0, 55.0, 40.0, Lots);
+      Supply (Wood, 20, Placed);
+      Supply (Straw, 60, Placed);
+      Set_Job (3, Forester);
+      for S in 1 .. 6_000 loop
+         Run (1);
+         exit when House_Count > 0 and then House_At (1).Phase = Framing;
+      end loop;
+      Blocks_Was := (if House_Count > 0 then House_At (1).Blocks else 0);
+      Takes_Was := (if House_Count > 0 then House_At (1).Takes else [others => 0]);
+      declare
+         Data : constant Bytes := Save;
+         Ok   : Boolean;
+      begin
+         Reset;
+         Load (Data, Ok);
+         Check (Ok and then Save = Data and then Blocks_Was > 1_000 and then House_Count > 0
+                and then House_At (1).Blocks = Blocks_Was and then House_At (1).Takes = Takes_Was,
+                "a hovel begun with the fuller truss, saved at its frame and loaded: the same bytes, and its blueprint's"
+                & Blocks_Was'Image & " blocks are" & (if House_Count > 0 then House_At (1).Blocks'Image else " ?")
+                & " after the load");
+      end;
+      --  (and run on until it stands, saved and loaded again.  A load held what was laid of a house
+      --  against its blueprint before it had read which truss the house has: every save in which a
+      --  hovel with the fuller truss stood was refused, "no colony in that save".  Found 2026-11-23,
+      --  two commits after the truss's, by a save of the game as it is played on its fifth day.)
+      Supply (Stone, 60, Placed);
+      for S in 1 .. 40_000 loop
+         Run (1);
+         exit when House_Count > 0 and then House_At (1).Phase = Standing;
+      end loop;
+      declare
+         Data  : constant Bytes := Save;
+         Stood : constant Boolean := House_Count > 0 and then House_At (1).Phase = Standing;
+         Laid  : constant Natural := (if House_Count > 0 then House_At (1).Placed else 0);
+         Ok    : Boolean;
+      begin
+         Reset;
+         Load (Data, Ok);
+         Check (Stood and then Laid = Blocks_Was and then Ok and then Save = Data and then House_Count > 0
+                and then House_At (1).Phase = Standing and then House_At (1).Placed = Laid,
+                "the same hovel standing (" & Img (Laid) & " blocks laid), saved and loaded: "
+                & (if not Stood then "it does not stand" elsif not Ok then "the save is refused" else "the same bytes"));
+      end;
+   end;
+
+   --  Found 2026-11-23, when a stockpile's places were made level: people standing at the stockpile
+   --  with their feet a block in the ground, eating or looking for work (2,540 serf-seconds in
+   --  eighteen days of the game as it is played; 517 with every rule of that day off).  A way's
+   --  point where the height changes is the first eighth of a metre inside the next place of the
+   --  walking map, and a walker kept the height it came from until it got there: whoever stopped in
+   --  that eighth stood in the step.  Here: the meadow a block higher north of a line, bushes on
+   --  the higher ground a picker's reach from the line, and whoever stands still within a metre and
+   --  a half past the line looked at each second.
+   Put_Line ("a walker at the height of the place it steps into as it steps into it:");
+   declare
+      type Counts is record
+         In_S  : Natural := 0;     --  serf-seconds standing still with ground in its own block column at its feet,
+         Stood : Natural := 0;     --  of those standing still within a metre and a half past the line
+      end record;
+      Got    : array (Boolean) of Counts;
+      Edge_Y : constant Float := 30.0;
+   begin
+      for Rule in Boolean loop
+         --  (as Set_Up, with the ground and its bushes made before the stake is put)
+         Reset;
+         Set_Beds (False);
+         Set_Curing (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Step_At_Edge (Rule);
+         Meadow;
+         Fill (2.0, Edge_Y, 46.0, 46.0, Ground_Row, Ground_Row, Grass);
+         for K in 0 .. 13 loop
+            declare
+               Cx : constant Integer := B (10.0 + 2.0 * Float (K));
+               Cy : constant Integer := B (Edge_Y + 1.1);
+            begin
+               for Dx in -2 .. 2 loop
+                  for Dy in -2 .. 2 loop
+                     for Dz in 0 .. 2 loop
+                        if Float (Dx * Dx + Dy * Dy) / 6.25 + Float (Dz * Dz) / 4.0 < 1.0 then
+                           Set (Cx + Dx, Cy + Dy, Ground_Row + 1 + Dz, Berry_Bush);
+                        end if;
+                     end loop;
+                  end loop;
+               end loop;
+            end;
+         end loop;
+         Changed_World;
+         Hours := 16.0 * 24.0;
+         Place_Stake (Stake_P, 6, 42);
+         declare
+            Laid, Cells : Natural;
+         begin
+            Lay_Path ((20.5, 17.5, Ground_M), (40.0, 17.5, Ground_M), Laid);
+            Zone_Stockpile (21.0, 15.0, 25.0, 17.0, Cells);
+         end;
+         Index_All;
+         for I in 1 .. Natural'Min (6, Members) loop
+            Set_Job (I, Gatherer);
+         end loop;
+         declare
+            Was : array (1 .. 6) of Vec3 := [others => (0.0, 0.0, 0.0)];
+         begin
+            for S in 1 .. 1_800 loop
+               Run (1);
+               for I in 1 .. Natural'Min (6, Members) loop
+                  declare
+                     W : constant Vec3 := Where (I);
+                  begin
+                     if W = Was (I) and then W.Y >= Edge_Y and then W.Y < Edge_Y + 1.5 then
+                        Got (Rule).Stood := Got (Rule).Stood + 1;
+                        if Get (B (W.X), B (W.Y), B (W.Z + 0.05)) = Grass then
+                           Got (Rule).In_S := Got (Rule).In_S + 1;
+                        end if;
+                     end if;
+                     Was (I) := W;
+                  end;
+               end loop;
+            end loop;
+         end;
+      end loop;
+      Check (Got (False).Stood > 100 and then Got (False).In_S > 20,
+             "as it was (--no-step-at-edge): of" & Got (False).Stood'Image & " serf-seconds standing still just past where the"
+             & " meadow steps up a block," & Got (False).In_S'Image & " were with the step's turf at their feet");
+      Check (Got (True).Stood > 100 and then Got (True).In_S = 0,
+             "with the rule: none of" & Got (True).Stood'Image);
+   end;
+
+   --  John, 2026-11-23, of a stockpile flattened whole or each place by itself: "flatten the
+   --  stockpile, let's just make this easy for ourselves".  A meadow that rises a block a metre
+   --  northward from a line, a path along its foot, a stockpile zoned from the path up the rise.
+   Put_Line ("a stockpile is one level:");
+   declare
+      type Got_Rec is record
+         Cells    : Natural := 0;
+         Z_Lo, Z_Hi : Float := 0.0;          --  the lowest and the highest of its places' heights
+         Rows_Lo, Rows_Hi : Integer := 0;    --  and of its ground's tops (rows), over all its block columns
+         Columns  : Natural := 0;
+         Flat     : Natural := 0;            --  stockpiles made one level
+         Note     : Flat_Note;
+         Top_Near, Top_Far : Float := 0.0;   --  the zone's top as it says it, at its foot and at its far side
+         Same     : Boolean := False;        --  saved and loaded: the same bytes
+         Wood_Z   : Float := 0.0;            --  where wood supplied to it lies
+      end record;
+      Got : array (Boolean) of Got_Rec;
+   begin
+      for Rule in Boolean loop
+         Reset;
+         Set_Beds (False);
+         Set_Curing (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Place_Level (True);
+         Set_Pile_Flat (Rule);
+         Meadow;
+         for K in 0 .. 7 loop
+            Fill (2.0, 26.0 + Float (K), 46.0, 46.0, Ground_Row + K, Ground_Row + K, Grass);
+         end loop;
+         Changed_World;
+         Hours := 16.0 * 24.0;
+         Place_Stake (Stake_P, 6, 42);
+         declare
+            Laid, Cells, Placed, Zn : Natural;
+            G : Got_Rec renames Got (Rule);
+         begin
+            Lay_Path ((20.5, 24.5, Ground_M), (40.0, 24.5, Ground_M), Laid);
+            Zone_Stockpile (24.0, 25.0, 32.0, 33.0, Cells);
+            Index_All;
+            Zn := Zone_On (28.0, 28.0);
+            G.Cells := Cells;
+            G.Flat := Piles_Flattened;
+            G.Note := Last_Flat;
+            G.Z_Lo := Float'Last;
+            G.Z_Hi := Float'First;
+            for C in 1 .. Cell_Count loop
+               if not Cell_At (C).Overflow then
+                  G.Z_Lo := Float'Min (G.Z_Lo, Cell_At (C).Centre.Z);
+                  G.Z_Hi := Float'Max (G.Z_Hi, Cell_At (C).Centre.Z);
+               end if;
+            end loop;
+            G.Rows_Lo := Integer'Last;
+            G.Rows_Hi := Integer'First;
+            for X in B (22.0) .. B (34.0) loop
+               for Y in B (24.0) .. B (35.0) loop
+                  if Zn > 0 and then Zone_On ((Float (X) + 0.5) * 0.25, (Float (Y) + 0.5) * 0.25) = Zn then
+                     G.Columns := G.Columns + 1;
+                     for Row in reverse Ground_Row - 4 .. Ground_Row + 12 loop
+                        if Get (X, Y, Row) in Grass | Dirt then
+                           G.Rows_Lo := Integer'Min (G.Rows_Lo, Row);
+                           G.Rows_Hi := Integer'Max (G.Rows_Hi, Row);
+                           exit;
+                        end if;
+                     end loop;
+                  end if;
+               end loop;
+            end loop;
+            G.Top_Near := Zone_Top (28.0, 25.6);
+            G.Top_Far := Zone_Top (28.0, 32.4);
+            Supply (Wood, 40, Placed);
+            for C in 1 .. Cell_Count loop
+               if Cell_At (C).Kind = Wood and then Cell_At (C).Count > 0 then
+                  G.Wood_Z := Float'Max (G.Wood_Z, Cell_At (C).Centre.Z);
+               end if;
+            end loop;
+            declare
+               Data : constant Bytes := Save;
+               Ok   : Boolean;
+            begin
+               Reset;
+               Set_Pile_Flat (Rule);
+               Load (Data, Ok);
+               G.Same := Ok and then Save = Data;
+            end;
+         end;
+      end loop;
+      Check (Got (False).Cells >= 40 and then Got (False).Flat = 0 and then Got (False).Z_Hi - Got (False).Z_Lo >= 1.25
+             and then Got (False).Rows_Hi - Got (False).Rows_Lo >= 5,
+             "each place by itself (the default): its" & Got (False).Cells'Image & " places lie from " & Img (Got (False).Z_Lo, 2)
+             & " to " & Img (Got (False).Z_Hi, 2) & " m, its ground's tops" & Integer'Image (Got (False).Rows_Hi - Got (False).Rows_Lo)
+             & " blocks apart");
+      Check (Got (True).Cells >= 40 and then Got (True).Flat = 1 and then Got (True).Note.By_Path
+             and then Got (True).Z_Lo = Ground_M and then Got (True).Z_Hi = Ground_M
+             and then Got (True).Rows_Lo = Ground_Row - 1 and then Got (True).Rows_Hi = Ground_Row - 1
+             and then Got (True).Columns > 600 and then Got (True).Note.Columns = Got (True).Columns
+             and then Got (True).Note.Left = 0 and then Got (True).Note.Fill_Most = 0 and then Got (True).Note.Cut_Most in 5 .. 8,
+             "with the rule: all" & Got (True).Cells'Image & " places at " & Img (Got (True).Z_Lo, 2) & " m, the level of its"
+             & " ground beside its path; all" & Got (True).Columns'Image & " block columns of its ground at one row (the deepest cut"
+             & Got (True).Note.Cut_Most'Image & " blocks," & Got (True).Note.Moved'Image & " blocks moved)");
+      Check (Got (True).Top_Near = Got (True).Top_Far and then Got (True).Top_Near > 0.0
+             and then Got (False).Top_Far - Got (False).Top_Near >= 1.25,
+             "the zone's own ground says so: its top at its foot and at its far side " & Img (Got (True).Top_Near, 2) & " and "
+             & Img (Got (True).Top_Far, 2) & " m (as it was: " & Img (Got (False).Top_Near, 2) & " and " & Img (Got (False).Top_Far, 2) & ")");
+      Check (Got (True).Wood_Z = Ground_M and then Got (True).Same and then Got (False).Same,
+             "wood supplied to it lies at " & Img (Got (True).Wood_Z, 2) & " m; saved and loaded, the same bytes, either way");
+   end;
+   --  (a ledge a metre and a half high across it: as it was, the zoning stopped at the ledge and
+   --  the stockpile was the half before it; to be one level, it takes the ledge and is all of
+   --  what was marked)
+   for With_Rule in Boolean loop
+      Reset;
+      Set_Beds (False);
+      Set_Curing (False);
+      Castle.Herds.Set_Scatter (True);
+      Set_Labour (False);
+      Set_Needs (False);
+      Set_Skills (False);
+      Set_Demand_Chain (False);
+      Set_Place_Level (True);
+      Set_Pile_Flat (With_Rule);
+      Meadow;
+      Fill (2.0, 29.0, 46.0, 46.0, Ground_Row, Ground_Row + 5, Grass);
+      Changed_World;
+      Hours := 16.0 * 24.0;
+      Place_Stake (Stake_P, 6, 42);
+      declare
+         Laid, Cells : Natural;
+         Over : Natural := 0;
+      begin
+         Lay_Path ((20.5, 24.5, Ground_M), (40.0, 24.5, Ground_M), Laid);
+         Zone_Stockpile (24.0, 25.0, 32.0, 33.0, Cells);
+         for X in B (24.0) .. B (32.0) - 1 loop
+            for Y in B (25.0) .. B (33.0) - 1 loop
+               if Get (X, Y, Ground_Row) /= Air then
+                  Over := Over + 1;
+               end if;
+            end loop;
+         end loop;
+         Check ((if With_Rule then Cells = 64 and then Over = 0 and then Last_Flat.Cut_Most = 6
+                 else Cells = 32 and then Over = 32 * 16),
+                (if With_Rule then "with the rule" else "as it was") & ", a ledge a metre and a half high across it:"
+                & Cells'Image & " places," & Over'Image & " block columns of it over its level");
+      end;
+   end loop;
+   --  (the land is cut or filled whatever it is made of.  A square metre of granite let into the
+   --  rise, six blocks over the level: cut with the rest, and the floor there is granite.  A
+   --  boulder on the rise, a metre square and a metre high, its foot two blocks in the ground:
+   --  cut through, and no block of it is left in the floor's top for the band to prise out.
+   --  Bog iron in the turf lower down: the floor there is bog iron.  Left as they lay, these were
+   --  lumps in the floor with the places over them closed: 2026-11-23)
+   Reset;
+   Set_Beds (False);
+   Set_Curing (False);
+   Castle.Herds.Set_Scatter (True);
+   Set_Labour (False);
+   Set_Needs (False);
+   Set_Skills (False);
+   Set_Demand_Chain (False);
+   Set_Place_Level (True);
+   Set_Pile_Flat (True);
+   Meadow;
+   for K in 0 .. 7 loop
+      Fill (2.0, 26.0 + Float (K), 46.0, 46.0, Ground_Row + K, Ground_Row + K, Grass);
+   end loop;
+   Fill (27.0, 31.0, 28.0, 32.0, Ground_Row + 5, Ground_Row + 5, Granite);
+   --  (the rise's top at the boulder is row Ground_Row + 3, four blocks over the meadow's: the
+   --  boulder from six blocks under that to three over it, so that the level goes through it)
+   Fill (29.0, 29.0, 30.0, 30.0, Ground_Row - 3, Ground_Row + 6, Boulder);
+   Fill (25.0, 27.0, 26.0, 28.0, Ground_Row + 1, Ground_Row + 1, Bog_Iron);    --  (the turf there, two blocks over the meadow's)
+   --  (and a second boulder, in the meadow before the rise, its top at the level already)
+   Fill (30.0, 25.25, 30.5, 25.75, Ground_Row - 2, Ground_Row - 1, Boulder);
+   Changed_World;
+   Hours := 16.0 * 24.0;
+   Place_Stake (Stake_P, 6, 42);
+   declare
+      Laid, Cells : Natural;
+      All_At, All_Open : Boolean := True;
+      Rock_Floor, Iron_Floor : Boolean := True;
+      Boulder_Left, Boulder_Top : Natural := 0;
+   begin
+      Lay_Path ((20.5, 24.5, Ground_M), (40.0, 24.5, Ground_M), Laid);
+      Zone_Stockpile (24.0, 25.0, 32.0, 33.0, Cells);
+      for C in 1 .. Cell_Count loop
+         if not Cell_At (C).Overflow then
+            All_At := All_At and then Cell_At (C).Centre.Z = Ground_M;
+            All_Open := All_Open and then not Cell_At (C).Closed;
+         end if;
+      end loop;
+      for X in B (27.0) .. B (28.0) - 1 loop
+         for Y in B (31.0) .. B (32.0) - 1 loop
+            Rock_Floor := Rock_Floor and then Get (X, Y, Ground_Row - 1) = Granite and then Get (X, Y, Ground_Row) = Air;
+         end loop;
+      end loop;
+      for X in B (25.0) .. B (26.0) - 1 loop
+         for Y in B (27.0) .. B (28.0) - 1 loop
+            Iron_Floor := Iron_Floor and then Get (X, Y, Ground_Row - 1) = Bog_Iron and then Get (X, Y, Ground_Row) = Air;
+         end loop;
+      end loop;
+      for X in B (29.0) .. B (30.0) - 1 loop
+         for Y in B (29.0) .. B (30.0) - 1 loop
+            for Row in Ground_Row .. Ground_Row + 8 loop
+               if Get (X, Y, Row) /= Air then
+                  Boulder_Left := Boulder_Left + 1;
+               end if;
+            end loop;
+            if Get (X, Y, Ground_Row - 1) = Boulder then
+               Boulder_Top := Boulder_Top + 1;
+            end if;
+         end loop;
+      end loop;
+      for X in B (30.0) .. B (30.5) - 1 loop
+         for Y in B (25.25) .. B (25.75) - 1 loop
+            if Get (X, Y, Ground_Row - 1) = Boulder then
+               Boulder_Top := Boulder_Top + 1;
+            end if;
+            if Get (X, Y, Ground_Row - 2) /= Boulder then       --  (what is under the floor's top stays)
+               Boulder_Left := Boulder_Left + 1;
+            end if;
+         end loop;
+      end loop;
+      Check (Cells >= 40 and then All_At and then All_Open and then Rock_Floor and then Iron_Floor
+             and then Boulder_Left = 0 and then Boulder_Top = 0 and then Get (B (29.5), B (29.5), Ground_Row - 1) = Dirt
+             and then Last_Flat.Left = 0 and then Last_Flat.Shut = 0 and then Piles_Flattened = 1,
+             "rock, a boulder and bog iron in it are cut to the level with the rest (" & Img (Last_Flat.Left)
+             & " block columns left,"  & Boulder_Left'Image & " blocks of the boulder over the floor,"
+             & Boulder_Top'Image & " of it in the floor's top); every place open and at " & Img (Ground_M, 2) & " m");
+   end;
+   --  (water in it is left, and its bank: a pond on the rise, two metres by three quarters, sunk a
+   --  block into it, its water four blocks over the level the rest is cut to; the earth beside it
+   --  is not cut below it)
+   Reset;
+   Set_Beds (False);
+   Set_Curing (False);
+   Castle.Herds.Set_Scatter (True);
+   Set_Labour (False);
+   Set_Needs (False);
+   Set_Skills (False);
+   Set_Demand_Chain (False);
+   Set_Place_Level (True);
+   Set_Pile_Flat (True);
+   Meadow;
+   for K in 0 .. 7 loop
+      Fill (2.0, 26.0 + Float (K), 46.0, 46.0, Ground_Row + K, Ground_Row + K, Grass);
+   end loop;
+   Fill (27.0, 30.25, 29.0, 31.0, Ground_Row + 4, Ground_Row + 4, Air);
+   Fill (27.0, 30.25, 29.0, 31.0, Ground_Row + 3, Ground_Row + 3, Water);
+   Changed_World;
+   Hours := 16.0 * 24.0;
+   Place_Stake (Stake_P, 6, 42);
+   declare
+      Laid, Cells : Natural;
+      Water_Left, Bank_Low, Shut : Natural := 0;
+   begin
+      Lay_Path ((20.5, 24.5, Ground_M), (40.0, 24.5, Ground_M), Laid);
+      Zone_Stockpile (24.0, 25.0, 32.0, 33.0, Cells);
+      for X in B (27.0) .. B (29.0) - 1 loop
+         for Y in B (30.25) .. B (31.0) - 1 loop
+            if Get (X, Y, Ground_Row + 3) = Water then
+               Water_Left := Water_Left + 1;
+            end if;
+         end loop;
+      end loop;
+      --  (the ring of block columns round it: none of them cut below the water's row)
+      for X in B (27.0) - 1 .. B (29.0) loop
+         for Y in B (30.25) - 1 .. B (31.0) loop
+            if (X not in B (27.0) .. B (29.0) - 1 or else Y not in B (30.25) .. B (31.0) - 1)
+              and then (X in B (27.0) .. B (29.0) - 1 or else Y in B (30.25) .. B (31.0) - 1)
+              and then Get (X, Y, Ground_Row + 3) not in Grass | Dirt
+            then
+               Bank_Low := Bank_Low + 1;
+            end if;
+         end loop;
+      end loop;
+      for C in 1 .. Cell_Count loop
+         if not Cell_At (C).Overflow and then Cell_At (C).Closed then
+            Shut := Shut + 1;
+         end if;
+      end loop;
+      Check (Cells >= 40 and then Water_Left = 24 and then Bank_Low = 0 and then Last_Flat.Shut = Shut and then Shut in 1 .. 12
+             and then Last_Flat.Cut_Most >= 5,
+             "a pond on the rise in it keeps its water (" & Img (Water_Left) & " block columns) and its bank (" & Img (Bank_Low)
+             & " columns of it cut below the water);" & Shut'Image & " places round it are closed");
+   end;
+   --  (a tree on a knoll in a stockpile put down whole, its foot two metres over the level: the
+   --  knoll is cut away round it and the tree stands on a pillar of its own earth until it is
+   --  felled; one of the band fells it from the floor; then the pillar is cut too, nothing of
+   --  tree or knoll is left and the place is open.  A broadleaf one block column thick, and a
+   --  conifer two: its pillar may be a whole cell of the walking map.  The pillar is cut by
+   --  whichever comes first: the stockpile made level again where a tree of it is felled
+   --  (Box_Tree_Felled), or the tree's place made level a second after (Level_Places).  The
+   --  broadleaf's line has both and passes with the first taken out; the conifer's is run with
+   --  Set_Place_Level off, has the first alone, and fails with it taken out)
+   Use_Knoll := True;
+   for Thick in Boolean loop
+      Knoll_Thick := Thick;
+      Set_Up (With_Stockpile => False, With_Bushes => False, With_Trees => True, With_Labour => True);
+      Set_Trees (Find'Unrestricted_Access, Shape'Unrestricted_Access);
+      Set_Box_Place (True);
+      Set_Place_Level (not Thick);
+      Set_Pile_Flat (True);
+      declare
+         W : constant Integer := (if Thick then 2 else 1);       --  its trunk's block columns each way
+         Cells : Natural;
+         Oak   : Natural := 0;
+         Zone_N : Natural;
+         Closed_0, Closed_1, Off_Level, Left_Over, Pillar_0 : Natural := 0;
+         Knoll_0 : Natural := 0;
+         Felled_At : Natural := 0;
+         Flat_0 : Flat_Note;
+      begin
+         --  (the knoll: stepped two blocks a block column, so that the zoning takes it for the
+         --  stockpile's ground as it takes a hillside)
+         for D in 0 .. Knoll_B / 2 - 1 loop
+            for X in 100 - D .. 100 + W - 1 + D loop
+               for Y in 100 - D .. 100 + W - 1 + D loop
+                  for Row in Ground_Row .. Ground_Row + Knoll_B - 2 * D - 1 loop
+                     Set (X, Y, Row, Grass);
+                  end loop;
+               end loop;
+            end loop;
+         end loop;
+         for X in 100 .. 100 + W - 1 loop
+            for Y in 100 .. 100 + W - 1 loop
+               Set (X, Y, Ground_Row + Knoll_B - 2, (if Thick then Pine_Log else Log));     --  (its roots, two blocks in)
+               Set (X, Y, Ground_Row + Knoll_B - 1, (if Thick then Pine_Log else Log));
+            end loop;
+         end loop;
+         Changed_World;
+         Index_All;
+         Place_Box (Stockpile_Box, (27.0, 27.0, Ground_M), 0, Cells);
+         Zone_N := Zone_Count;
+         Flat_0 := Last_Flat;
+         for K in 1 .. Cell_Count loop
+            if Zone_Of_Cell (K) = Zone_N and then Cell_At (K).Closed then
+               Closed_0 := Closed_0 + 1;
+            end if;
+         end loop;
+         --  (what is left of the knoll at once: the earth under the trunk alone)
+         for X in 94 .. 107 loop
+            for Y in 94 .. 107 loop
+               for Row in Ground_Row .. Ground_Row + Knoll_B - 1 loop
+                  if Get (X, Y, Row) /= Air then
+                     Knoll_0 := Knoll_0 + 1;
+                     if X in 100 .. 100 + W - 1 and then Y in 100 .. 100 + W - 1 then
+                        Pillar_0 := Pillar_0 + 1;
+                     end if;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+         for K in 1 .. Tree_Count loop
+            if Tree_At (K).Bx = 100 then
+               Oak := K;
+            end if;
+         end loop;
+         for S in 1 .. 3_000 loop
+            Run (1);
+            if Oak > 0 and then Tree_Down (Oak) then
+               Felled_At := S;
+               exit;
+            end if;
+         end loop;
+         Run (5);
+         for K in 1 .. Cell_Count loop
+            if Zone_Of_Cell (K) = Zone_N and then not Cell_At (K).Overflow then
+               if Cell_At (K).Closed then
+                  Closed_1 := Closed_1 + 1;
+               end if;
+               if Cell_At (K).Centre.Z /= Ground_M then
+                  Off_Level := Off_Level + 1;
+               end if;
+            end if;
+         end loop;
+         for X in 94 .. 107 loop
+            for Y in 94 .. 107 loop
+               for Row in Ground_Row .. Ground_Row + Knoll_B + 30 loop
+                  if Get (X, Y, Row) not in Air | Leaves then
+                     Left_Over := Left_Over + 1;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+         Check (Cells = 100 and then Flat_0.Level_M = Ground_M and then Flat_0.Cut_Most = Knoll_B - 2
+                and then Flat_0.Left = W * W and then Closed_0 >= 1 and then Knoll_0 = Knoll_B * W * W
+                and then Pillar_0 = Knoll_B * W * W
+                and then Oak > 0 and then Felled_At > 0 and then Left_Over = 0 and then Closed_1 = 0 and then Off_Level = 0
+                and then Box_Trees_Left = 0 and then Get (100, 100, Ground_Row - 1) in Dirt | Grass,
+                "put down over a " & (if Thick then "conifer two block columns thick" else "broadleaf")
+                & " on a knoll two metres high: the knoll is cut away round it at once (" & Img (Knoll_0)
+                & " blocks left, the pillar under its trunk); one of the band fells it (down after" & Felled_At'Image
+                & " colony seconds); then" & Left_Over'Image & " blocks of tree or knoll stand over the floor and"
+                & Closed_1'Image & " places are closed");
+      end;
+   end loop;
+   Use_Knoll := False;
+   Knoll_Thick := False;
+   --  (a bush that stands in it goes up or down with its ground: left where it stood under a floor
+   --  filled in round it, it stood in a pit a gatherer walked into and not out of: the square in
+   --  the wood, 2026-11-23.  Here the rise is cut away under one, four blocks)
+   Reset;
+   Set_Beds (False);
+   Set_Curing (False);
+   Castle.Herds.Set_Scatter (True);
+   Set_Labour (False);
+   Set_Needs (False);
+   Set_Skills (False);
+   Set_Demand_Chain (False);
+   Set_Place_Level (True);
+   Set_Pile_Flat (True);
+   Meadow;
+   for K in 0 .. 7 loop
+      Fill (2.0, 26.0 + Float (K), 46.0, 46.0, Ground_Row + K, Ground_Row + K, Grass);
+   end loop;
+   declare
+      Cx : constant Integer := B (28.1);
+      Cy : constant Integer := B (29.6);       --  (the ground there: four blocks over the meadow)
+   begin
+      for Dx in -2 .. 2 loop
+         for Dy in -2 .. 2 loop
+            for Dz in 0 .. 2 loop
+               if Float (Dx * Dx + Dy * Dy) / 6.25 + Float (Dz * Dz) / 4.0 < 1.0 then
+                  Set (Cx + Dx, Cy + Dy, Ground_Row + 4 + Dz, Berry_Bush);
+               end if;
+            end loop;
+         end loop;
+      end loop;
+      Changed_World;
+      Hours := 16.0 * 24.0;
+      Place_Stake (Stake_P, 6, 42);
+      declare
+         Laid, Cells : Natural;
+         Bush_K : Natural := 0;
+         Bush_Z_Was : Float := -1.0;
+         High_Left, Low_Now : Natural := 0;
+      begin
+         Lay_Path ((20.5, 24.5, Ground_M), (40.0, 24.5, Ground_M), Laid);
+         Index_All;
+         for K in 1 .. Bush_Slots loop
+            if Bush_Alive (K) and then Flat (Bush_Centre (K), (28.1, 29.6, 0.0)) < 0.6 then
+               Bush_K := K;
+               Bush_Z_Was := Bush_Centre (K).Z;
+            end if;
+         end loop;
+         Zone_Stockpile (24.0, 25.0, 32.0, 33.0, Cells);
+         for Dx in -2 .. 2 loop
+            for Dy in -2 .. 2 loop
+               for Row in Ground_Row + 3 .. Ground_Row + 8 loop
+                  if Get (Cx + Dx, Cy + Dy, Row) in Berry_Bush | Bare_Bush then
+                     High_Left := High_Left + 1;
+                  end if;
+               end loop;
+               for Row in Ground_Row .. Ground_Row + 2 loop
+                  if Get (Cx + Dx, Cy + Dy, Row) in Berry_Bush | Bare_Bush then
+                     Low_Now := Low_Now + 1;
+                  end if;
+               end loop;
+            end loop;
+         end loop;
+         Check (Bush_K > 0 and then Bush_Z_Was >= Ground_M + 0.75 and then Last_Flat.Bushes = 1
+                and then Bush_Alive (Bush_K) and then Bush_Centre (Bush_K).Z = Ground_M
+                and then High_Left = 0 and then Low_Now >= 20 and then Get (Cx, Cy, Ground_Row) = Berry_Bush
+                and then Get (Cx, Cy, Ground_Row - 1) = Grass,
+                "a bush on the rise in it (its ground at " & Img (Bush_Z_Was, 2) & " m) stands on the floor now, at "
+                & (if Bush_K > 0 then Img (Bush_Centre (Bush_K).Z, 2) else "?") & " m:" & Low_Now'Image
+                & " blocks of it there, none left where it stood");
+      end;
+   end;
+
+   --  A stockpile is refused on ground too steep (John, 2026-11-23: "let's block the players
+   --  placement if it's too steep, let's say anything where a part is over 1/2 slope").  A rise
+   --  north of a path, Per blocks a metre; or a ledge across it; or a boulder on a gentle rise.
+   --  (With Plan_Lot's own test of Steep_B cut, the second, third and fourth lines fail.)
+   Put_Line ("a stockpile is refused on ground too steep:");
+   declare
+      use Ada.Strings.Unbounded;
+      type Ground_Kind is (Rise, Ledge, Rock);
+      procedure Try (Kind : Ground_Kind; Per : Natural; Rule, Box : Boolean; Cells : out Natural; Said : out Unbounded_String) is
+         Laid : Natural;
+      begin
+         Reset;
+         Set_Beds (False);
+         Set_Curing (False);
+         Castle.Herds.Set_Scatter (True);
+         Set_Labour (False);
+         Set_Needs (False);
+         Set_Skills (False);
+         Set_Demand_Chain (False);
+         Set_Box_Place (True);
+         Set_Steep_Refuse (Rule);
+         Meadow;
+         case Kind is
+            when Rise | Rock =>
+               for K in 0 .. 7 loop        --  (a metre a step, Per blocks a step)
+                  for J in 0 .. Per - 1 loop
+                     Fill (2.0, 26.0 + Float (K), 46.0, 46.0, Ground_Row + K * Per + J, Ground_Row + K * Per + J, Grass);
+                  end loop;
+               end loop;
+               if Kind = Rock then         --  (a boulder a metre square and a metre high on it)
+                  Fill (28.0, 28.0, 29.0, 29.0, Ground_Row, Ground_Row + 3 * Per + 3, Boulder);
+               end if;
+            when Ledge =>
+               Fill (2.0, 29.0, 46.0, 46.0, Ground_Row, Ground_Row + Per - 1, Grass);
+         end case;
+         Changed_World;
+         Hours := 16.0 * 24.0;
+         Place_Stake (Stake_P, 6, 42);
+         Lay_Path ((20.5, 24.5, Ground_M), (40.0, 24.5, Ground_M), Laid);
+         if Box then
+            Place_Box (Stockpile_Box, (28.0, 30.5, Ground_M), 0, Cells);
+            Said := To_Unbounded_String (Box_Refusal);
+         else
+            Zone_Stockpile (24.0, 25.0, 32.0, 33.0, Cells);
+            Said := To_Unbounded_String (Stockpile_Refusal);
+         end if;
+      end Try;
+      function Steep (S : Unbounded_String) return Boolean is (Ada.Strings.Fixed.Index (To_String (S), "too steep") > 0);
+      C1, C2, C3, C4, C5, C6, C7, C8 : Natural;
+      S1, S2, S3, S4, S5, S6, S7, S8 : Unbounded_String;
+   begin
+      Try (Rise, 2, True, False, C1, S1);
+      Check (C1 = 64 and then S1 = "", "a rise of half a metre a metre, dragged: taken," & C1'Image & " places");
+      Try (Rise, 3, True, False, C2, S2);
+      Try (Rise, 3, False, False, C3, S3);
+      Check (C2 = 0 and then Steep (S2) and then not Steep (S3) and then Zone_Count >= 1,
+             "a rise of three quarters of a metre a metre, dragged: refused (""" & To_String (S2) & """); with the rule off"
+             & C3'Image & " places (""" & To_String (S3) & """)");
+      Try (Ledge, 3, True, False, C4, S4);
+      Try (Ledge, 3, False, False, C5, S5);
+      Check (C4 = 0 and then Steep (S4) and then C5 = 32 and then S5 = "",
+             "a ledge three blocks high across level ground: refused; with the rule off the" & C5'Image & " places before it");
+      Try (Rise, 3, True, True, C6, S6);
+      Try (Rise, 1, True, True, C7, S7);
+      Check (C6 = 0 and then Steep (S6) and then C7 > 0 and then S7 = "",
+             "put down whole: on the steep rise refused (""" & To_String (S6) & """), on a rise of a block a metre"
+             & C7'Image & " places");
+      Try (Rock, 1, True, False, C8, S8);
+      Check (C8 > 0 and then S8 = "",
+             "a boulder a metre high on a gentle rise is no slope: taken," & C8'Image & " places");
    end;
 
    New_Line;

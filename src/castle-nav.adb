@@ -120,6 +120,164 @@ package body Castle.Nav is
 
    Wading : constant array (0 .. Wade_B) of Float := [1.0, 0.55, 0.3];
 
+   Kept   : Kept_List (1 .. Max_Kept);
+   Kept_N : Natural := 0;
+   function In_Box (B : Kept_Box; X, Y : Float) return Boolean is
+     (X >= B.X0 and then X < B.X1 and then Y >= B.Y0 and then Y < B.Y1);
+   function Kept_Cell (Cx, Cy : Integer) return Boolean is
+      X : constant Float := (Float (Cx) + 0.5) * Cell_M;
+      Y : constant Float := (Float (Cy) + 0.5) * Cell_M;
+   begin
+      for K in 1 .. Kept_N loop
+         declare
+            G : Kept_Ground renames Kept (K);
+            Pos, Neg : Boolean := False;
+         begin
+            for I in 1 .. 4 loop
+               declare
+                  A : constant Vec3 := G.Corner (I);
+                  B : constant Vec3 := G.Corner (I mod 4 + 1);
+                  Cr : constant Float := (B.X - A.X) * (Y - A.Y) - (B.Y - A.Y) * (X - A.X);
+               begin
+                  if Cr > 0.0 then
+                     Pos := True;
+                  elsif Cr < 0.0 then
+                     Neg := True;
+                  end if;
+               end;
+            end loop;
+            if not (Pos and then Neg) and then not In_Box (G.But_A, X, Y) and then not In_Box (G.But_B, X, Y) then
+               return True;
+            end if;
+         end;
+      end loop;
+      return False;
+   end Kept_Cell;
+
+   --  Buildings walked where they are drawn (the spec, Set_Drawn).
+   Drawn   : Drawn_List (1 .. Max_Drawn);
+   Drawn_N : Natural := 0;
+   Drawn_Bound : array (1 .. Max_Drawn) of Kept_Box;      --  (all of each lies in it: most cells are not looked at twice)
+   --  Two four-cornered pieces overlap (more than along an edge): no side
+   --  of either has the other wholly beyond it.
+   function Overlap (A, B : Kept_Corners) return Boolean is
+      Eps : constant := 0.001;
+      function Apart (P, Q : Kept_Corners) return Boolean is
+      begin
+         for I in 1 .. 4 loop
+            declare
+               E  : constant Vec3 := P (I mod 4 + 1) - P (I);
+               Nx : constant Float := -E.Y;
+               Ny : constant Float := E.X;
+               P_Lo, Q_Lo : Float := Float'Last;
+               P_Hi, Q_Hi : Float := Float'First;
+            begin
+               for K in 1 .. 4 loop
+                  P_Lo := Float'Min (P_Lo, P (K).X * Nx + P (K).Y * Ny);
+                  P_Hi := Float'Max (P_Hi, P (K).X * Nx + P (K).Y * Ny);
+                  Q_Lo := Float'Min (Q_Lo, Q (K).X * Nx + Q (K).Y * Ny);
+                  Q_Hi := Float'Max (Q_Hi, Q (K).X * Nx + Q (K).Y * Ny);
+               end loop;
+               if P_Hi <= Q_Lo + Eps * Sqrt (Nx * Nx + Ny * Ny) or else Q_Hi <= P_Lo + Eps * Sqrt (Nx * Nx + Ny * Ny) then
+                  return True;
+               end if;
+            end;
+         end loop;
+         return False;
+      end Apart;
+   begin
+      return not Apart (A, B) and then not Apart (B, A);
+   end Overlap;
+   function Inside (Q : Kept_Corners; X, Y : Float) return Boolean is
+      Pos, Neg : Boolean := False;
+   begin
+      for I in 1 .. 4 loop
+         declare
+            A  : constant Vec3 := Q (I);
+            B  : constant Vec3 := Q (I mod 4 + 1);
+            Cr : constant Float := (B.X - A.X) * (Y - A.Y) - (B.Y - A.Y) * (X - A.X);
+         begin
+            if Cr > 0.0 then
+               Pos := True;
+            elsif Cr < 0.0 then
+               Neg := True;
+            end if;
+         end;
+      end loop;
+      return not (Pos and then Neg);
+   end Inside;
+   --  What the list says of a cell: nothing, no floor, or one floor at row Z
+   --  walked at Speed; and Slowed, whether its floors are a wall's slow ones
+   --  (a hovel's).  Every building's walls first (and its doorways, which
+   --  hold a cell open), then the boxes.
+   type Drawn_Says is (As_It_Is, Shut, Level);
+   procedure Drawn_Cell (Cx, Cy : Integer; Says : out Drawn_Says; Z : out Integer; Speed : out Float;
+                         Slowed : out Boolean) is
+      X0 : constant Float := Float (Cx) * Cell_M;
+      Y0 : constant Float := Float (Cy) * Cell_M;
+      X1 : constant Float := X0 + Cell_M;
+      Y1 : constant Float := Y0 + Cell_M;
+      Xm : constant Float := (X0 + X1) / 2.0;
+      Ym : constant Float := (Y0 + Y1) / 2.0;
+      Sq : constant Kept_Corners := [(X0, Y0, 0.0), (X1, Y0, 0.0), (X1, Y1, 0.0), (X0, Y1, 0.0)];
+      function Near (K : Positive) return Boolean is
+        (not (X1 <= Drawn_Bound (K).X0 or else X0 >= Drawn_Bound (K).X1
+              or else Y1 <= Drawn_Bound (K).Y0 or else Y0 >= Drawn_Bound (K).Y1));
+      Walled, Held, Slow : Boolean := False;
+   begin
+      Says := As_It_Is;
+      Z := 0;
+      Speed := Best_Speed;
+      Slowed := False;
+      for K in 1 .. Drawn_N loop
+         if Near (K) then
+            declare
+               D : Drawn_House renames Drawn (K);
+            begin
+               for W in 1 .. D.Doors loop
+                  Held := Held or else Inside (D.Door (W), Xm, Ym);
+               end loop;
+               for W in 1 .. D.Walls loop
+                  if Overlap (Sq, D.Wall (W)) then
+                     if D.Slow then
+                        Slow := True;
+                     else
+                        Walled := True;
+                     end if;
+                  end if;
+               end loop;
+            end;
+         end if;
+      end loop;
+      if Walled and then not Held then
+         Says := Shut;
+         return;
+      end if;
+      Slowed := Slow and then not Held;
+      --  (of two boxes it lies in, the one its middle is in)
+      for Pass in 1 .. 2 loop
+         for K in 1 .. Drawn_N loop
+            if Near (K) then
+               declare
+                  B : Kept_Box renames Drawn (K).Box;
+               begin
+                  if (if Drawn (K).Whole
+                      then Pass = 1 and then X0 >= B.X0 - 0.001 and then X1 <= B.X1 + 0.001
+                           and then Y0 >= B.Y0 - 0.001 and then Y1 <= B.Y1 + 0.001
+                      else (Pass = 1 and then Xm >= B.X0 and then Xm < B.X1 and then Ym >= B.Y0 and then Ym < B.Y1)
+                           or else (Pass = 2 and then X1 > B.X0 and then X0 < B.X1 and then Y1 > B.Y0 and then Y0 < B.Y1))
+                  then
+                     Says := Level;
+                     Z := Drawn (K).Z;
+                     Speed := (if Slowed then Wall_Speed else Drawn (K).Speed);
+                     return;
+                  end if;
+               end;
+            end if;
+         end loop;
+      end loop;
+   end Drawn_Cell;
+
    --  A cell's floors from its four columns.  A floor at row Z needs every
    --  column open from Z up for Head_B rows (nothing in the way of the
    --  body), and at least two of them standing on ground no more than a
@@ -133,8 +291,25 @@ package body Castle.Nav is
       NC   : Natural := 0;
       Hold : array (0 .. 3) of Natural;
       Known : Boolean;
+      Slowed : Boolean := False;       --  (a hovel's wall as drawn: its floors are Wall_Speed)
    begin
       C := Empty;
+      if Drawn_N > 0 then
+         declare
+            Says  : Drawn_Says;
+            Z     : Integer;
+            Speed : Float;
+         begin
+            Drawn_Cell (Cx, Cy, Says, Z, Speed, Slowed);
+            if Says = Shut then
+               return;
+            elsif Says = Level then
+               C.N := 1;
+               C.F (1) := (Z => Integer_16 (Z), Head => 255, Water => 0, Speed => Speed);
+               return;
+            end if;
+         end;
+      end if;
       for K in 0 .. 3 loop
          Columns_Src (Bx0 + K mod 2, By0 + K / 2, Cols (K), Known);
          if not Known then
@@ -218,6 +393,12 @@ package body Castle.Nav is
                         Speed := 0.0;
                      else
                         Speed := Speed * Wading (Water);
+                     end if;
+                     if Kept_N > 0 and then Kept_Cell (Cx, Cy) then
+                        Speed := Speed * Kept_Slow;
+                     end if;
+                     if Slowed and then Speed > 0.0 then
+                        Speed := Wall_Speed;
                      end if;
                      C.N := C.N + 1;
                      C.F (C.N) := (Z     => Integer_16 (Z),
@@ -440,6 +621,101 @@ package body Castle.Nav is
       end if;
    end Forget_Stack;
 
+   function Kept_Count return Natural is (Kept_N);
+   function Kept_At (X, Y : Float) return Boolean is
+     (Kept_N > 0 and then Kept_Cell (Integer (Float'Floor (X / Cell_M)), Integer (Float'Floor (Y / Cell_M))));
+
+   procedure Set_Kept (K : Kept_List) is
+      N : constant Natural := Natural'Min (K'Length, Max_Kept);
+      procedure Forget_Under (G : Kept_Ground) is
+         X0, Y0 : Float := Float'Last;
+         X1, Y1 : Float := Float'First;
+      begin
+         for C of G.Corner loop
+            X0 := Float'Min (X0, C.X);  X1 := Float'Max (X1, C.X);
+            Y0 := Float'Min (Y0, C.Y);  Y1 := Float'Max (Y1, C.Y);
+         end loop;
+         for SX in Integer (Float'Floor (X0 / 8.0)) .. Integer (Float'Floor (X1 / 8.0)) loop
+            for SY in Integer (Float'Floor (Y0 / 8.0)) .. Integer (Float'Floor (Y1 / 8.0)) loop
+               Forget_Stack (SX, SY);
+            end loop;
+         end loop;
+      end Forget_Under;
+   begin
+      if N = Kept_N and then (N = 0 or else Kept (1 .. N) = K (K'First .. K'First + N - 1)) then
+         return;
+      end if;
+      for I in 1 .. Kept_N loop
+         Forget_Under (Kept (I));
+      end loop;
+      Kept_N := N;
+      for I in 1 .. N loop
+         Kept (I) := K (K'First + I - 1);
+         Forget_Under (Kept (I));
+      end loop;
+   end Set_Kept;
+
+   function Drawn_Count return Natural is (Drawn_N);
+   procedure Set_Drawn (D : Drawn_List) is
+      N : constant Natural := Natural'Min (D'Length, Max_Drawn);
+      procedure Forget_Under (H : Drawn_House) is
+         X0 : Float := H.Box.X0;
+         Y0 : Float := H.Box.Y0;
+         X1 : Float := H.Box.X1;
+         Y1 : Float := H.Box.Y1;
+      begin
+         for W in 1 .. H.Walls loop
+            for C of H.Wall (W) loop
+               X0 := Float'Min (X0, C.X);  X1 := Float'Max (X1, C.X);
+               Y0 := Float'Min (Y0, C.Y);  Y1 := Float'Max (Y1, C.Y);
+            end loop;
+         end loop;
+         for W in 1 .. H.Doors loop
+            for C of H.Door (W) loop
+               X0 := Float'Min (X0, C.X);  X1 := Float'Max (X1, C.X);
+               Y0 := Float'Min (Y0, C.Y);  Y1 := Float'Max (Y1, C.Y);
+            end loop;
+         end loop;
+         for SX in Integer (Float'Floor ((X0 - 1.0) / 8.0)) .. Integer (Float'Floor ((X1 + 1.0) / 8.0)) loop
+            for SY in Integer (Float'Floor ((Y0 - 1.0) / 8.0)) .. Integer (Float'Floor ((Y1 + 1.0) / 8.0)) loop
+               Forget_Stack (SX, SY);
+            end loop;
+         end loop;
+      end Forget_Under;
+   begin
+      if N = Drawn_N and then (N = 0 or else Drawn (1 .. N) = D (D'First .. D'First + N - 1)) then
+         return;
+      end if;
+      for I in 1 .. Drawn_N loop
+         Forget_Under (Drawn (I));
+      end loop;
+      Drawn_N := N;
+      for I in 1 .. N loop
+         Drawn (I) := D (D'First + I - 1);
+         Forget_Under (Drawn (I));
+         declare
+            B : Kept_Box := Drawn (I).Box;
+            procedure Take (C : Vec3) is
+            begin
+               B.X0 := Float'Min (B.X0, C.X);  B.X1 := Float'Max (B.X1, C.X);
+               B.Y0 := Float'Min (B.Y0, C.Y);  B.Y1 := Float'Max (B.Y1, C.Y);
+            end Take;
+         begin
+            for W in 1 .. Drawn (I).Walls loop
+               for C of Drawn (I).Wall (W) loop
+                  Take (C);
+               end loop;
+            end loop;
+            for W in 1 .. Drawn (I).Doors loop
+               for C of Drawn (I).Door (W) loop
+                  Take (C);
+               end loop;
+            end loop;
+            Drawn_Bound (I) := B;
+         end;
+      end loop;
+   end Set_Drawn;
+
    function Unpack (F : Packed_Floor) return Floor is
      ((Z => Integer (F.Z), Head => Natural (F.Head), Water => Natural (F.Water), Speed => F.Speed));
 
@@ -501,8 +777,11 @@ package body Castle.Nav is
       return 0.0;
    end Rise_Time;
 
+   --  (a step onto or off a hovel's wall as drawn is reckoned at Wall_Pace)
    function Step_Time (A, B : Packed_Floor; Diagonal : Boolean) return Float is
-     ((if Diagonal then 0.707_106_78 else 0.5) / (Walk_Speed * Float'Max (0.05, 0.5 * (A.Speed + B.Speed)))
+     ((if Diagonal then 0.707_106_78 else 0.5)
+      / (Walk_Speed * (if A.Speed <= Wall_Speed or else B.Speed <= Wall_Speed then Wall_Pace
+                       else Float'Max (0.05, 0.5 * (A.Speed + B.Speed))))
       + Rise_Time (A, B));
 
    --  The corner cell (X, Y) beside a diagonal step from A to B: the step
@@ -1113,6 +1392,10 @@ package body Castle.Nav is
       X     : Integer := Cell_Of (P0.X);
       Y     : Integer := Cell_Of (P0.Y);
       Cur   : Packed_Floor := F0;
+      --  (a hovel's wall as drawn at Wall_Pace, as a plan reckons it: else a way planned round one
+      --  was straightened through it, its line dearer than the cells only by the twentieth)
+      function Pace (F : Packed_Floor) return Float is
+        (if F.Speed <= Wall_Speed then Wall_Pace else Float'Max (0.05, F.Speed));
    begin
       Ok := False;
       Time := 0.0;
@@ -1153,7 +1436,7 @@ package body Castle.Nav is
                      --  than an eighth (not for every tuft of tall grass)
                      if C.F (Pick).Z /= Cur.Z or else abs (C.F (Pick).Speed - Cur.Speed) > 0.12 * Cur.Speed then
                         Add_Point ((Qx_M, Qy_M, Float (C.F (Pick).Z) * 0.25),
-                                   T0 + Time + Step / (Walk_Speed * Float'Max (0.05, C.F (Pick).Speed)),
+                                   T0 + Time + Step / (Walk_Speed * Pace (C.F (Pick))),
                                    D0 + Step * Float (K));
                      end if;
                   end if;
@@ -1162,7 +1445,7 @@ package body Castle.Nav is
                   Y := Qy;
                end;
             end if;
-            Time := Time + Step / (Walk_Speed * Float'Max (0.05, Cur.Speed));
+            Time := Time + Step / (Walk_Speed * Pace (Cur));
          end;
       end loop;
       if Cur.Z /= F1.Z or else X /= Cell_Of (P1.X) or else Y /= Cell_Of (P1.Y) then

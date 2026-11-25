@@ -19,7 +19,8 @@ begin
                  and then not Failed (M, Cell_Base + C)
                then
                   declare
-                     D : constant Float := Flat_Dist (M.Pos, Cells (C).Centre);
+                     D : constant Float :=   --  (from an overflow place first)
+                       Flat_Dist (M.Pos, Cells (C).Centre) - (if Cells (C).Overflow or else Cells (C).Closed then Overflow_Last else 0.0);
                   begin
                      if D < Best_D then
                         Best_D := D;

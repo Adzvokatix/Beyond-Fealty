@@ -1,29 +1,30 @@
-
-
-# Fief engine — world generation and the 3D view for Beyond Fealty
+# Castle Game engine — world generation and the 3D view
 
 Procedural voxel world for the castle colony game, in Ada 2022.
 2048 m x 2048 m x 256 m, 0.25 m blocks.  Mountains peak around 160 m.
 
 ## The project
-Beyond Fealty is a colony game on a generated voxel world. The player says
+
+Castle Game is a colony game on a generated voxel world. The player says
 where (a homestake, paths, stockpiles, a camp, reserves and protections);
 the people decide what and when, feed themselves, and say why when they
-can't. Today a band of six gathers, fells, hunts, cooks and lives through
-the seasons at a camp; point at a person, a stockpile, the camp or a deer
+can't. Today a band of thirteen arrives with the lord's cart, gathers,
+fells, hunts, cooks, builds its hovels and lives through the seasons at a
+camp, its stockpile ten metres square, placed once, its last ten places
+kept for loads in hand; and, from the second morning, a storehouse raised
+on a stockyard the player zones beside a path (its ground levelled, a
+door in each end, its yard fenced with a gateway beside each end and
+coverings along the back; beside a path at 45 degrees the yard is laid
+out along the path, its storehouse drawn turned to lie along it), kept by
+a stockman, its shelves and barrels
+made by a carpenter, the stores moved into it when it stands. Its houses
+have doors that open, trusses in their gables and tie beams under a full
+thatch; its paths are levelled as they are laid; housing can be taken out
+again, and a hovel nobody owns razed. Point at a person, a stockpile, the camp or a deer
 and a tooltip says what it is and is doing, and a right click offers what
 may be done with it. People have skills that grow with the work they do
 (stage 5b). Housing, trades, an
 economy and lordship are ahead (the phases are in the framework).
-
-<img width="2560" height="1440" alt="swappy-20261121-220821" src="https://github.com/user-attachments/assets/20323764-f5aa-48e9-818b-b13a0d729974" />
-<img width="2560" height="1440" alt="swappy-20261121-220825" src="https://github.com/user-attachments/assets/425a6281-9109-4ea3-8162-50902042926b" />
-<img width="2560" height="1440" alt="swappy-20261121-220827" src="https://github.com/user-attachments/assets/396967c4-924b-4078-a44e-5f1efb5142db" />
-<img width="2560" height="1440" alt="swappy-20261121-220829" src="https://github.com/user-attachments/assets/c924f5e7-ac4f-4254-b100-02c070554c50" />
-<img width="2560" height="1440" alt="swappy-20261121-220831" src="https://github.com/user-attachments/assets/974ff76c-03e9-4a88-ade3-5a4a18c88197" />
-<img width="2560" height="1440" alt="swappy-20261121-221305" src="https://github.com/user-attachments/assets/cedb78ae-2130-458e-962a-924499d61704" />
-<img width="2560" height="1440" alt="swappy-20261121-221607" src="https://github.com/user-attachments/assets/9feb4496-5076-4d64-98c4-369d191a0a9b" />
-<img width="2560" height="1440" alt="swappy-20261121-221609" src="https://github.com/user-attachments/assets/a5d3e0d1-5632-4233-8d0e-3843706d467a" />
 
 Where to read:
 
@@ -94,7 +95,7 @@ Options: `--seed N`, `--at X Y` (start focus, metres), `--view M` (stream
 radius, metres), `--size W H`, `--float` (a window that can't be resized:
 Sway and other tiling compositors float it at exactly `--size` instead of
 tiling it; the app id is `castle` for window rules), `--workers N`,
-`--novsync`, `--no-lod` (no far view: nothing drawn past the view and the haze whole at its edge, the picture as it was before the far view: `docs/systems/rendering.md`, "The far view"), and of the far view's parts `--no-far-shadows` (nothing past the view's edge casts or takes the sun's shadow), `--no-far-mirror` (far water mirrors the sky alone), `--no-ground-haze` (no haze on the ground and none at the map's rim), `--haze X` (the ground haze X times as thick), `--rim M` (the map's rim goes into the haze over M metres, 12 as built), `--no-floor` (holes in the land show the sky), `--no-low-horizon` (the sun and the moon cut off at eye level, not gone down behind the map's edge), `--no-round-boulders` (a boulder's edges and corners in steps), `--no-whole-map` (a stack's blocks are dropped with its mesh, as before 2026-11-14: the game holds every stack's blocks and streams the meshes alone, `docs/systems/world.md`, "The whole map held"), `--msaa N`
+`--novsync`, `--no-lod` (no far view: nothing drawn past the view and the haze whole at its edge, the picture as it was before the far view: `docs/systems/rendering.md`, "The far view"), and of the far view's parts `--no-far-shadows` (nothing past the view's edge casts or takes the sun's shadow), `--no-far-mirror` (far water mirrors the sky alone), `--no-ground-haze` (no haze on the ground and none at the map's rim), `--haze X` (the ground haze X times as thick), `--rim M` (the map's rim goes into the haze over M metres, 12 as built), `--no-floor` (holes in the land show the sky), `--no-low-horizon` (the sun and the moon cut off at eye level, not gone down behind the map's edge), `--no-round-boulders` (a boulder's edges and corners in steps), `--no-boulder-feet` (a boulder standing on the ground instead of spreading into it), `--no-whole-map` (a stack's blocks are dropped with its mesh, as before 2026-11-14: the game holds every stack's blocks and streams the meshes alone, `docs/systems/world.md`, "The whole map held"), `--msaa N`
 (default 4, 0 to switch off),
 `--cam YAW PITCH DIST`, `--clouds C` (force cloud cover 0-1), `--day D` (0-59) and `--time HOUR` (0-24) to start at,
 `--timescale H` (game hours per real second, default 1/60: a game minute a
@@ -113,7 +114,7 @@ steered by keys meant for another) with `--pan DX DY`
 the far view has filled: the way to see what a look kept by place does when the camera has been away).
 `--pointer "FRAME:COMMAND, ..."` drives the cursor in such a run (move to a
 pixel, follow a member or a deer, a point of the ground, click, right
-click, wheel, Esc): `docs/systems/interface.md`, "A scripted pointer".
+click, wheel, Esc, take up a colony tool): `docs/systems/interface.md`, "A scripted pointer".
 
 Saves and scripted edits: `--load FILE` starts from a save (the world is
 made from the save's seed; the view is the save's unless `--at` or `--cam`
@@ -152,9 +153,10 @@ vein next to the default view, saved and loaded back:
 | Houses opened (roof and near walls): where the camera and the pointer are, all of them, none | H |
 | Pause, game speed | Space; 1, 2, 3 |
 | The band | Tab: tabs for the Band (a scroll list), Stores, Camp, Orders |
-| Colony tools | the Tools panel: Homestake, then Path, Stockpile, Campfire and Housing; or the ground's menu |
+| Colony tools | the Tools panel: Homestake (the square the colony is founded on, held and turned), then Path, Stockpile (a box with its path, held and turned), Housing and Stockyard; or the ground's menu |
+| Z / X | turn what is held to be put down, an eighth of a turn |
 | Screenshot | F12 (`screenshot.png`, interface included) |
-| Cancel, then quit | Esc: closes a menu or ends a path line, or a stockpile or housing half drawn; with nothing to cancel, quits |
+| Cancel, then quit | Esc: closes a menu or ends a path line or housing half drawn, or puts away a box held to be put down; with nothing to cancel, quits |
 
 Bindings live in `Castle.Input.Bindings`, one table, ready for the options
 menu.
@@ -238,7 +240,7 @@ tools/colony_run.adb       the colony on the real world with no window, on fixed
                            (--nav-stats: what the colony's steps, the walking map and the routes cost;
                            --prove-dry: every dry way the pieces of ground call out of reach searched for whole)
 tools/reference_run.sh     the reference run's command line
-tools/reference_check.sh   the 41-day reference run eight ways (seven with --no-beds --pace 1: nothing else off; --deer-scatter; and with it --all-hands --no-level; --paths-built; --no-labour; --no-demand; --no-skills; and one with beds, housing, a porter, a second stockpile, the band's pace of today, the cook's hold, the lord's cart and ladders; the seven also with --no-cook-hold --no-curing), each its kept log, line for line
+tools/reference_check.sh   the 41-day reference run eight ways (all of them a band of six on a stockpile of 10 m by 5 m with no overflow and no storehouse, as they were measured: --band 6 --stockpile-least 0 --no-overflow --last-places 0 --one-to-a-bush --no-storehouse in reference_run.sh, and --no-top-cut for the eighth; seven with --no-beds --pace 1: nothing else off; --deer-scatter; and with it --all-hands --no-level; --paths-built; --no-labour; --no-demand; --no-skills; and one with beds, housing, a porter, a second stockpile, the band's pace of today, the cook's hold, the lord's cart and ladders; the seven also with --no-cook-hold --no-curing), each its kept log, line for line
 tools/demo_stage5a.sh, demo_stage5b.sh   the stage demos, recorded with a scripted pointer (need ffmpeg)
 tools/demo_stage6.sh, demo_housing_pass.sh   stage 6a's, and the pass after it (housing pulled along a path and filled inside a round of paths, a path drawn on its ground, walled ground, roofs trimmed, the wall as one behind a row, beds on level ground across the way to the fire, cloaks, sleepers)
 tools/flora_stats.adb      trees by kind, forest cover and density, lone trees, berry bushes, wild vegetables, tall grass, boulders by the mountain mask,
@@ -258,6 +260,11 @@ tools/demo_paths_reach.sh  records the paths and reach demo (a path planned and 
 tools/demo_hands_level.sh  records the hands and levelling demo (two at a time laying a path a stretch each, a camp's floor levelled on a slope, earth heaped in the stockpile)
 tools/shadow_still.sh      do the shadows hold still?  records a still view with the clock running and measures the change
 tools/look_cost.sh         what a frame costs the GPU at twelve fixed views (the four every look is costed at, then sky, water and weather)
+tools/stockyard_sites.sh   seventeen stockyards since 2026-11-22 (its own header says each; the first eleven:) eighteen days each (four of them with the storehouse of 12 m by 8 m, the rest with the storehouse of before, --storehouse 10 5 4.5: ground the larger one is refused on; five put down whole, twenty metres square with their path: --stockyard-box; all four hundred places, the storehouse fronting its own path; at every one the lord's cart brought before the storehouse and its salt carried in, and every block column the storehouse's own blocks stand in its stockyard's ground); the first six: three square to the grid (beside a path aslant up the reference hillside as it was found; the largest, 25 m a side, there; beside a path at 45 degrees on the flat with --no-yard-turn) and three laid out along a path at 45 degrees (on the flat; the least on ground that falls 3 m; the largest): fails if a storehouse does not stand or anyone starved, and for those along a path if any of the ground is off its level or anyone stood in a wall as the storehouse is drawn
+tools/yard_corners.py      the two corners that zone a stockyard along a path at 45 degrees (for colony_run's --stockyard)
+tools/turned_streets.sh    hovels turned to a path at 45 degrees, on the flat, on rising ground and up a steep hillside, eleven days each (every member's state printed each hour): fails if fewer than four stand, anyone died or was said to be starving (the empty bellies are counted and said), any ground a hovel is drawn on is off its level or grown over, anyone else stood on it for long, anyone was in a wall of one as it is drawn, or a bed is not got to by its door (NO_WALK=1: hovels walked as they stand, as before 2026-11-20)
+tools/square_sites.sh      the square a colony is founded on, at real places: squares founded and made over a grid at ten places, their walls and stairs with them, and each scanned for pits and for a way to its fire (colony_run --square-scan), two of the places again with the paths laid last metre first and with the walls built when half the paths are laid (no square may stand otherwise); fourteen awkward sites twelve days each; a square saved half built (its floor, its walls) and run on from the save; a square founded round its tree; stockpiles with trees in them saved and run on: fails on a pit, a fire out of reach, anyone starved, a wall left unfinished, or a run that ends otherwise than the straight one (about four minutes)
+tools/herd_places.sh       where herds are put down, at real places: a colony founded at each of 400 stakes and its two herds looked at (colony_run --herd-scan); none on a tree's trunk, none where a deer cannot walk off; and the same count with the rule off, which must still find some
 tools/stress.sh            the stress test: years of the colony, a band of forty-eight, wide views, a long pan, the debug build
                            through a year (docs/production/Stress_test.md has what it found)
 tools/demo_sky_weather.sh  records the sky and weather demo (clouds, a sunset, the moon, snow, rain and pools, mist, sixty-four lights)
@@ -269,24 +276,41 @@ tools/dynamics_check.adb   the filters against theory: overshoot, stability, fra
 tools/serf_check.adb       serfs: 36,000 builds, symmetry, standing, IK, walking
 tools/path_check.adb       routes on made-up ground with known answers; timing on seed 1
 tools/colony_check.adb     the berry loop on a made-up meadow, through a save and back
-tools/deer_check.adb       deer: builds, IK, the stepper's gaits (no sliding, footfall, frame-rate independence)
+tools/deer_check.adb       deer: builds, IK, the stepper's gaits (no sliding, footfall, frame-rate independence); on a made-up hillside and cliff, one piece
 tools/pick_check.adb       pointing at things: the person in front of the zone in front of the block; walls, reach
 tools/test_world.*         the made-up world path_check, colony_check and pick_check share
-tools/colony_v7.bin, _v10, _v11, _v12, _v13, _v14.bin   colony blobs of each format, for colony_check to load
+tools/colony_v7.bin, _v10 to _v16.bin   colony blobs of older formats, for colony_check to load
 tools/water_probe.adb      generated water block by block round a point
 tools/fall_find.adb        the biggest falls on seed 1
 tools/font_glyphs.py       the font's glyph pictures; writes src/castle-font_data.ads
 tools/water_check.adb      water over the whole map: water standing above dry ground,
                            steps in the flow, lake outflows, streams near lakes left unjoined
+tools/today_run.sh, today_check.sh   the game as it is played (every rule at its default: a square, a stockpile, the stockyard, housing,
+                           thirteen with jobs), 41 days against its kept log, line for line and to its state
+tools/scratch_build.sh     the working copy built in another directory (nothing compiled or linked in the working copy)
+tools/check_section.sh     one section of colony_check alone, cut out and built in a scratch copy
+tools/belly.py, logsame.sh member-hours with an empty belly in a run's log; two runs' logs line for line across a blob bump
+tools/gate.sh              the gate: a commit proved from a clean copy of it (both builds, the nine checks in debug, the reference
+                           check, the three site scripts in both builds, the stress runner); three quarters of an hour
+tools/mechanics_check.py   John's design document against itself and, through tools/mechanics_map.json, against the code's lists
+tools/docs_check.py        every option, path and identifier the living documents name, looked for in the sources, and the other way
+tools/switch_census.py     every switch: its default, its option, which part of the gate runs it which way (docs/systems/switches.md)
+tools/unused_entities.py   what a specification declares and nothing uses, from the compiler's cross-references
+tools/code_shape.py        where the code is long, where it repeats itself, the constructs worth a look
+tools/gate_coverage.sh     what the gate never runs: its parts in a build that counts lines (tools/coverage_report.py reads it)
 src/castle-climate.*       calendar, weather, snow and ice
 ```
 
 ```
-docs/production/           the framework, the plan, the restructure plan and its inventory, the stage log, reference runs
-docs/systems/              one README per system
+docs/production/           State.md (where the project stands: one page), the framework, the plan, the restructure plan and its
+                           inventory, the stage log, reference runs
+docs/systems/              one README per system; switches.md lists every switch
+docs/conventions/          what past sessions learned and John ruled, a file a part of the game (CLAUDE.md has the index)
 docs/handoffs/             Handoff_YYYY_MM_DD_topic.md, one per session
-docs/design/               the design report, the organized design, jobs, the asset guide, the generation spec,
-                           the design conversations, the palette (color_palette.txt is the source of every colour)
+docs/design/               detailed_mechanics.json (John's design of the colony, its people and its economy) and
+                           Mechanics_crosswalk.md (it beside the build); the design report, the organized design, jobs, the
+                           asset guide, the generation spec and the design conversations it was drawn from; the palette
+                           (color_palette.txt is the source of every colour)
 docs/reference/            REFERENCES.md (the papers, kept outside git in CASTLE_GAME/papers/), the .kkrieger notes
 ```
 

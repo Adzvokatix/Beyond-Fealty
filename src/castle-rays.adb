@@ -18,8 +18,10 @@ package body Castle.Rays is
       elsif M = Thatch then
          return Castle.Cutaway.Cover_At (Px, Py, Pz) >= 0.5;
       else
-         --  (a cleared wall, by its place: whatever it is made of)
-         return Class_Of (M) /= Solid or else Castle.Cutaway.Wall_Cover_At (Px, Py, Pz) >= 0.5;
+         --  (a cleared wall, by its place: whatever it is made of; and a roof's timber with its roof)
+         return Class_Of (M) /= Solid
+           or else (Castle.Cutaway.Wall_Cover_At (Px, Py, Pz) >= 0.5
+                    and then (M /= Log or else Castle.Cutaway.Timber_Cover_At (Px, Py, Pz) >= 0.5));
       end if;
    end Stops;
 

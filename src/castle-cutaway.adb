@@ -9,7 +9,7 @@ package body Castle.Cutaway is
    N       : Natural := 0;
 
    function Of_Corners (Id : Positive; Front_Left, Front_Right, Back_Right, Back_Left : Vec3;
-                        Top_Z : Float) return Roof
+                        Top_Z : Float; Pivot : Vec3 := (0.0, 0.0, 0.0); Radians : Float := 0.0) return Roof
    is
       A  : constant Vec3 := (Front_Right.X - Front_Left.X, Front_Right.Y - Front_Left.Y, 0.0);
       B  : constant Vec3 := (Back_Left.X - Front_Left.X, Back_Left.Y - Front_Left.Y, 0.0);
@@ -23,8 +23,16 @@ package body Castle.Cutaway is
               Along  => (if La > 1.0e-4 then (A.X / La, A.Y / La, 0.0) else (1.0, 0.0, 0.0)),
               Half_A => La / 2.0,
               Half_B => Lb / 2.0,
-              Top_Z  => Top_Z);
+              Top_Z  => Top_Z,
+              Pivot  => Pivot,
+              Turn_C => (if Radians = 0.0 then 1.0 else Cos (Radians)),
+              Turn_S => (if Radians = 0.0 then 0.0 else Sin (Radians)));
    end Of_Corners;
+
+   function Home (R : Roof; P : Vec3) return Vec3 is
+     (if R.Turn_S = 0.0 then P
+      else (R.Pivot.X + R.Turn_C * (P.X - R.Pivot.X) + R.Turn_S * (P.Y - R.Pivot.Y),
+            R.Pivot.Y - R.Turn_S * (P.X - R.Pivot.X) + R.Turn_C * (P.Y - R.Pivot.Y), P.Z));
 
    --  P in R's own frame: along its walls, across them, up.
    function Local (R : Roof; P : Vec3) return Vec3 is
@@ -104,8 +112,8 @@ package body Castle.Cutaway is
         (case Way is
             when None    => False,
             when Full    => True,
-            when Dynamic => (L > 1.0e-4 and then Crosses (Eye, To, R))
-                            or else (Pointing and then Crosses (Eye, Pointed, R)));
+            when Dynamic => (L > 1.0e-4 and then Crosses (Home (R, Eye), Home (R, To), R))
+                            or else (Pointing and then Crosses (Home (R, Eye), Home (R, Pointed), R)));
    begin
       Last_Eye := Eye;
       --  those already clearing, or coming back: by the roofs offered now
@@ -199,8 +207,9 @@ package body Castle.Cutaway is
          Sb : constant Float := (if P.Y < 0.0 then -1.0 else 1.0);
          Nx : constant Float := (if In_A < In_B then Sa * C.R.Along.X else -Sb * C.R.Along.Y);
          Ny : constant Float := (if In_A < In_B then Sa * C.R.Along.Y else Sb * C.R.Along.X);
-         Ex : constant Float := Eye.X - X;
-         Ey : constant Float := Eye.Y - Y;
+         --  (the eye where it is as the house stands: one drawn turned is looked at through its turn)
+         Ex : constant Float := Home (C.R, Eye).X - X;
+         Ey : constant Float := Home (C.R, Eye).Y - Y;
          Facing : constant Float := (Nx * Ex + Ny * Ey) / Float'Max (Sqrt (Ex * Ex + Ey * Ey), 0.5);
          T  : constant Float := Float'Max (0.0, Float'Min (1.0, (Facing - Face_Lo) / (Face_Hi - Face_Lo)));
       begin
@@ -216,6 +225,32 @@ package body Castle.Cutaway is
       end loop;
       return C;
    end Wall_Cover_At;
+
+   function Timber_Cover (C : Cleared; X, Y, Z : Float) return Float is
+      P    : constant Vec3 := Local (C.R, (X, Y, Z));
+      In_A : constant Float := C.R.Half_A - abs P.X;
+      In_B : constant Float := C.R.Half_B - abs P.Y;
+      Inn  : constant Float := Float'Min (In_A, In_B);
+   begin
+      if Inn <= Wall_M or else Z < C.R.Centre.Z + Timber_Up_M or else Z > C.R.Top_Z + 0.5 then
+         return 1.0;                                       --  not a timber of its roof
+      end if;
+      declare
+         T : constant Float := Float'Max (0.0, Float'Min (1.0, Inn / Taper_M));
+         R : constant Float := Edge_Cover * (1.0 - T * T * (3.0 - 2.0 * T));
+      begin
+         return 1.0 - C.Amount * (1.0 - R);
+      end;
+   end Timber_Cover;
+
+   function Timber_Cover_At (X, Y, Z : Float) return Float is
+      C : Float := 1.0;
+   begin
+      for K in 1 .. N loop
+         C := Float'Min (C, Timber_Cover (State (K), X, Y, Z));
+      end loop;
+      return C;
+   end Timber_Cover_At;
 
    function Eye_Now return Vec3 is (Last_Eye);
 

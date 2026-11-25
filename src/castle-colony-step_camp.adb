@@ -82,7 +82,8 @@ begin
                              when For_Fire => (if M.Carry = Sticks then Camp_At + (0.0, 0.0, 0.1)
                                                else Camp_At + Camp_Off (Stack_Off.X, Stack_Off.Y)),
                              when For_Seat => Seat_Log (Integer'Min (Seat_Logs, Seats_Laid + 1)),
-                             when For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder =>
+                             when For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder | For_Fitting
+                                | For_Wall =>
                                Camp_At + (0.0, 0.0, 0.1),
                              when For_Pot | For_Store | For_Stoke => Camp_At + (0.0, 0.0, 0.5));
             end if;
@@ -149,7 +150,8 @@ begin
                   else
                      Fire_Logs := Fire_Logs + M.Carried;
                   end if;
-               when For_Store | For_Stoke | For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder =>
+               when For_Store | For_Stoke | For_Ring | For_Frame | For_Floor | For_House | For_Bed | For_Ladder
+                  | For_Fitting | For_Wall =>
                   null;
             end case;
             M.Carry := Nothing;

@@ -131,11 +131,95 @@ package body Castle.Pick is
       Ground    : Castle.Rays.Hit;
       Reach     : Float := No_Limit;
       Slack     : Float := 0.0;
-      Keep      : Thing := (others => <>)) return Thing
+      Keep      : Thing := (others => <>);
+      Cast      : Caster := null) return Thing
    is
       Far   : constant Float := 2_000.0;
+
+      --  Houses drawn turned (the spec, Cast).
+      type Turned_Look is record
+         House  : Natural := 0;      --  the house drawn turned that the ray meets as it is drawn (0: none),
+         T      : Float := 0.0;      --  and where along the ray
+         Unseen : Natural := 0;      --  the turned house, of whose walls as they stand Ground is a block
+         Past   : Float := 0.0;      --  with Unseen: where the ray comes to the level of its pad
+      end record;
+      function Pad_Row (V : Castle.Colony.House_View) return Integer is (Integer (Float'Rounding (V.Corner (1).Z * 4.0)));
+      function Look_Turned return Turned_Look is
+         use Castle.Colony;
+         TL : Turned_Look;
+         Gp : constant Vec3 := From + Dir * Ground.Dist;
+      begin
+         if Ground.Found then
+            declare
+               H : constant Natural := House_On (Gp.X + 0.1 * Dir.X, Gp.Y + 0.1 * Dir.Y);
+            begin
+               --  (and the ground itself within the walls, as they stand, of a house that is walked
+               --  where it is drawn, come to by the ray through a doorway of it as it stands: that
+               --  ground is walked whatever is dug or built there, and is not the cursor's)
+               if H > 0 and then House_At (H).Turn /= 0.0
+                 and then (Ground.Z >= Pad_Row (House_At (H))
+                           or else (House_At (H).Walked_Drawn and then Ground.Z >= Pad_Row (House_At (H)) - 1))
+               then
+                  TL.Unseen := H;
+                  TL.Past := (if Dir.Z < -1.0E-4 then (House_At (H).Corner (1).Z - From.Z) / Dir.Z else Far);
+               end if;
+            end;
+         end if;
+         TL.T := Float'Last;
+         for K in 1 .. House_Count loop
+            declare
+               V : constant House_View := House_At (K);
+            begin
+               if V.Turn /= 0.0 then
+                  declare
+                     C  : constant Float := Cos (V.Turn);
+                     S  : constant Float := Sin (V.Turn);
+                     D0 : constant Vec3 := From - V.Pivot;
+                     --  (the ray taken back through its turn: to the house as it stands)
+                     F2 : constant Vec3 := (V.Pivot.X + C * D0.X + S * D0.Y, V.Pivot.Y - S * D0.X + C * D0.Y, From.Z);
+                     D2 : constant Vec3 := (C * Dir.X + S * Dir.Y, -S * Dir.X + C * Dir.Y, Dir.Z);
+                     Lo : Vec3 := V.Corner (1);
+                     Hi : Vec3 := V.Corner (1);
+                     T0 : Float;
+                  begin
+                     for Cn of V.Corner loop
+                        Lo := (Float'Min (Lo.X, Cn.X), Float'Min (Lo.Y, Cn.Y), Lo.Z);
+                        Hi := (Float'Max (Hi.X, Cn.X), Float'Max (Hi.Y, Cn.Y), Hi.Z);
+                     end loop;
+                     Lo := Lo - (0.3, 0.3, 0.0);
+                     Hi := (Hi.X + 0.3, Hi.Y + 0.3, V.Top_Z + 0.3);
+                     if Enters (F2, D2, Far, Lo, Hi, T0) then
+                        declare
+                           Start : constant Float := Float'Max (0.0, T0 - 0.05);
+                           H2    : constant Castle.Rays.Hit := Cast (F2 + D2 * Start, D2, 40.0);
+                           P2    : constant Vec3 := F2 + D2 * (Start + H2.Dist);
+                        begin
+                           if H2.Found and then H2.Z >= Pad_Row (V)
+                             and then House_On (P2.X + 0.1 * D2.X, P2.Y + 0.1 * D2.Y) = K
+                             and then Start + H2.Dist < TL.T
+                             --  (nothing seen stands before it)
+                             and then (TL.Unseen > 0 or else not Ground.Found or else Start + H2.Dist <= Ground.Dist + 0.3)
+                           then
+                              TL.House := K;
+                              TL.T := Start + H2.Dist;
+                           end if;
+                        end;
+                     end if;
+                  end;
+               end if;
+            end;
+         end loop;
+         return TL;
+      end Look_Turned;
+      TL : constant Turned_Look :=
+        (if Cast /= null and then Castle.Colony.House_Count > 0 then Look_Turned else (others => <>));
+      --  how far along the ray the ground that is seen lies
+      Seen_T : constant Float := (if TL.Unseen > 0 then TL.Past else Ground.Dist);
       --  how far along the ray anything can still be seen: to the ground, and a little into it
-      Sight : constant Float := (if Ground.Found then Ground.Dist + Hide_M else Far);
+      --  (and no further than a house drawn turned that the ray meets: its walls are in the way
+      --  as they are drawn, though no block stands there for the ray to walk into)
+      Sight : constant Float :=
+        Float'Min ((if Ground.Found then Seen_T + Hide_M else Far), (if TL.House > 0 then TL.T + Hide_M else Far));
       L     : constant Float := Float'Min (Sight, (if Reach < Far then Reach + 1.0 else Far));
       R     : Thing;
 
@@ -177,6 +261,7 @@ package body Castle.Pick is
       end Try;
    begin
       R.Ground := Ground;
+      R.Turned := TL.House > 0 or else TL.Unseen > 0;
       for I in 1 .. Castle.Colony.Members loop
          Try (A_Person, I, People_Src (I));
       end loop;
@@ -208,7 +293,20 @@ package body Castle.Pick is
             Best   : Natural := 0;
             Best_T : Float := Float'Last;
             T      : Float;
-            Gp     : constant Vec3 := From + Dir * Ground.Dist;
+            Gp     : constant Vec3 := From + Dir * Seen_T;
+            --  the house whose ground (X, Y) is: one drawn turned, where it is drawn
+            function House_Under (X, Y : Float) return Natural is
+               H : constant Natural := House_On (X, Y);
+            begin
+               if Cast /= null then
+                  for K in 1 .. House_Count loop
+                     if House_At (K).Turn /= 0.0 and then House_Drawn_On (K, X, Y, 0.25) then
+                        return K;
+                     end if;
+                  end loop;
+               end if;
+               return (if H > 0 and then Cast /= null and then House_At (H).Turn /= 0.0 then 0 else H);
+            end House_Under;
          begin
             for K in 1 .. Cell_Count loop
                declare
@@ -245,18 +343,30 @@ package body Castle.Pick is
                end if;
                return R;
             end if;
+            --  a house drawn turned: the ray meets it as it is drawn
+            if Best = 0 and then TL.House > 0 then
+               R.Kind := A_House;
+               R.Index := TL.House;
+               R.Dist := TL.T;
+               R.Point := From + Dir * TL.T;
+               if R.Dist > Reach then
+                  R.Kind := Nothing;
+                  R.Index := 0;
+               end if;
+               return R;
+            end if;
             --  a house: what the ray lands on is of it (a wall, the roof, the
             --  ground its walls are to stand on)
             if Best = 0 and then Ground.Found and then House_Count > 0 then
                declare
-                  H : constant Natural := House_On (Gp.X + 0.1 * Dir.X, Gp.Y + 0.1 * Dir.Y);
+                  H : constant Natural := House_Under (Gp.X + 0.1 * Dir.X, Gp.Y + 0.1 * Dir.Y);
                begin
                   if H > 0 and then Gp.Z >= House_At (H).Corner (1).Z - 2.0 * Level_M
                     and then Gp.Z <= House_At (H).Top_Z + 2.0 * Level_M
                   then
                      R.Kind := A_House;
                      R.Index := H;
-                     R.Dist := Ground.Dist;
+                     R.Dist := Seen_T;
                      R.Point := Gp;
                      if R.Dist > Reach then
                         R.Kind := Nothing;
@@ -273,7 +383,7 @@ package body Castle.Pick is
                begin
                   if Z > 0 and then abs (Gp.Z - Top) <= (if Z = Camp_Zone then 2.0 * Level_M else Level_M) then
                      Best := Z;
-                     Best_T := Ground.Dist;
+                     Best_T := Seen_T;
                   end if;
                end;
             end if;
@@ -282,7 +392,7 @@ package body Castle.Pick is
                R.Index := Best;
                R.Dist := Best_T;
                R.Point := From + Dir * Best_T;
-            elsif Ground.Found then
+            elsif Ground.Found and then TL.Unseen = 0 then    --  (never a block that is drawn elsewhere)
                R.Kind := A_Block;
                R.Dist := Ground.Dist;
                R.Point := Gp;

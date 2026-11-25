@@ -56,6 +56,22 @@ procedure Pick_Check is
 begin
    Attach;
    Reset;
+   Set_Stockpile_Least (0.0);      --  (its stockpiles are small: any size, as before 2026-11-17,
+   Set_Overflow (False);           --  with no overflow round them)
+   Set_Storehouse (False);
+   Set_Last_Places (0);            --  (and none of their places kept, as before 2026-11-18)
+   Set_Path_Level (False);         --  (and a path laid on the ground as it lies, as before 2026-11-19)
+   Set_Roof_Timbers (False);       --  (and a house without its roof's timbers or its windows' timber)
+   Set_Window_Timber (False);
+   Set_One_Stockpile (True);       --  (and the stockpile placed once, the stores moved into the stockyard, as before 2026-11-19)
+   Set_Stores_Move (True);
+   Set_Box_Place (False);          --  (and no stockpile put down whole with its path, as before 2026-11-20)
+   Set_Yard_Box (False);           --  (nor the stockyard: zoned corner to corner, as before 2026-11-21)
+   Set_Store_Size (40, 20, 18);    --  (and its storehouse as it was)
+   Set_Store_Stacks (False);       --  (a place in it its own, one barrel to a place)
+   Set_Wood_Reach (False);         --  (and a forester's trees no further than the work radius)
+   Set_House_Turn (False);         --  (and no house turned)
+   Set_Bush_Sharing (False);
    Set_Needs (False);
    Set_Demand_Chain (False);
    Meadow;
@@ -456,6 +472,264 @@ begin
       Check (T.Kind /= A_Cart, "at the ground a metre and a half past its end: not the cart (" & Said (T) & ")");
       T := See (C.At_P + (-3.0, -4.0, 9.0), C.At_P + (0.0, 0.0, 0.75), Reach => 6.0);
       Check (T.Kind = Nothing, "out of reach, nothing");
+   end;
+
+   --  A house drawn turned is pointed at where it is drawn (the fourth step of the turned building).
+   Put_Line ("a house drawn turned:");
+   Reset;
+   Set_House_Turn (True);
+   Set_Needs (False);
+   Set_Demand_Chain (False);
+   Meadow;
+   Place_Stake ((6.0, 6.0, Ground_M), 6, 42);
+   declare
+      Lots : Natural;
+      function See_T (Eye, At_P : Vec3) return Thing is
+         Dir : constant Vec3 := Normalize (At_P - Eye);
+      begin
+         return Look (Eye, Dir, Cast (Eye, Dir, 200.0), Cast => Cast'Access);
+      end See_T;
+   begin
+      Lay_Path ((22.0, 26.0, Ground_M), (42.0, 46.0, Ground_M), Laid);
+      Build_Paths_Now;
+      Zone_Housing (22.0 - 0.7, 26.0 + 0.7, 42.0, 46.0, Lots);
+      Run (2);
+      if House_Count >= 1 and then House_At (1).Turn /= 0.0 then
+         declare
+            V    : constant House_View := House_At (1);
+            Mid  : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+            Dm   : constant Vec3 := (V.Drawn (1) + V.Drawn (3)) * 0.5;
+            Off  : Vec3 := V.Drawn (1);      --  a point it is drawn on, off where it stands
+            Bare : Vec3 := V.Corner (1);     --  and one where it stands, off where it is drawn
+            T    : Thing;
+            function Flat (A, C : Vec3) return Float is (Sqrt ((A.X - C.X) ** 2 + (A.Y - C.Y) ** 2));
+         begin
+            for C of V.Drawn loop
+               if Flat (C, Mid) > Flat (Off, Mid) then
+                  Off := C;
+               end if;
+            end loop;
+            for C of V.Corner loop
+               if Flat (C, Dm) > Flat (Bare, Dm) then
+                  Bare := C;
+               end if;
+            end loop;
+            Off := Off + (Dm - Off) * (1.0 / Flat (Dm, Off));
+            Bare := Bare + (Mid - Bare) * (1.0 / Flat (Mid, Bare));
+            T := See_T (Off + (0.3, 0.2, 12.0), Off);
+            Check (T.Kind = A_House and then T.Index = 1,
+                   "begun: pointing at the ground it is drawn on, off where it stands: the house (" & Said (T) & ")");
+            T := See_T (Bare + (0.3, 0.2, 12.0), Bare);
+            Check (T.Kind = A_Zone, "and at the ground it stands on, off where it is drawn: the zone (" & Said (T) & ")");
+            Build_Homes_Now;
+            T := See_T (Off + (0.3, 0.2, 14.0), Off + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_House and then T.Index = 1 and then T.Point.Z > Ground_M + 1.5,
+                   "built: pointing down at it where it is drawn, off where it stands: the house, on its thatch ("
+                   & Said (T) & ", " & Img (T.Point.Z - Ground_M, 2) & " m up)");
+            T := See_T (Bare + (0.3, 0.2, 14.0), Bare + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_Zone and then abs (T.Point.Z - Ground_M) < 0.3,
+                   "and down at where it stands, off where it is drawn: the zone's ground, not the house and not a"
+                   & " block of it (" & Said (T) & ")");
+            T := See (Bare + (0.3, 0.2, 14.0), Bare + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_House and then T.Index = 1,
+                   "(asked without the caster, a house is pointed at where it stands, as before: " & Said (T) & ")");
+            --  its roof is cleared by where it is drawn (Castle.Cutaway, given its turn)
+            declare
+               use Castle.Cutaway;
+               R : constant Roof := Of_Corners (1, V.Corner (1), V.Corner (2), V.Corner (3), V.Corner (4), V.Top_Z,
+                                                Pivot => V.Pivot, Radians => V.Turn);
+               N_On, N_Off : Natural;
+            begin
+               Set_View (Dynamic);
+               Clear;
+               Follow (Off + (0.3, 0.2, 14.0), Off, [R], 1.0);
+               N_On := Castle.Cutaway.Count;
+               Clear;
+               Follow (Bare + (0.3, 0.2, 14.0), Bare, [R], 1.0);
+               N_Off := Castle.Cutaway.Count;
+               Check (N_On = 1 and then N_Off = 0,
+                      "the eye's line down through it where it is drawn clears its roof; down through where it stands,"
+                      & " off where it is drawn, clears none (" & Img (N_On) & ", " & Img (N_Off) & ")");
+               Clear;
+               Follow (Off + (0.3, 0.2, 14.0), Off, [R], 1.0);
+               T := See_T (Off + (0.3, 0.2, 14.0), Off + (0.0, 0.0, 1.0));
+               Check (T.Kind = A_House and then T.Index = 1 and then T.Point.Z < Ground_M + 0.5,
+                      "and with its roof cleared the pointer goes through to its floor as drawn: still the house ("
+                      & Said (T) & ", " & Img (T.Point.Z - Ground_M, 2) & " m up)");
+               Clear;
+            end;
+            --  never a person behind its walls as drawn: from past the house, level, at somebody
+            --  who stands on its other side
+            declare
+               Wm  : constant Vec3 := Where (1);
+               Dir : constant Vec3 := (Dm - Wm) * (1.0 / Flat (Dm, Wm));
+               Eye : constant Vec3 := (Dm.X + Dir.X * 5.5, Dm.Y + Dir.Y * 5.5, Ground_M + 1.4);
+            begin
+               T := See_T (Eye, Wm + (0.0, 0.0, 1.2));
+               Check (T.Kind = A_House,
+                      "from past it, level, at somebody who stands on its other side (" & Img (Flat (Eye, Wm), 1)
+                      & " m off): a house as it is drawn, not the person behind it (" & Said (T) & ")");
+               T := See_T (Wm + (-3.0, -4.0, 9.0), Wm + (0.0, 0.0, 1.0));
+               Check (T.Kind = A_Person and then T.Index = 1, "(and that one, looked at with nothing between: " & Said (T) & ")");
+            end;
+            --  from the path at its front as drawn
+            declare
+               Out_V : constant Vec3 := (V.Drawn_Door - Dm) * (1.0 / Flat (V.Drawn_Door, Dm));
+            begin
+               T := See_T (V.Drawn_Door + Out_V * 4.0 + (0.0, 0.0, 1.5), Dm + (0.0, 0.0, 1.2));
+               Check (T.Kind = A_House and then T.Index = 1,
+                      "and from the path at its front wall as drawn: the house (" & Said (T) & ")");
+            end;
+         end;
+      else
+         Check (False, "a hovel is begun turned beside a path at 45 degrees");
+      end if;
+   end;
+
+   --  A storehouse drawn turned on a stockyard laid out along its path (John, 2026-11-20: "go on with
+   --  the second way for the stockyard"): pointed at where it is drawn; and, the feet going by it as it
+   --  is drawn, whoever is in it is pointed at where they are.
+   Put_Line ("a storehouse drawn turned, walked where it is drawn:");
+   Reset;
+   Set_Storehouse (True);
+   Set_Needs (False);
+   Set_Demand_Chain (False);
+   Meadow;
+   Hours := 16.0 * 24.0;
+   Place_Stake ((4.0, 4.0, Ground_M), 6, 42);
+   declare
+      C45 : constant Float := 0.707_106_78;
+      function See_T (Eye, At_P : Vec3) return Thing is
+         Dir : constant Vec3 := Normalize (At_P - Eye);
+      begin
+         return Look (Eye, Dir, Cast (Eye, Dir, 200.0), Cast => Cast'Access);
+      end See_T;
+      function Flat (A, C : Vec3) return Float is (Sqrt ((A.X - C.X) ** 2 + (A.Y - C.Y) ** 2));
+      --  (a path north-east through (32, 30), and a lot of 16 m by 16 m along it on its north-west side)
+      A_P   : constant Float := (32.0 + 30.0) * C45;
+      B_P   : constant Float := (30.0 - 32.0) * C45;
+      Front : constant Float := Float'Ceiling (B_P + 0.5 - 0.001);
+      From  : constant Float := Float'Rounding (A_P) - 8.0;
+      A0    : constant Float := From + 0.3;
+      A1    : constant Float := From + 15.7;
+      B0    : constant Float := Front + 0.3;
+      B1    : constant Float := Front + 15.7;
+      Zoned : Natural;
+   begin
+      Lay_Path ((32.0 - 18.0 * C45, 30.0 - 18.0 * C45, Ground_M), (32.0 + 18.0 * C45, 30.0 + 18.0 * C45, Ground_M), Laid);
+      Build_Paths_Now;
+      Run (1);
+      Hours := 17.0 * 24.0 + 8.0;
+      Run (1);
+      Zone_Stockyard ((A0 - B0) * C45, (A0 + B0) * C45, (A1 - B1) * C45, (A1 + B1) * C45, Zoned);
+      if Zoned = 256 and then Storehouse > 0 and then House_At (Storehouse).Yard_Turned then
+         Build_Homes_Now;
+         Run (2);
+         declare
+            S    : constant Positive := Storehouse;
+            V    : constant House_View := House_At (S);
+            Mid  : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+            Dm   : constant Vec3 := (V.Drawn (1) + V.Drawn (3)) * 0.5;
+            Off  : Vec3 := V.Drawn (1);      --  a point it is drawn on, off where it stands
+            Bare : Vec3 := V.Corner (1);     --  and one where it stands, off where it is drawn
+            Inside : Vec3 := (0.0, 0.0, -1.0);
+            T    : Thing;
+         begin
+            for C of V.Drawn loop
+               if Flat (C, Mid) > Flat (Off, Mid) then
+                  Off := C;
+               end if;
+            end loop;
+            --  (it is turned about its middle: a corner of it as it stands that is well off it as drawn)
+            for C of V.Corner loop
+               declare
+                  P : constant Vec3 := C + (Mid - C) * (0.8 / Flat (Mid, C));
+               begin
+                  if not House_Drawn_On (S, P.X, P.Y, 0.8) and then House_Walls_On (S, P.X, P.Y) then
+                     Bare := P;
+                  end if;
+               end;
+            end loop;
+            Off := Off + (Dm - Off) * (1.2 / Flat (Dm, Off));
+            for K in 1 .. Cell_Count loop
+               if Zone_Of_Cell (K) = Stockyard and then Cell_At (K).Fit = Floor and then Inside.Z < 0.0 then
+                  Inside := Cell_At (K).Centre;
+               end if;
+            end loop;
+            Check (V.Walked_Drawn and then not V.People_Turned and then Inside.Z >= 0.0
+                   and then House_Place (S, Inside.X, Inside.Y) = Within_It
+                   and then House_Place (S, Bare.X, Bare.Y) = Where_Its_Blocks_Stand
+                   and then House_Place (S, Off.X, Off.Y) = Within_It and then not House_Walls_On (S, Off.X, Off.Y),
+                   "built on a stockyard along a path at 45 degrees: the feet go by it as it is drawn, and its places"
+                   & " inside are within it as drawn");
+            T := See_T (Off + (0.3, 0.2, 14.0), Off + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_House and then T.Index = S and then T.Point.Z > Ground_M + 1.5,
+                   "pointing down at it where it is drawn, off where it stands: the storehouse, on its thatch ("
+                   & Said (T) & ", " & Img (T.Point.Z - Ground_M, 2) & " m up)");
+            T := See_T (Bare + (0.3, 0.2, 14.0), Bare + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_Zone and then abs (T.Point.Z - Ground_M) < 0.3,
+                   "and down at where its blocks stand, off where it is drawn: the yard's ground, not the storehouse and"
+                   & " not a block of it (" & Said (T) & ")");
+            --  in at a doorway of it as it stands (nothing is seen there: the yard), to the ground within
+            --  its walls as they stand: not the cursor's to dig or build on, the feet going by it as drawn
+            declare
+               Dw  : constant Doorway_View := Doorway_At (S, 1);
+               Md  : constant Vec3 := Dw.Foot + Dw.Along * (Dw.Width / 2.0);
+               Eye : constant Vec3 := Md - Dw.Inward * 3.0 + (0.0, 0.0, 1.5);
+            begin
+               --  (half a metre in from its doorway as it stands: off it as it is drawn)
+               T := See_T (Eye, Md + Dw.Inward * 0.5);
+               Check (not House_Drawn_On (S, Md.X + Dw.Inward.X * 0.5, Md.Y + Dw.Inward.Y * 0.5, 0.25)
+                      and then T.Turned and then T.Kind /= A_House and then abs (T.Point.Z - Ground_M) < 0.3,
+                      "in at a doorway of it as it stands, to the ground within its walls as they stand: the yard's"
+                      & " ground, and not the cursor's to dig (" & Said (T) & ")");
+            end;
+            --  somebody standing where its blocks stand, off where it is drawn, is in the open: pointed at
+            Hold_Still (3, (Bare.X, Bare.Y, Ground_M), 600.0);
+            T := See_T (Bare + (0.3, 0.2, 10.0), Bare + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_Person and then T.Index = 3,
+                   "somebody standing where its blocks stand, off where it is drawn, is pointed at: nothing is seen"
+                   & " between (" & Said (T) & ")");
+            Hold_Still (3, (2.0, 2.0, Ground_M), 600.0);
+            --  somebody inside it as drawn: not through its roof; with its roof cleared, pointed at where they stand
+            Hold_Still (1, Inside, 600.0);
+            T := See_T (Inside + (0.3, 0.2, 14.0), Inside + (0.0, 0.0, 1.0));
+            Check (T.Kind = A_House and then T.Index = S,
+                   "somebody inside it: pointing down at them through its roof says the storehouse (" & Said (T) & ")");
+            declare
+               use Castle.Cutaway;
+               R : constant Roof := Of_Corners (S, V.Corner (1), V.Corner (2), V.Corner (3), V.Corner (4), V.Top_Z,
+                                                Pivot => V.Pivot, Radians => V.Turn);
+               N_On : Natural;
+            begin
+               Set_View (Dynamic);
+               Clear;
+               Follow (Inside + (0.3, 0.2, 14.0), Inside, [R], 1.0);
+               N_On := Castle.Cutaway.Count;
+               T := See_T (Inside + (0.3, 0.2, 14.0), Inside + (0.0, 0.0, 1.0));
+               Check (N_On = 1 and then T.Kind = A_Person and then T.Index = 1,
+                      "with its roof cleared by the eye's line down through it as drawn, the one inside is pointed at where"
+                      & " they stand (" & Said (T) & ")");
+               Clear;
+            end;
+            --  never a person behind it as drawn: from the yard behind it, level, at somebody before its front
+            declare
+               Out_V : constant Vec3 := (V.Drawn_Door - Dm) * (1.0 / Flat (V.Drawn_Door, Dm));
+               Wm    : constant Vec3 := (Dm.X + Out_V.X * 5.0, Dm.Y + Out_V.Y * 5.0, Ground_M);
+               Eye   : constant Vec3 := (Dm.X - Out_V.X * 5.5, Dm.Y - Out_V.Y * 5.5, Ground_M + 1.4);
+            begin
+               Hold_Still (2, Wm, 600.0);
+               T := See_T (Eye, Wm + (0.0, 0.0, 1.2));
+               Check (T.Kind = A_House and then T.Index = S,
+                      "from the yard behind it, level, at somebody who stands before its front (" & Img (Flat (Eye, Wm), 1)
+                      & " m off): the storehouse as it is drawn, not the person behind it (" & Said (T) & ")");
+               T := See_T (Wm + (Out_V.X * 4.0, Out_V.Y * 4.0, 7.0), Wm + (0.0, 0.0, 1.0));
+               Check (T.Kind = A_Person and then T.Index = 2, "(and that one, looked at with nothing between: " & Said (T) & ")");
+            end;
+         end;
+      else
+         Check (False, "a stockyard along a path at 45 degrees takes its storehouse (" & Img (Zoned) & " places)");
+      end if;
    end;
 
    New_Line;

@@ -2,7 +2,8 @@ separate (Castle.Colony)
 function Go_Pick (I : Positive) return Boolean is
    M : Member renames Band (I);
 begin
-   for Attempt in 1 .. 3 loop
+   --  (told of the ways: more of them asked in one thought, each a look at the map's pieces, no search)
+   for Attempt in 1 .. (if Told_On then Ask_Tries else 3) loop
       declare
          Best : Natural := 0;
          Best_S : Float := Float'Last;
@@ -11,9 +12,9 @@ begin
             declare
                Bu : Bush renames Bushes (K);
             begin
-               if Bu.Ripe > 0 and then (Bu.Reserved_By = 0 or else Bu.Reserved_By = I)
-                 and then not Failed (M, K)
-                 and then Flat_Dist (Bu.Centre, Stake_At) <= Work_Radius_M
+               if Bu.Ripe > 0 and then Bush_Free (K, I)
+                 and then not Failed (M, K) and then not No_Way_Told (K)
+                 and then Flat_Dist (Bu.Centre, Stake_At) <= Food_Reach_M
                then
                   declare
                      S : constant Float := Flat_Dist (M.Pos, Bu.Centre) + Stake_Weight (M) * Flat_Dist (Stake_At, Bu.Centre);
@@ -30,10 +31,14 @@ begin
             M.Why := No_Bush;
             return False;
          end if;
-         if Route_To (M, Bushes (Best).Centre, Bushes (Best).Radius + 0.7) then
+         if (if Told_On then Route_Asked (M, Bushes (Best).Centre, Bushes (Best).Radius + 0.7, Best)
+             else Route_To (M, Bushes (Best).Centre, Bushes (Best).Radius + 0.7))
+         then
             Release (M, I);
             M.Bush := Best;
-            Bushes (Best).Reserved_By := I;
+            if Bushes (Best).Reserved_By = 0 or else not Share_On then
+               Bushes (Best).Reserved_By := I;
+            end if;
             M.State := To_Bush;
             return True;
          end if;

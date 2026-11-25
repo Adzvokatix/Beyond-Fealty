@@ -10,8 +10,10 @@ begin
    Clear_Places;                              --  what grows where things will be put is cut
    for K in 1 .. Plan_Cells_N loop
       N_Cells := N_Cells + 1;
-      Castle.Colony.Cells (N_Cells) := (Centre => Plan_Cell (K), Turn => Plan_Turn, others => <>);
+      Castle.Colony.Cells (N_Cells) :=
+        (Centre => Plan_Cell (K), Turn => Plan_Turn, Overflow => K > Plan_Cells_N - Plan_Over_N, others => <>);
    end loop;
    Cells := N_Cells - First;
    New_Stockpile_Zone (First + 1);            --  one zoning, one zone
+   Flatten_Pile (N_Zones);                    --  (and one level: Set_Pile_Flat)
 end Zone_Stockpile;

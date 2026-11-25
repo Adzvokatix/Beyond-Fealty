@@ -34,6 +34,7 @@ begin
       --  off, it would be taken up again the same moment, all night)
       if Interruptible (M.State)
         and then not (M.State = To_Site and then M.Carried > 0)
+        and then not (M.State in To_Patch | Tamping and then M.Carried > 0 and then M.Use_For = For_Wall)
         and then (Bedtime (M)
                   or else (M.Fed < Very_Hungry and then not M.Fends
                            and then ((Raw_Food (M.Carry) > 0 and then M.Use_For = For_Store)
@@ -78,5 +79,7 @@ begin
          Step_Hunt (I);
       when To_Tow | Towing =>
          Step_Tow (I);
+      when To_Fitting | Fitting_Out =>
+         Step_Fitting (I);
    end case;
 end Step_Member;

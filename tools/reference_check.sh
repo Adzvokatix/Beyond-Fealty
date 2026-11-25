@@ -61,6 +61,13 @@
 # All eight recorded again on 2026-11-14 for generator 14 (a fifth of the
 # mountains' boulders, three in ten more on open land): each run's scene is set
 # as it was, to the line; how each ends moved.
+# All eight recorded again on 2026-11-16 for generator 15 (a boulder goes into
+# the ground: nothing hollow under it, a skirt round its foot): each run's
+# scene is set as it was, to the line; how each ends moved, both ways (living
+# at the end of the eight: 32 before, 29 after).
+# And again the same night for generator 16 (a tree's trunk goes down through
+# a boulder to the ground, the rock giving way round it): each scene set as it
+# was; one log did not move at all, seven ended otherwise.
 # A change that is not about the colony's behaviour must leave all eight passing.
 #   tools/reference_check.sh      (about ninety seconds; exits 1 on any difference)
 cd "$(dirname "$0")/.." || exit 1
@@ -82,5 +89,5 @@ same reference_run_camp_zones.txt "and with the paths laid as they were marked i
 same reference_run_stage5c.txt "with the band's labour off is stage 5c's" --no-beds --pace 1 --no-cook-hold --no-curing --no-path-holes --deer-scatter --no-labour
 same reference_run_stage5b.txt "and without the demand chain is stage 5b's" --no-beds --pace 1 --no-cook-hold --no-curing --no-path-holes --deer-scatter --no-labour --no-demand
 same reference_run_stage5a.txt "and without skills either is stage 5a's" --no-beds --pace 1 --no-cook-hold --no-curing --no-path-holes --deer-scatter --no-labour --no-demand --no-skills
-same reference_run_stage6.txt "with housing marked along a path west, and a porter for a hunter, is stage 6's" --path 1176 1076 1140 1076 --housing 1141 1077 1167 1087 --housing 1141 1075 1175 1065 --porters 1 --hunters 1 --stockpile 1180 1077 1190 1082
+same reference_run_stage6.txt "with housing marked along a path west, and a porter for a hunter, is stage 6's" --path 1176 1076 1140 1076 --housing 1141 1077 1167 1087 --housing 1141 1075 1175 1065 --porters 1 --hunters 1 --stockpile 1180 1077 1190 1082 --no-top-cut
 exit $FAIL

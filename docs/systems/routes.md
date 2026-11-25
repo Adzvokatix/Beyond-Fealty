@@ -26,6 +26,52 @@ in.
   code keeps for every loaded stack (`Castle.World_Blocks`), a stack at a
   time when a route first needs it and again whenever the stack's ground has
   changed (`Ground_Version`: built, dug, placed on, dropped).
+* **Ground people keep off** (`Set_Kept`, since 2026-11-19: a hovel drawn
+  turned, on the ground it is drawn on but does not stand on). A cell whose
+  middle lies in one of the list's four-cornered pieces of ground, and in
+  neither of its two boxes, is walked at `Kept_Slow` (a tenth) of what its
+  ground gives: applied in `Build_Cell`, the one place a floor's speed is
+  made, so a stack read whole and a stack mended agree. A way round is
+  taken wherever there is one; whoever has business there still gets there;
+  the pieces of ground are what they were (nothing is shut, so nobody can be
+  shut in). `Set_Kept` forgets the stacks the old list and the new lie in;
+  a route planned before goes on as planned. The list is the colony's to
+  give (`Castle.Colony.Set_Keep_Off`) and is not saved.
+* **A building walked where it is drawn** (`Set_Drawn`, since 2026-11-20: the
+  storehouse of a stockyard laid out along a path at 45 degrees, whose own
+  blocks stand square to the grid and are drawn turned; `habitation.md`).
+  For each of the list, in `Build_Cell`: a cell whose square overlaps one of
+  its walls as drawn (a four-cornered piece each, the doorways left out) has
+  no floor; any other cell that overlaps the box its blocks stand in has one
+  floor, at its pad's row, at the best pace, whatever stands there.
+  **That box is the one place where the map is not read from the blocks**:
+  the ground under it has to be level at that row (the stockyard's is), and
+  what is dug or built in it is not walked by (the pointer keeps the cursor
+  off it). Within its walls as drawn but off the box the map is read from
+  the blocks as ever. A wall at 45 degrees does not leak: every cell its
+  piece touches is shut, not those whose middles it covers (`path_check`:
+  both doorways shut, no way in from thirty-six sides). Whoever stands in a
+  cell when it shuts walks off it. `Set_Drawn` forgets the stacks the old
+  list and the new lie in; the colony then zeroes every route's stamps, as
+  a load leaves them, so each is looked over step by step at its next
+  check. The list is the colony's to give (`Walk_Drawn`: each tick, and at
+  the end of a load) and is not saved.
+  **A turned hovel since 2026-11-20** (`Castle.Colony.Set_Hovel_Walk`;
+  `Handoff_2026_11_20_walked_hovels_and_yard_pieces.md`) is on the list
+  too, with three differences. Its walls **slow, they do not shut**
+  (`Drawn_House.Slow`): the cells they touch keep their floors at
+  `Wall_Speed`, and a step onto or off one is reckoned at `Wall_Pace`, a
+  hundredth (in `Step_Time`, and in `Line` when a way is straightened, or a
+  way planned round a hovel is straightened through its wall). Shut, the
+  ground made round a hovel on a hillside held pockets a serf could drop
+  into and not climb out of (5 to 84 spots in `colony_check`'s streets by
+  how thick the wall was taken). Its **doorway** is held open: a cell whose
+  middle lies in a building's `Door` piece is neither shut nor slowed (a
+  metre-wide doorway at 45 degrees: `path_check` puts it at 50 places on the
+  cells). Only cells **wholly** in its box are made level (`Whole`), at
+  turf's pace (`Speed`). Every building's walls are asked before any box.
+  A pace multiplied into a floor's own would not have done: a step's pace
+  is the mean of its two floors', and a twentieth at the least.
 * **A roof is not walked on** (`Ground_Speed`: shingle and, since stage 6a,
   thatch, are floors nobody stands on). So `Surface_Z` under a roof
   answers with the floor inside the house, and a route's end is chosen by
@@ -84,6 +130,25 @@ in.
   cells, then over those lines. A route is a line of points with the time
   each is reached, and a serf walks it at that pace (slower uphill, wading,
   on sand), scaled by its own speed.
+* **At the height of the place stepped into** (2026-11-23;
+  `Castle.Colony.Set_Step_At_Edge`, `--no-step-at-edge`; the colony's
+  `Walk`, `castle-colony-walk.adb`). A point is put wherever the height
+  changes: the first eighth of a metre inside the next cell (`Line`).
+  Between two points a walker kept the height of the one it had left, so
+  for that eighth it walked in the step it was climbing, and whoever
+  stopped there stood in it: one stops as soon as its work is within reach,
+  the same few centimetres past the same edge every time. In eighteen days
+  of the game as it is played, 517 serf-seconds standing still with a block
+  of the ground in one's own block column at one's feet (2,540 with the
+  other rules of 2026-11-23, a stockpile's places made level among them,
+  each a step from the next), nearly all at the stockpile, eating or
+  looking for work. Now a walker has the
+  next point's height from where it enters that point's cell: 3 such
+  serf-seconds. `colony_run --builder-stats` ("in the ground") and
+  `--feet-stats` measure it; `--watch MEMBER S0 S1` says one member's feet,
+  the ground under them and the map's floors there second by second. Held
+  off in the reference runs, `stress.sh`, `look_cost.sh` and
+  `colony_check`'s `Reset`.
 * **Edits.** A route keeps the ground versions of the stacks it crosses.
   Twice a second each walker looks whether any changed; if the rest of its
   route can no longer be walked step by step, or the route fell short of

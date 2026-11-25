@@ -39,6 +39,7 @@ with Castle.Serfs;
 with Castle.Animals;
 with Castle.Deer;
 with Castle.Poses;
+with Castle.Buildings;
 with Castle.Colony;
 with Castle.Scenario;
 with Castle.Actions;
@@ -60,6 +61,7 @@ with Castle.Geology;
 with Castle.Marks;
 with Castle.Zone_Marks;
 with Castle.Bodies;
+with Castle.Bodies.Voxels;
 
 --  Castle Game: world, window, camera and streaming view.
 --
@@ -119,6 +121,8 @@ procedure Castle_Game is
    MSAA      : Natural := 4;
    Start_Day : Float := 20.0;                --  day of the 60-day year at the start
    Start_Hour : Float := 15.0;
+   Clock_Add  : Float := 0.0;      --  --clock-add H: a loaded save's clock moved on H hours, the colony left as saved
+                                   --  (for a still of sleepers by daylight; what the time keys do: nothing measured)
    Time_Scale : Long_Float := 1.0 / 60.0;    --  game hours per real second: a game minute a second
    Game_Clock : Castle.Climate.Game_Hours := 0.0;
    Climate   : Castle.Climate.State;
@@ -198,11 +202,13 @@ procedure Castle_Game is
    Deer_Walk_N : Natural := 0;
    Deer_Walks  : array (1 .. 8, 1 .. 5) of Float := [others => [others => 0.0]];
    Follow_Deer : Boolean := False;
+   Deer_Stats  : Boolean := False;     --  --deer-stats: at the end, how far apart the deer's hips and withers were drawn
    Record_Dir  : Unbounded_String;
    Record_N    : Natural := 0;
    Recorded    : Natural := 0;
    Force_Winter : Boolean := False;
    Show_Routes : Boolean := False;   --  F6, --paths: the serfs' routes over the ground
+   Store_Note_Seen : Natural := 0;   --  (the storehouse note last said)
    Show_Map    : Boolean := False;   --  F7, --navmap: the walking map round the camera
    Show_Wells  : Boolean := False;   --  F8, --wellmap: the aquifer heat map round the camera
 
@@ -216,6 +222,8 @@ procedure Castle_Game is
    --  start, then take off when they make their bed, and then draped over them when they sleep"; an
    --  experiment: --no-cloth is the cloaks as they were)
    Cloth_On : Boolean := True;
+   Cloak_Fit : Boolean := True;        --  a sleeper's cloak lies over all it is dressed in (Dressed; --no-cloak-fit:
+                                       --  over the ten capsules a worn one is kept off, as it was)
    type Cloak_Is is (Not_Yet, Worn, Off, Over);   --  on its back; lying where it was put down; over its sleeper
    Cloak_Cloth : array (1 .. Castle.Colony.Max_Members) of Castle.Cloth.Cloth_Id := [others => 0];
    Cloak_State : array (1 .. Castle.Colony.Max_Members) of Cloak_Is := [others => Not_Yet];
@@ -236,7 +244,7 @@ procedure Castle_Game is
    Under        : Castle.Pick.Thing;
    Notes_Told   : Natural := 0;       --  the interface's notes put in the log so far
 
-   type Script_Kind is (Move, Rel, To_Member, To_Deer, To_Ground, Click, RClick, Wheel, Esc);
+   type Script_Kind is (Move, Rel, To_Member, To_Deer, To_Ground, Click, RClick, Wheel, Esc, Tool, Eye_On, Turn_Held);
    type Script_Event is record
       Frame : Natural := 0;
       Kind  : Script_Kind := Move;
@@ -541,11 +549,58 @@ procedure Castle_Game is
 
    --  A serf for every member, dressed for their job and the season, told
    --  each frame where the member is and what they are doing.
+   --  Buildings drawn turned (Castle.Render.Set_Turns; --turn-houses): each house's turn, for what is
+   --  drawn from its place.  What is the house's own (its door's leaf, its trim, its bed) and whoever
+   --  is within its walls is drawn through it; filled by Show_Turns, a frame behind at the most.
+   type House_Turn is record
+      Radians : Float := 0.0;                      --  (0: it is drawn as it stands)
+      Pivot   : Vec3 := (0.0, 0.0, 0.0);
+      People  : Boolean := False;                  --  whoever is within its walls as they stand is drawn through it
+                                                   --  (not a storehouse's that is walked where it is drawn)
+   end record;
+   House_Turns : array (1 .. Castle.Colony.Max_Houses) of House_Turn;
+   --  (Part: how much of its turn, 1 all of it: Turned_Part)
+   procedure Through_Turn (K : Natural; P : in out Vec3; Yaw : in out Float; Part : Float := 1.0) is
+   begin
+      if K in House_Turns'Range and then House_Turns (K).Radians /= 0.0 then
+         declare
+            T : House_Turn renames House_Turns (K);
+            C : constant Float := Cos (T.Radians * Part);
+            S : constant Float := Sin (T.Radians * Part);
+            D : constant Vec3 := P - T.Pivot;
+         begin
+            P := (T.Pivot.X + C * D.X - S * D.Y, T.Pivot.Y + S * D.X + C * D.Y, P.Z);
+            Yaw := Yaw + T.Radians * Part;
+         end;
+      end if;
+   end Through_Turn;
+   --  A prop of house K's own, on the ground at P, through its turn.
+   procedure Put_In_House (K : Natural; L : Castle.Figures.Look_Id; P : Vec3; Yaw : Float) is
+      Q : Vec3 := P;
+      A : Float := Yaw;
+   begin
+      Through_Turn (K, Q, A);
+      Castle.Props.Put (L, Q, A);
+   end Put_In_House;
+
+   --  The house each member is drawn through the turn of (0: none), for the pointer (Drawn_Person).
+   Turned_In : array (1 .. Castle.Colony.Max_Members) of Natural := [others => 0];
+   --  How much of that turn each is drawn through.  All of it within its walls, and about them as
+   --  far as its builder works; **a storehouse's builder, further off, less and less** (Ease_M: none
+   --  of it that much further), so that coming to its work and going from it it is nowhere drawn
+   --  to jump: the storehouse is turned about its middle, and at the edge of where its builder works
+   --  the whole turn is some six metres.  A storehouse has its own yard round it, wider than that;
+   --  a hovel's builder is drawn as before, all or nothing (its neighbours stand nearer than that).
+   Turned_Part : array (1 .. Castle.Colony.Max_Members) of Float := [others => 1.0];
+   Ease_M : constant := 6.0;
    procedure Show_Members is
       use Castle.Colony;
       Winter : constant Boolean := Force_Winter
         or else Castle.Climate."=" (Castle.Climate.Season_Of (Castle.Climate.Day_Of_Year (Game_Clock)),
                                     Castle.Climate.Winter);
+      --  (a look of voxel parts takes some milliseconds to make: at most one is made again a frame,
+      --  the rest next frame, so that the whole band dressed for winter at once is no hitch)
+      Restyled : Natural := 0;
    begin
       for I in 1 .. Members loop
          declare
@@ -559,7 +614,10 @@ procedure Castle_Game is
                Job_Shown (I) := J;
                Winter_Shown (I) := Winter;
                Cloak_Off_Shown (I) := Off;
-            elsif Job_Shown (I) /= J or else Winter_Shown (I) /= Winter or else Cloak_Off_Shown (I) /= Off then
+            elsif (Job_Shown (I) /= J or else Winter_Shown (I) /= Winter or else Cloak_Off_Shown (I) /= Off)
+              and then (Restyled = 0 or else not Castle.Bodies.Voxels.Voxel_People)
+            then
+               Restyled := Restyled + 1;
                Castle.Serfs.Restyle (Serf_Of (I), O);
                Job_Shown (I) := J;
                Winter_Shown (I) := Winter;
@@ -571,6 +629,39 @@ procedure Castle_Game is
                                    Log => Carrying (I) in Wood | Straw | Carcass | Salt | Ladder
                                           or else (Cart.Towed and then Cart.By = I));   --  (its hands on the shafts)
                Castle.Serfs.Perch (Serf_Of (I), (if Aloft (I) then Shown_At (I).Z - Where (I).Z else 0.0));
+               --  (within the walls of a house drawn turned: drawn through its turn)
+               --  (and its builder at work about it, within a few steps of its walls)
+               declare
+                  K    : Natural := Castle.Colony.House_On (Where (I).X, Where (I).Y);
+                  Part : Float := 1.0;
+               begin
+                  if K = 0 and then Castle.Colony.Site_Of (I) in 1 .. Castle.Colony.House_Count then
+                     declare
+                        V : constant Castle.Colony.House_View := Castle.Colony.House_At (Castle.Colony.Site_Of (I));
+                        C : constant Vec3 := (V.Corner (1) + V.Corner (3)) * 0.5;
+                        R : constant Float :=
+                          0.5 * Sqrt ((V.Corner (3).X - V.Corner (1).X) ** 2 + (V.Corner (3).Y - V.Corner (1).Y) ** 2);
+                        D : constant Float := Sqrt ((Where (I).X - C.X) ** 2 + (Where (I).Y - C.Y) ** 2);
+                     begin
+                        if D <= R + 3.0 then
+                           K := Castle.Colony.Site_Of (I);
+                        elsif V.Yard_Turned and then D < R + 3.0 + Ease_M then
+                           K := Castle.Colony.Site_Of (I);
+                           Part := 1.0 - (D - (R + 3.0)) / Ease_M;
+                           Part := Part * Part * (3.0 - 2.0 * Part);          --  (eased at both ends)
+                        end if;
+                     end;
+                  end if;
+                  if K in House_Turns'Range and then House_Turns (K).Radians /= 0.0 and then House_Turns (K).People then
+                     Castle.Serfs.Turn_About (Serf_Of (I), House_Turns (K).Pivot, House_Turns (K).Radians * Part);
+                     Turned_In (I) := K;
+                     Turned_Part (I) := Part;
+                  else
+                     Castle.Serfs.Turn_About (Serf_Of (I), (0.0, 0.0, 0.0), 0.0);
+                     Turned_In (I) := 0;
+                     Turned_Part (I) := 1.0;
+                  end if;
+               end;
                --  (asleep across the way to the fire, its face is to the fire)
                Castle.Serfs.Lie_Facing (Serf_Of (I), Doing (I) = Sleeping and then Sleeping_Place (I).By_Fire,
                                         Castle.Colony.Camp);
@@ -624,14 +715,14 @@ procedure Castle_Game is
    --  side Gap apart, each row Rise above the one under it with one fewer
    --  in it, four rows at most.
    procedure Prop_Stack (L : Castle.Figures.Look_Id; Centre : Vec3; Turn : Float; N, Across : Positive;
-                         Gap, Rise : Float) is
+                         Gap, Rise : Float; Rows : Positive := 4; Straight : Boolean := False) is
       Side_V : constant Vec3 := (-Sin (Turn), Cos (Turn), 0.0);
       Left   : Natural := N;
       Row    : Natural := 0;
    begin
-      while Left > 0 and then Row < 4 loop
+      while Left > 0 and then Row < Rows loop
          declare
-            In_Row : constant Positive := Integer'Max (1, Across - Row);
+            In_Row : constant Positive := (if Straight then Across else Integer'Max (1, Across - Row));
             Here   : constant Natural := Natural'Min (Left, In_Row);
          begin
             for J in 0 .. Here - 1 loop
@@ -645,17 +736,18 @@ procedure Castle_Game is
       end loop;
    end Prop_Stack;
 
-   procedure Log_Stack (Centre : Vec3; Turn : Float; N, Across : Positive) is
+   procedure Log_Stack (Centre : Vec3; Turn : Float; N, Across : Positive; Rows : Positive := 4;
+                        Straight : Boolean := False) is
    begin
-      Prop_Stack (Castle.Props.Log, Centre, Turn, N, Across, 0.21, 0.19);
+      Prop_Stack (Castle.Props.Log, Centre, Turn, N, Across, 0.21, 0.19, Rows, Straight);
    end Log_Stack;
 
    --  N small things on a cell: a grid of Per_Side x Per_Side, Gap apart,
    --  in layers Rise apart (Rise 0: one layer).
    procedure Prop_Grid (L : Castle.Figures.Look_Id; Centre : Vec3; N, Per_Side : Positive; Gap, Rise : Float;
-                        Turn : Float := 0.0) is
+                        Turn : Float := 0.0; Most_Layers : Positive := 3) is
       K : Natural := 0;
-      Layers : constant Positive := (if Rise > 0.0 then 3 else 1);
+      Layers : constant Positive := (if Rise > 0.0 then Most_Layers else 1);
       Ct : constant Float := Cos (Turn);
       St : constant Float := Sin (Turn);
    begin
@@ -843,6 +935,9 @@ procedure Castle_Game is
    --  What lies in the stockpiles, each place's lying the way its lot
    --  does: baskets (one to a gatherer's load, four at most), logs and
    --  sheaves stacked, stones, clods of earth and joints heaped, hides laid flat.
+   --  On the storehouse's floor the baskets stand in tiers, four to a tier
+   --  (a place's own worth each: Castle.Colony.Floor_Stack of them), and a
+   --  barrel's place may have a second barrel on the first, which is then shut.
    procedure Show_Stockpiles is
       use Castle.Colony;
       Spot : constant array (1 .. 4) of Vec3 :=
@@ -853,23 +948,74 @@ procedure Castle_Game is
             C  : constant Cell_View := Cell_At (K);
             Ct : constant Float := Cos (C.Turn);
             St : constant Float := Sin (C.Turn);
+            Covered : constant Boolean := C.Fit = Cover;     --  (piled higher under a covering)
+            --  a shelf's: its way into the room from its wall, and along it
+            Off  : constant Float := Sqrt ((C.Centre.X - C.Wall.X) ** 2 + (C.Centre.Y - C.Wall.Y) ** 2);
+            Into : constant Vec3 :=
+              (if Off > 0.01 then ((C.Centre.X - C.Wall.X) / Off, (C.Centre.Y - C.Wall.Y) / Off, 0.0)
+               else (1.0, 0.0, 0.0));
+            Shelf_Turn : constant Float := Arctan (Into.Y, Into.X) - Ada.Numerics.Pi / 2.0;
          begin
-            if C.Count > 0 and then C.Kind in Berries | Vegetables | Apples | Grain then
-               for J in 1 .. Natural'Min (4, (C.Count + Carry_Limit (C.Kind) - 1) / Carry_Limit (C.Kind)) loop
-                  Castle.Props.Put (Castle.Props.Basket_Of (case C.Kind is
-                                                               when Vegetables => Castle.Props.Vegetable_Heap,
-                                                               when Apples => Castle.Props.Apple_Heap,
-                                                               when Grain => Castle.Props.Grain_Heap,
-                                                               when others => Castle.Props.Berry_Heap),
-                                    C.Centre + (Spot (J).X * Ct - Spot (J).Y * St, Spot (J).X * St + Spot (J).Y * Ct, 0.0),
-                                    0.4 * Float (J + K));
+            if C.Fit in Meat_Barrel | Water_Barrel then
+               if C.Made then
+                  Castle.Props.Put (Castle.Props.Barrel (Water => C.Fit = Water_Barrel and then C.Count > 0
+                                                                  and then not C.Second),
+                                    C.Centre, C.Turn + 0.3 * Float (K mod 5));
+                  if C.Second then            --  (open and full of water only once the lower one's worth is in)
+                     Castle.Props.Put (Castle.Props.Barrel (Water => C.Fit = Water_Barrel and then C.Count > Barrel_Pails),
+                                       C.Centre + (0.0, 0.0, Castle.Props.Barrel_Tall),
+                                       C.Turn + 0.3 * Float (K mod 5) + 0.9);
+                  end if;
+               end if;
+            elsif C.Fit = Shelf then
+               if C.Made then
+                  Castle.Props.Put (Castle.Props.Shelf, (C.Wall.X, C.Wall.Y, C.Centre.Z), Shelf_Turn);
+                  for J in 1 .. Natural'Min (Shelf_Hides, (if C.Kind = Hide then C.Count else 0)) loop
+                     declare
+                        Board : constant Positive := (J - 1) / 2 + 1;
+                        Along : constant Float := (if J mod 2 = 1 then -0.24 else 0.24);
+                     begin
+                        Castle.Props.Put (Castle.Props.Hide,
+                                          (C.Wall.X, C.Wall.Y, C.Centre.Z) + Into * 0.2
+                                          + (-Into.Y * Along, Into.X * Along, Castle.Props.Shelf_Boards (Board)),
+                                          Shelf_Turn);
+                     end;
+                  end loop;
+               end if;
+            elsif C.Fit = Lean then
+               if C.Count > 0 and then C.Kind = Ladder then      --  leaned against the storehouse's wall
+                  Castle.Props.Put_Ladder (C.Centre, (C.Wall.X, C.Wall.Y, C.Centre.Z + 2.0));
+               end if;
+            elsif C.Count > 0 and then C.Kind in Berries | Vegetables | Apples | Grain then
+               --  (a tier to a place's own worth of it: the first as it always was, four baskets at the most)
+               for Tier in 0 .. (C.Count - 1) / Cell_Limit (C.Kind) loop
+                  declare
+                     In_Tier : constant Natural := Natural'Min (Cell_Limit (C.Kind), C.Count - Tier * Cell_Limit (C.Kind));
+                  begin
+                     for J in 1 .. Natural'Min (4, (In_Tier + Carry_Limit (C.Kind) - 1) / Carry_Limit (C.Kind)) loop
+                        Castle.Props.Put (Castle.Props.Basket_Of (case C.Kind is
+                                                                     when Vegetables => Castle.Props.Vegetable_Heap,
+                                                                     when Apples => Castle.Props.Apple_Heap,
+                                                                     when Grain => Castle.Props.Grain_Heap,
+                                                                     when others => Castle.Props.Berry_Heap),
+                                          C.Centre + (Spot (J).X * Ct - Spot (J).Y * St, Spot (J).X * St + Spot (J).Y * Ct,
+                                                      Float (Tier) * Castle.Props.Basket_Tall),
+                                          0.4 * Float (J + K) + 0.7 * Float (Tier));
+                     end loop;
+                  end;
                end loop;
             elsif C.Count > 0 and then C.Kind = Wood then
-               Log_Stack (C.Centre, C.Turn, C.Count, 4);
+               if Covered then
+                  Log_Stack (C.Centre, C.Turn, C.Count, 4, Rows => 8, Straight => True);
+               else
+                  Log_Stack (C.Centre, C.Turn, C.Count, 4);
+               end if;
             elsif C.Count > 0 and then C.Kind = Straw then
-               Prop_Stack (Castle.Props.Sheaf, C.Centre, C.Turn, (C.Count + 1) / 2, 3, 0.27, 0.23);
+               Prop_Stack (Castle.Props.Sheaf, C.Centre, C.Turn, (C.Count + 1) / 2, 3, 0.27, 0.23,
+                           Rows => (if Covered then 7 else 4), Straight => Covered);
             elsif C.Count > 0 and then C.Kind = Stone then
-               Prop_Grid (Castle.Props.Stone, C.Centre, (C.Count + 1) / 2, 3, 0.27, 0.15, C.Turn);
+               Prop_Grid (Castle.Props.Stone, C.Centre, (C.Count + 1) / 2, 3, 0.27, 0.15, C.Turn,
+                          Most_Layers => (if Covered then 7 else 3));
             elsif C.Count > 0 and then C.Kind = Earth then
                Prop_Grid (Castle.Props.Clod, C.Centre, (C.Count + 3) / 4, 3, 0.27, 0.2, C.Turn);
             elsif C.Count > 0 and then C.Kind = Meat then
@@ -917,10 +1063,27 @@ procedure Castle_Game is
          declare
             L : constant Ladder_View := Ladder_At (H);
          begin
-            if L.Standing then
-               Castle.Props.Put_Ladder (L.Foot, L.Top);
+            if L.Standing then              --  (at a house drawn turned: through its turn)
+               declare
+                  Foot : Vec3 := L.Foot;
+                  Top  : Vec3 := L.Top;
+                  Yaw  : Float := 0.0;
+               begin
+                  Through_Turn (H, Foot, Yaw);
+                  Through_Turn (H, Top, Yaw);
+                  Castle.Props.Put_Ladder (Foot, Top);
+               end;
             end if;
          end;
+      end loop;
+      --  water in two buckets, one in each hand
+      for I in 1 .. Members loop
+         if Serf_Of (I) > 0 and then Carrying (I) = Water then
+            for Sd in Castle.Bodies.Side loop
+               Castle.Props.Put (Castle.Props.Bucket, Castle.Serfs.Hand_At (Serf_Of (I), Sd) - (0.0, 0.0, 0.27),
+                                 Castle.Serfs.Heading (Serf_Of (I)));
+            end loop;
+         end if;
       end loop;
       --  and on shoulders (stone goes in the porter's sack)
       for I in 1 .. Members loop
@@ -937,28 +1100,366 @@ procedure Castle_Game is
    --  The lord's cart: its body and four wheels round the bed that stands
    --  in the world, and the sacks of salt left in it (one to forty pounds,
    --  six at the most, the last ones on top).
+   --  Its wheels turn as it is pulled (John, 2026-11-17: "Add cart wheel
+   --  animations"): by as far as it has gone along its shafts since the
+   --  frame before, over a wheel's radius.  Drawn only.  --no-wheel-roll:
+   --  they slide, as they did.
+   Wheels_Roll : Boolean := True;
+   Cart_Roll   : Float := 0.0;
+   Cart_Was    : Vec3 := (0.0, 0.0, 0.0);
+   Cart_Seen   : Boolean := False;
+
    procedure Show_Cart is
       C : constant Castle.Colony.Cart_View := Castle.Colony.Cart;
    begin
       if C.Here then
-         Castle.Props.Put_Cart (C.At_P, C.Turn, (C.Salt + 39) / 40, Towed => C.Towed);
+         if Cart_Seen and then Wheels_Roll then
+            declare
+               D    : constant Vec3 := C.At_P - Cart_Was;
+               Gone : constant Float := D.X * Cos (C.Turn) + D.Y * Sin (C.Turn);
+            begin
+               if abs Gone < 2.0 then                    --  (further in a frame: it was set down somewhere else)
+                  Cart_Roll := Float'Remainder (Cart_Roll + Gone / Castle.Props.Wheel_Hub_M, 2.0 * Ada.Numerics.Pi);
+               end if;
+            end;
+         end if;
+         Cart_Was := C.At_P;
+         Cart_Seen := True;
+         Castle.Props.Put_Cart (C.At_P, C.Turn, (C.Salt + 39) / 40, Towed => C.Towed, Roll => Cart_Roll);
+      else
+         Cart_Seen := False;
       end if;
    end Show_Cart;
+
+   --  Doors (John, 2026-11-17: "Add doors and animations to buildings"): a
+   --  leaf of planks in each doorway of a house whose walls stand (two in a
+   --  storehouse's two-metre doorways), swung into the house while anyone
+   --  is within Door_Near_M of the doorway, shut behind them.  Drawn only:
+   --  the doorway is open to walk through as it was, and to the pointer.
+   --  Where the wall it hangs in is cut away for the eye, it is not drawn.
+   --  --no-doors: none.
+   Doors_On     : Boolean := True;
+   Doors_Held   : Boolean := False;       --  (--doors-open)
+   Trims_On     : Boolean := True;        --  (--no-window-trim: off)
+   Gate_Open    : array (1 .. Castle.Colony.Max_Houses, 1 .. 2) of Float := [others => [others => 0.0]];
+   Door_Near_M  : constant := 1.3;
+   Door_Swing_S : constant := 0.45;        --  drawn seconds to open, or to shut
+   Door_Open    : array (1 .. Castle.Colony.Max_Houses, 1 .. 2) of Float := [others => [others => 0.0]];
+
+   --  Buildings drawn turned (John, 2026-11-19: "can't we just \"detatch\" the entire building and
+   --  rotate it?").  A hovel the colony has turned to its path (House_View.Turn) is drawn turned about
+   --  the middle of its doorway, and what is in it with it (House_Turns).  --turn-houses: every hovel,
+   --  45 degrees, for looking.
+   Turn_Houses : Boolean := False;
+   Turns_Key   : Natural := Natural'Last;
+   procedure Show_Turns is
+      use Castle.Colony;
+      use type Castle.Buildings.Building_Kind;
+      T : Castle.Render.Turn_List (1 .. Castle.Render.Max_Turns);
+      N : Natural := 0;
+      Key : Natural := 0;
+   begin
+      House_Turns := [others => <>];
+      for K in 1 .. House_Count loop
+         declare
+            V : constant House_View := House_At (K);
+         begin
+            if V.Yard_Turned and then N < T'Last then
+               --  (a storehouse on a stockyard along its path: its own blocks, eaves and all, about the
+               --  point the colony keeps; its floor of plank)
+               declare
+                  X0, Y0 : Float := Float'Last;
+                  X1, Y1 : Float := Float'First;
+               begin
+                  for C of V.Corner loop
+                     X0 := Float'Min (X0, C.X);  X1 := Float'Max (X1, C.X);
+                     Y0 := Float'Min (Y0, C.Y);  Y1 := Float'Max (Y1, C.Y);
+                  end loop;
+                  N := N + 1;
+                  T (N) := (X0 => X0 - 0.25, Y0 => Y0 - 0.25, X1 => X1 + 0.25, Y1 => Y1 + 0.25, Z0 => V.Corner (1).Z,
+                            Pivot => V.Pivot, Radians => V.Turn, Margin => 0.25, Floor => Castle.Blocks.Plank);
+                  House_Turns (K) := (Radians => T (N).Radians, Pivot => T (N).Pivot, People => V.People_Turned);
+                  Key := Key + K * 7 + V.Placed + (if V.Turn > 0.0 then 100_000 else 200_000);
+               end;
+            elsif V.Kind = Castle.Buildings.Hovel and then N < T'Last and then Doorway_Count (K) > 0
+              and then (V.Turn /= 0.0 or else Turn_Houses)
+            then
+               declare
+                  D  : constant Doorway_View := Doorway_At (K, 1);
+                  X0, Y0 : Float := Float'Last;
+                  X1, Y1 : Float := Float'First;
+               begin
+                  for C of V.Corner loop
+                     X0 := Float'Min (X0, C.X);  X1 := Float'Max (X1, C.X);
+                     Y0 := Float'Min (Y0, C.Y);  Y1 := Float'Max (Y1, C.Y);
+                  end loop;
+                  N := N + 1;
+                  T (N) := (X0 => X0 - 0.5, Y0 => Y0 - 0.5, X1 => X1 + 0.5, Y1 => Y1 + 0.5, Z0 => V.Corner (1).Z,
+                            Pivot => D.Foot + D.Along * (D.Width / 2.0),
+                            Radians => (if V.Turn /= 0.0 then V.Turn else Ada.Numerics.Pi / 4.0),
+                            Margin => 0.5, Floor => Castle.Blocks.Footpath);
+                  House_Turns (K) := (Radians => T (N).Radians, Pivot => T (N).Pivot,
+                                      People => V.People_Turned or else (Turn_Houses and then V.Turn = 0.0));
+                  Key := Key + K * 7 + V.Placed + (if V.Turn > 0.0 then 100_000 elsif V.Turn < 0.0 then 200_000 else 0);
+               end;
+            end if;
+         end;
+      end loop;
+      if Key /= Turns_Key then
+         Turns_Key := Key;
+         Castle.Render.Set_Turns (T (1 .. N));
+      end if;
+   end Show_Turns;
+
+   procedure Show_Doors is
+      use Castle.Colony;
+   begin
+      for K in 1 .. House_Count loop
+         if Doors_On and then House_At (K).Phase in Roofing | Trimming | Yard | Standing then
+            for N in 1 .. Natural'Min (2, Doorway_Count (K)) loop
+               declare
+                  D    : constant Doorway_View := Doorway_At (K, N);
+                  Mid  : constant Vec3 := D.Foot + D.Along * (D.Width / 2.0);
+                  --  (who is near it: where it is drawn, of a house walked where it is drawn)
+                  function Seen_Mid return Vec3 is
+                     Q : Vec3 := Mid;
+                     A : Float := 0.0;
+                  begin
+                     if K in House_Turns'Range and then not House_Turns (K).People then
+                        Through_Turn (K, Q, A);
+                     end if;
+                     return Q;
+                  end Seen_Mid;
+                  Near_P : constant Vec3 := Seen_Mid;
+                  Near : constant Boolean :=
+                    (for some I in 1 .. Members =>
+                       not Dead (I) and then abs (Where (I).Z - Near_P.Z) < 1.5
+                       and then (Where (I).X - Near_P.X) ** 2 + (Where (I).Y - Near_P.Y) ** 2 < Door_Near_M ** 2);
+                  Open : Float renames Door_Open (K, N);
+                  Two  : constant Boolean := D.Width > 1.25;
+                  --  a leaf hung at Hinge, lying along Shut when it is shut
+                  procedure Leaf (Hinge, Shut : Vec3; Swing : Float) is
+                     Dir : constant Vec3 := Shut * Cos (Swing) + D.Inward * Sin (Swing);
+                  begin
+                     --  (its straps outside: the look whose ledges are on the side that is inward here)
+                     Put_In_House
+                       (K, Castle.Props.Door_Leaf (Mirrored => Shut.X * D.Inward.Y - Shut.Y * D.Inward.X < 0.0),
+                        Hinge, Arctan (Dir.Y, Dir.X));
+                  end Leaf;
+               begin
+                  Open := Float'Max (0.0, Float'Min (1.0, Open + (if Near or else Doors_Held then 1.0 else -1.0) * Step_Seconds / Door_Swing_S));
+                  if Castle.Cutaway.Wall_Cover_At (Mid.X, Mid.Y, Mid.Z + 1.0) >= 0.5 then
+                     declare
+                        --  (eased; a little past square, back toward the wall inside)
+                        A : constant Float := (Open * Open * (3.0 - 2.0 * Open)) * 1.75;
+                     begin
+                        Leaf (D.Foot, D.Along, A);
+                        if Two then
+                           Leaf (D.Foot + D.Along * D.Width, D.Along * (-1.0), A);
+                        end if;
+                     end;
+                  end if;
+               end;
+            end loop;
+         end if;
+         --  The trim round its windows (John, 2026-11-19: "Thin trim around the tops and side(s)"): a
+         --  strip of plank up each side of the opening and across its top, on the wall's outer face.
+         --  On every house's windows, whenever it was begun.  --no-window-trim: none.
+         if Trims_On and then House_At (K).Phase in Roofing | Trimming | Yard | Standing then
+            for N in 1 .. Window_Count (K) loop
+               declare
+                  D   : constant Doorway_View := Window_At (K, N);
+                  Mid : constant Vec3 := D.Foot + D.Along * (D.Width / 2.0);
+                  --  (the look's -Y is outward: hung from whichever corner makes it so)
+                  Flip : constant Boolean := D.Along.X * D.Inward.Y - D.Along.Y * D.Inward.X < 0.0;
+                  Dir  : constant Vec3 := (if Flip then D.Along * (-1.0) else D.Along);
+               begin
+                  if Castle.Cutaway.Wall_Cover_At (Mid.X, Mid.Y, Mid.Z + 0.1) >= 0.5 then
+                     Put_In_House (K, Castle.Props.Window_Trim (Tall => D.Height > 0.6),
+                                   (if Flip then D.Foot + D.Along * D.Width else D.Foot), Arctan (Dir.Y, Dir.X));
+                     --  and on the wall's inner face (John, 2026-11-19: "Trim width yes inside the house
+                     --  too"): the same strips hung from the opening's other corner, turned about
+                     Put_In_House (K, Castle.Props.Window_Trim (Tall => D.Height > 0.6),
+                                   (if Flip then D.Foot else D.Foot + D.Along * D.Width), Arctan (-Dir.Y, -Dir.X));
+                  end if;
+               end;
+            end loop;
+         end if;
+         --  The leaves of a stockyard's gateways (John, 2026-11-19: "yeah add the leafs on the gateways"):
+         --  hung from the storehouse's corner and from the gateway's post once that is raised, swung
+         --  into the yard while anyone is near or the cart is; a gateway under 1.9 m has one leaf (a gap
+         --  beside it), under 0.95 m none.  Drawn only.
+         if Doors_On then
+            for N in 1 .. Gateway_Count (K) loop
+               declare
+                  D    : constant Doorway_View := Gateway_At (K, N);
+                  Mid  : constant Vec3 := D.Foot + D.Along * (D.Width / 2.0);
+                  Crt  : constant Cart_View := Cart;
+                  Near : constant Boolean :=
+                    (for some I in 1 .. Members =>
+                       not Dead (I) and then abs (Where (I).Z - Mid.Z) < 1.5
+                       and then (Where (I).X - Mid.X) ** 2 + (Where (I).Y - Mid.Y) ** 2 < Door_Near_M ** 2)
+                    or else (Crt.Here and then (Crt.At_P.X - Mid.X) ** 2 + (Crt.At_P.Y - Mid.Y) ** 2 < 2.5 ** 2);
+                  Open : Float renames Gate_Open (K, N);
+                  procedure Leaf (Hinge, Shut : Vec3; Swing : Float) is
+                     Dir : constant Vec3 := Shut * Cos (Swing) + D.Inward * Sin (Swing);
+                  begin
+                     Castle.Props.Put
+                       (Castle.Props.Gate_Leaf (Mirrored => Shut.X * D.Inward.Y - Shut.Y * D.Inward.X < 0.0),
+                        Hinge, Arctan (Dir.Y, Dir.X));
+                  end Leaf;
+               begin
+                  Open := Float'Max (0.0, Float'Min (1.0, Open + (if Near or else Doors_Held then 1.0 else -1.0)
+                                                             * Step_Seconds / Door_Swing_S));
+                  if D.Hung and then D.Width >= 0.95 then
+                     declare
+                        A : constant Float := (Open * Open * (3.0 - 2.0 * Open)) * 1.75;
+                     begin
+                        if N = 1 or else D.Width >= 1.9 then
+                           --  (from its post: the left gateway's is at its far end from the storehouse)
+                           Leaf ((if N = 1 then D.Foot else D.Foot + D.Along * D.Width),
+                                 (if N = 1 then D.Along else D.Along * (-1.0)), A);
+                        end if;
+                        if N = 2 or else D.Width >= 1.9 then
+                           --  (from the storehouse's corner)
+                           Leaf ((if N = 1 then D.Foot + D.Along * D.Width else D.Foot),
+                                 (if N = 1 then D.Along * (-1.0) else D.Along), A);
+                        end if;
+                     end;
+                  end if;
+               end;
+            end loop;
+         end if;
+      end loop;
+   end Show_Doors;
 
    --  F6: where each member is going.
    --  The beds of straw: each one's by the fire, where it made it, and the
    --  one in each house that has one; a bed lies back from where its
    --  sleeper's feet are, away from the fire (in a house, toward its door).
+   --  What of a stockyard is drawn as its design has it (Castle.Colony.Yard_Pieces; their blocks
+   --  are not drawn: Castle.Blocks.Piece): a turned one's rails and gateway planks, each a piece from
+   --  end to end; its coverings' roofs as far as smoothed, each of metre tiles in the plane through
+   --  its front and back edges, with a rounded edge all round (none where it meets the next).
+   procedure Show_Yard_Pieces is
+      use Castle.Colony;
+      function Unit (V : Vec3) return Vec3 is
+         L : constant Float := Sqrt (V.X * V.X + V.Y * V.Y + V.Z * V.Z);
+      begin
+         return (if L > 1.0E-6 then V * (1.0 / L) else (1.0, 0.0, 0.0));
+      end Unit;
+      function Cross (A, B : Vec3) return Vec3 is
+        ((A.Y * B.Z - A.Z * B.Y, A.Z * B.X - A.X * B.Z, A.X * B.Y - A.Y * B.X));
+      function Flat (A, B : Vec3) return Float is (Sqrt ((B.X - A.X) ** 2 + (B.Y - A.Y) ** 2));
+      --  (a piece a metre long laid from A to B: its X stretched to the length, its Z up as near as can be)
+      procedure Lay (L : Castle.Figures.Look_Id; A, B : Vec3; Up : Vec3 := (0.0, 0.0, 1.0)) is
+         X : constant Vec3 := B - A;
+         Y : constant Vec3 := Unit (Cross (Up, X));
+         Z : constant Vec3 := Unit (Cross (X, Y));
+      begin
+         Castle.Props.Put_In (L, (X => X, Y => Y, Z => Z, O => A));
+      end Lay;
+   begin
+      for K in 1 .. House_Count loop
+         if Castle.Buildings."=" (House_At (K).Kind, Castle.Buildings.Storehouse) then
+            declare
+               P : constant Yard_Pieces_View := Yard_Pieces (K);
+            begin
+               for R in 1 .. P.N_Rails loop
+                  Lay (Castle.Props.Rail (P.Rails (R).Plank), P.Rails (R).A, P.Rails (R).B);
+               end loop;
+               for C in 1 .. P.N_Roofs loop
+                  declare
+                     Rf : Yard_Roof renames P.Roofs (C);
+                     Along : constant Vec3 := Rf.Front_R - Rf.Front_L;
+                     Part  : constant Float := Float (Rf.Smoothed) / Float (Integer'Max (1, Rf.Rows));
+                     Whole : constant Boolean := Rf.Smoothed >= Rf.Rows;
+                     Down  : constant Vec3 := (Rf.Back_L - Rf.Front_L) * Part;   --  (as far back as it is smoothed)
+                     N_U   : constant Positive := Integer'Max (1, Integer (Float'Rounding (Flat (Rf.Front_L, Rf.Front_R))));
+                     N_V   : constant Positive :=
+                       Integer'Max (1, Integer (Float'Rounding (Flat (Rf.Front_L, Rf.Front_L + Down))));
+                     --  (the roof's frame kept right-handed with its top's normal up: from the front's left
+                     --  corner along it, or from its right corner back along it; a frame turned inside out
+                     --  draws a box's insides)
+                     Flip  : constant Boolean := Cross (Along, Down).Z < 0.0;
+                     O0    : constant Vec3 := (if Flip then Rf.Front_R else Rf.Front_L);
+                     Xu    : constant Vec3 := Along * ((if Flip then -1.0 else 1.0) / Float (N_U));
+                     Yv    : constant Vec3 := Down * (1.0 / Float (N_V));
+                     Zn    : constant Vec3 := Unit (Cross (Xu, Yv));
+                     Sink  : constant Vec3 := Zn * (-0.11);     --  (the rounded edge's middle, a little under the top)
+                     --  (which pieces of the rounded edge are the narrower, Castle.Props.Cover_Thatch: every
+                     --  second metre along the row of coverings, counted from the first one's corner, so that
+                     --  where two coverings meet the edge goes on as one; along the back the other way round,
+                     --  and down an end from the other of its front corner's: at no corner do two of one width
+                     --  end in each other)
+                     Row_O : constant Vec3 := P.Roofs (1).Front_L;
+                     Row_D : constant Vec3 := Unit (P.Roofs (1).Front_R - P.Roofs (1).Front_L);
+                     function Along_Row (Q : Vec3) return Float is
+                       ((Q.X - Row_O.X) * Row_D.X + (Q.Y - Row_O.Y) * Row_D.Y);
+                     function Inner_Of (I : Natural) return Boolean is
+                       (Castle.Props.Cover_Thatch
+                        and then Integer (Float'Floor
+                                            (Float'Min (Along_Row (O0 + Xu * Float (I)), Along_Row (O0 + Xu * Float (I + 1)))
+                                             + 0.5)) mod 2 /= 0);
+                  begin
+                     --  (the look is 3 m along and 2.1 m down: stretched to the roof, its normal a unit; its
+                     --  X from the far end of the front back along it, so that X, the normal and the slope
+                     --  are a right-handed frame)
+                     Castle.Props.Put_In
+                       (Castle.Props.Thatch_Tile,
+                        (X => Xu * (-Float (N_U) / 3.0), Y => Zn,
+                         Z => Down * (1.0 / 2.1), O => O0 + Xu * Float (N_U)));
+                     for I in 0 .. N_U - 1 loop
+                        Lay (Castle.Props.Thatch_Roll (Inner_Of (I)),
+                             O0 + Xu * Float (I) + Sink, O0 + Xu * Float (I + 1) + Sink, Zn);
+                        if Whole then
+                           Lay (Castle.Props.Thatch_Roll (Castle.Props.Cover_Thatch and then not Inner_Of (I)),
+                                O0 + Down + Xu * Float (I) + Sink, O0 + Down + Xu * Float (I + 1) + Sink, Zn);
+                        end if;
+                     end loop;
+                     --  (its ends: none where it meets the next covering, the two one roof)
+                     for Side in 1 .. 2 loop
+                        declare
+                           E : constant Vec3 := (if Side = 1 then Rf.Front_L else Rf.Front_R);
+                           Meets : Boolean := False;
+                        begin
+                           for D in 1 .. P.N_Roofs loop
+                              if D /= C and then (Flat (E, P.Roofs (D).Front_L) < 0.1 or else Flat (E, P.Roofs (D).Front_R) < 0.1)
+                              then
+                                 Meets := True;
+                              end if;
+                           end loop;
+                           if not Meets then
+                              declare
+                                 --  (the front edge's piece at this corner)
+                                 At_Corner : constant Boolean := Inner_Of ((if Flat (E, O0) < 0.1 then 0 else N_U - 1));
+                              begin
+                                 for J in 0 .. N_V - 1 loop
+                                    Lay (Castle.Props.Thatch_Roll
+                                           (Castle.Props.Cover_Thatch and then (At_Corner xor (J mod 2 = 0))),
+                                         E + Yv * Float (J) + Sink, E + Yv * Float (J + 1) + Sink, Zn);
+                                 end loop;
+                              end;
+                           end if;
+                        end;
+                     end loop;
+                  end;
+               end loop;
+            end;
+         end if;
+      end loop;
+   end Show_Yard_Pieces;
+
    procedure Show_Beds is
       use Castle.Colony;
-      procedure Bed (Feet, Toward : Vec3) is
+      procedure Bed (Feet, Toward : Vec3; House : Natural := 0) is
          Dx : constant Float := Toward.X - Feet.X;
          Dy : constant Float := Toward.Y - Feet.Y;
          L  : constant Float := Sqrt (Dx * Dx + Dy * Dy);
       begin
          if L > 0.01 then
-            Castle.Props.Put (Castle.Props.Pallet, (Feet.X - 1.05 * Dx / L, Feet.Y - 1.05 * Dy / L, Feet.Z),
-                              Arctan (Dy, Dx));
+            Put_In_House (House, Castle.Props.Pallet, (Feet.X - 1.05 * Dx / L, Feet.Y - 1.05 * Dy / L, Feet.Z),
+                          Arctan (Dy, Dx));
          end if;
       end Bed;
    begin
@@ -975,8 +1476,11 @@ procedure Castle_Game is
          declare
             V : constant House_View := House_At (H);
          begin
-            if V.Has_Bed then
-               Bed (V.Bed, V.Bed + (V.Corner (4) - V.Corner (1)));
+            if V.Has_Bed and then V.Walk then
+               --  (one walked where it is drawn: its bed is in it as drawn, and is said so)
+               Bed (V.Bed, V.Bed + (V.Drawn (4) - V.Drawn (1)));
+            elsif V.Has_Bed then
+               Bed (V.Bed, V.Bed + (V.Corner (4) - V.Corner (1)), House => H);
             end if;
          end;
       end loop;
@@ -1017,6 +1521,61 @@ procedure Castle_Game is
 
    Cloth_Near_M : constant := 40.0;   --  a cloak further than this from the eye hangs straight, not stepped
 
+   --  A sleeper as it is dressed, for the cloak laid over it (Cloak_Fit; John, 2026-11-22: "the
+   --  cloak clipping through their clothing when they sleep needs a bit of a fix ... just add their
+   --  clothes to the "clip box", so the cloak wraps around it when they sleep").  The cloth is kept
+   --  out of capsules, and the ten it was kept out of are a body's middle lines with radii of their
+   --  own: none lies along the ribs at all, and a sleeve, a skirt or a shoulder is wider than the
+   --  one it hangs on.  This is every box of the sleeper's own rig, as its bones lie: a capsule
+   --  along the box's longest side, as thick as the box from corner to corner across it; two or
+   --  three side by side for one much wider than it is deep (the chest, the hips, a skirt).  So
+   --  whatever a look is dressed in is in it, and a box added to a look is in it with nothing
+   --  more to do.  What is thinner than a pixel and a half is left out (a braid, a scabbard).
+   function Dressed (S : Positive; F : Castle.Poses.Frames) return Castle.Cloth.Capsules is
+      R   : constant Castle.Bodies.Rig := Castle.Serfs.Rig_Of (S);
+      Px  : constant Float := Castle.Bodies.Px;
+      Got : Castle.Cloth.Capsules (1 .. 3 * Castle.Bodies.Max_Boxes);
+      N   : Natural := 0;
+   begin
+      for I in 1 .. R.Count loop
+         declare
+            B   : Castle.Bodies.Box renames R.Boxes (I);
+            Fb  : constant Castle.Poses.Frame := F (B.On);
+            Ax  : constant array (1 .. 3) of Vec3 := [Normalize (Fb.X), Normalize (Fb.Y), Normalize (Fb.Z)];
+            Sz  : constant array (1 .. 3) of Float := [B.Size.X * Px, B.Size.Y * Px, B.Size.Z * Px];
+            Mid : constant Vec3 :=
+              Castle.Poses.Place (Fb, (B.Lo.X + 0.5 * B.Size.X, B.Lo.Y + 0.5 * B.Size.Y, B.Lo.Z + 0.5 * B.Size.Z));
+            Long : constant Positive :=
+              (if Sz (1) >= Sz (2) and then Sz (1) >= Sz (3) then 1 elsif Sz (2) >= Sz (3) then 2 else 3);
+            A1  : constant Positive := (if Long = 1 then 2 else 1);          --  the two sides across it,
+            A2  : constant Positive := (if Long = 3 then 2 else 3);
+            Wide : constant Positive := (if Sz (A1) >= Sz (A2) then A1 else A2);   --  the wider and the thinner
+            Thin : constant Positive := (if Wide = A1 then A2 else A1);
+         begin
+            if Sz (Thin) >= 1.5 * Px then
+               declare
+                  Lobes : constant Positive :=
+                    (if Sz (Wide) > 1.6 * Sz (Thin)
+                     then Integer'Min (3, Integer (Float'Ceiling (Sz (Wide) / Sz (Thin)))) else 1);
+                  Rad   : constant Float := Sqrt ((0.5 * Sz (Wide) / Float (Lobes)) ** 2 + (0.5 * Sz (Thin)) ** 2);
+                  Half  : constant Float := Float'Max (0.0, 0.5 * Sz (Long) - Rad);
+               begin
+                  for K in 1 .. Lobes loop
+                     declare
+                        C : constant Vec3 :=
+                          Mid + Ax (Wide) * (Sz (Wide) * ((Float (K) - 0.5) / Float (Lobes) - 0.5));
+                     begin
+                        N := N + 1;
+                        Got (N) := (A => C - Ax (Long) * Half, B => C + Ax (Long) * Half, R => Rad);
+                     end;
+                  end loop;
+               end;
+            end if;
+         end;
+      end loop;
+      return Got (1 .. N);
+   end Dressed;
+
    procedure Show_Cloths is
       use Castle.Colony;
       use Castle.Cloth;
@@ -1027,7 +1586,7 @@ procedure Castle_Game is
          if Serf_Of (I) > 0 and then not Dead (I) then
             declare
                S  : constant Positive := Serf_Of (I);
-               F  : constant Castle.Poses.Frames := Castle.Serfs.Frames_Of (S);
+               F  : constant Castle.Poses.Frames := Castle.Serfs.Frames_Home (S);   --  (where it stands on the map: drawn through the turn)
                K  : constant Float := Castle.Serfs.Height_Of (S) / 1.7;
                P  : constant Bed_View := Sleeping_Place (I);
                --  (down, and still: laid over a body still lying down it falls beside it, and over one still
@@ -1103,7 +1662,9 @@ procedure Castle_Game is
                   Dn   : constant Vec3 := (Dx / Dl, Dy / Dl, 0.0);
                   Ac   : constant Vec3 := (-Dn.Y, Dn.X, 0.0);
                begin
-                  Lay (C, Mid + (0.0, 0.0, 0.45 * K) - Dn * (0.4 * K) - Ac * (0.4 * K), Ac * (0.8 * K), Dn * (1.0 * K));
+                  --  (over all it is dressed in: a little higher, clear of the shoulder that is uppermost)
+                  Lay (C, Mid + (0.0, 0.0, (if Cloak_Fit then 0.6 else 0.45) * K) - Dn * (0.4 * K) - Ac * (0.4 * K),
+                       Ac * (0.8 * K), Dn * (1.0 * K));
                end Over_Sleeper;
             begin
                for T in 1 .. Nu loop
@@ -1170,9 +1731,24 @@ procedure Castle_Game is
                   if not (Want = Worn and then Sqrt ((Top (3).X - Eye.X) ** 2 + (Top (3).Y - Eye.Y) ** 2) > Cloth_Near_M)
                   then
                      Step (C, Dt, (if Want = Off then Capsules'(1 .. 0 => (A => (0.0, 0.0, 0.0), B => (0.0, 0.0, 0.0), R => 0.0))
+                                   elsif Want = Over and then Cloak_Fit then Dressed (S, F)
                                    else Caps), Ground, Stick => Want = Over);
                   end if;
-                  Castle.Props.Put_Cloth (C, Castle.Serfs.Cloak_Of (S));
+                  declare        --  (lying or worn in a house drawn turned: drawn through its turn)
+                     Mid : constant Vec3 := Point (C, 3, 4);
+                     Kh  : constant Natural := Castle.Colony.House_On (Mid.X, Mid.Y);
+                  begin
+                     if Cloak_State (I) = Worn and then I in Turned_In'Range and then Turned_In (I) > 0 then
+                        --  (on a back: through as much of the turn as its wearer is, wherever about the house
+                        --  that is; by where the cloth lay, a builder's outside the walls was drawn apart from it)
+                        Castle.Props.Put_Cloth (C, Castle.Serfs.Cloak_Of (S), House_Turns (Turned_In (I)).Pivot,
+                                                House_Turns (Turned_In (I)).Radians * Turned_Part (I));
+                     elsif Kh in House_Turns'Range and then House_Turns (Kh).Radians /= 0.0 and then House_Turns (Kh).People then
+                        Castle.Props.Put_Cloth (C, Castle.Serfs.Cloak_Of (S), House_Turns (Kh).Pivot, House_Turns (Kh).Radians);
+                     else
+                        Castle.Props.Put_Cloth (C, Castle.Serfs.Cloak_Of (S));
+                     end if;
+                  end;
                end if;
             end;
          end if;
@@ -1194,10 +1770,16 @@ procedure Castle_Game is
          declare
             V : constant House_View := House_At (K);
          begin
-            if V.Phase in Roofing | Trimming | Standing then
+            --  (a storehouse's yard is laid after its roof: it is roofed then too.  Left out, a
+            --  storehouse whose yard was never finished never opened: John, 2026-11-17,
+            --  "Storehouse needs the transparency the same as the habitations")
+            if V.Phase in Roofing | Trimming | Yard | Standing then
                N := N + 1;
-               Roofs (N) := Castle.Cutaway.Of_Corners (K, V.Corner (1), V.Corner (2), V.Corner (3), V.Corner (4),
-                                                       V.Top_Z);
+               --  (one drawn turned: by its turn, as the game draws it)
+               Roofs (N) := Castle.Cutaway.Of_Corners
+                 (K, V.Corner (1), V.Corner (2), V.Corner (3), V.Corner (4), V.Top_Z,
+                  Pivot   => (if K in House_Turns'Range then House_Turns (K).Pivot else (0.0, 0.0, 0.0)),
+                  Radians => (if K in House_Turns'Range then House_Turns (K).Radians else 0.0));
             end if;
          end;
       end loop;
@@ -1274,6 +1856,9 @@ procedure Castle_Game is
       Lay  : constant Castle.Marks.Colour := (0.95, 0.85, 0.5, 0.55);
       Zone : constant Castle.Marks.Colour := (0.95, 0.85, 0.55, 0.6);
    begin
+      --  (why what is held is refused: said only while it is held over ground that refuses it, so
+      --  the last reason does not stay by the cursor once it is off the ground or over a panel)
+      Tools.Warn := Castle.Text.To_Line ("");
       if Tools.Mode = Castle.HUD.Edit or else not Cursor_Hit.Found or else Castle.UI.Wants_Mouse
         or else Castle.HUD.Menu_Open
       then
@@ -1282,18 +1867,68 @@ procedure Castle_Game is
       P := Ground_Point (Cursor_Hit) + (0.0, 0.0, 0.06);
       case Tools.Mode is
          when Castle.HUD.Stake =>
+            if Castle.Actions.Square_Stake and then not Castle.Colony.Has_Stake then
+               --  (the square the colony is founded on, held: its floor and the path round it)
+               declare
+                  Plan : constant Castle.Colony.Square_Plan :=
+                    Castle.Colony.Plan_Square (Ground_Point (Cursor_Hit), Tools.Way);
+                  C    : constant Castle.Marks.Colour := (if Plan.Ok then Lay else Castle.Zone_Marks.Refused_C);
+                  function At_Z (V : Vec3) return Vec3 is ((V.X, V.Y, Plan.Middle.Z));
+               begin
+                  if Plan.Ok then
+                     Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
+                     Tools.Warn := Castle.Text.To_Line ("");
+                  else
+                     Castle.Zone_Marks.Show_Lot (Plan.Corner, P.Z, Castle.Zone_Marks.Refused_C);
+                     Tools.Warn := Castle.Text.To_Line (Castle.Colony.Square_Refusal);
+                  end if;
+                  for K in 1 .. 4 loop
+                     Castle.Zone_Marks.Show_Path_Line (At_Z (Plan.Ring (K)), At_Z (Plan.Ring (K mod 4 + 1)), C);
+                  end loop;
+               end;
+            end if;
             Castle.Marks.Strip (P + (-0.4, 0.0, 0.0), P + (0.4, 0.0, 0.0), 0.1, Zone);
             Castle.Marks.Strip (P + (0.0, -0.4, 0.0), P + (0.0, 0.4, 0.0), 0.1, Zone);
          when Castle.HUD.Path =>
             if Tools.Path_Started then
-               Castle.Zone_Marks.Show_Path_Line (Tools.Path_From, Ground_Point (Cursor_Hit), Lay);
+               --  (the line as it will be laid: straight or at 45 degrees)
+               Castle.Zone_Marks.Show_Path_Line
+                 (Tools.Path_From, Castle.Actions.Path_Reach (Tools.Path_From, Ground_Point (Cursor_Hit)), Lay);
             else
+               P := Castle.Actions.Path_Begin (Ground_Point (Cursor_Hit)) + (0.0, 0.0, 0.06);
                Castle.Marks.Strip (P + (-0.5, 0.0, 0.0), P + (0.5, 0.0, 0.0), 0.1, Lay);
             end if;
          when Castle.HUD.Stockpile =>
             --  the lot as it would be taken: turned to its path, drawn out to
             --  it, filled as far as it would fill (or, refused, its outline)
-            if Tools.Zone_Started then
+            if Castle.Colony.Box_Place then                 --  (put down whole: the box held, and its path)
+               declare
+                  Plan : constant Castle.Colony.Box_Plan :=
+                    Castle.Colony.Plan_Box (Castle.Colony.Stockpile_Box, Ground_Point (Cursor_Hit), Tools.Way);
+               begin
+                  if Plan.Lot.Ok then
+                     Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
+                     Castle.Zone_Marks.Show_Path_Line (Plan.Where.From, Plan.Where.To, Lay);
+                     Tools.Warn := Castle.Text.To_Line ("");
+                  else
+                     Castle.Zone_Marks.Show_Lot (Plan.Where.Corner, P.Z, Castle.Zone_Marks.Refused_C);
+                     if Plan.Where.Ok then
+                        Castle.Zone_Marks.Show_Path_Line (Plan.Where.From, Plan.Where.To, Castle.Zone_Marks.Refused_C);
+                     end if;
+                     Tools.Warn := Castle.Text.To_Line (Castle.Colony.Box_Refusal);
+                  end if;
+               end;
+            elsif Castle.Colony.One_Stockpile then          --  (the square placed with one click)
+               declare
+                  Plan : constant Castle.Colony.Lot_Plan := Castle.Colony.Plan_Stockpile_At (P.X, P.Y);
+               begin
+                  if Plan.Ok then
+                     Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
+                  else
+                     Castle.Zone_Marks.Show_Lot (Plan.Corner, P.Z, Castle.Zone_Marks.Refused_C);
+                  end if;
+               end;
+            elsif Tools.Zone_Started then
                declare
                   Plan : constant Castle.Colony.Lot_Plan :=
                     Castle.Colony.Plan_Stockpile (Tools.Zone_From.X, Tools.Zone_From.Y, P.X, P.Y);
@@ -1310,10 +1945,88 @@ procedure Castle_Game is
             end if;
          when Castle.HUD.Housing =>
             --  the ground it would take, as a stockpile's is shown
-            if Tools.Zone_Started then
+            if Tools.Zone_Started and then Castle.Actions.Housing_Pull then
+               --  (pulled with its path: its line as the path tool shows one, and each row asked)
+               declare
+                  To_P : constant Vec3 := Ground_Point (Cursor_Hit);
+                  Line : constant Castle.Colony.Pull_View := Castle.Colony.Pull_Line (Tools.Zone_From, To_P);
+                  Any  : Boolean := False;
+                  Why  : Castle.Text.Line := Castle.Text.To_Line ("");
+               begin
+                  if Line.Ok then
+                     for Begun_Side in reverse Boolean loop
+                        if (if Begun_Side then Tools.Rows mod 3 /= 1 else Tools.Rows mod 3 /= 0) then
+                           declare
+                              Plan : constant Castle.Colony.Lot_Plan :=
+                                Castle.Colony.Plan_Housing_Pull (Line, Begun_Side, Count => False);
+                           begin
+                              if Plan.Ok then
+                                 Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
+                                 Any := True;
+                              else
+                                 Castle.Zone_Marks.Show_Lot (Plan.Corner, P.Z, Castle.Zone_Marks.Refused_C);
+                                 if Castle.Text.Str (Why) = "" then
+                                    Why := Castle.Text.To_Line (Castle.Colony.Pull_Refusal);
+                                 end if;
+                              end if;
+                           end;
+                        end if;
+                     end loop;
+                     Castle.Zone_Marks.Show_Path_Line
+                       (Line.From, Line.To, (if Any then Lay else Castle.Zone_Marks.Refused_C));
+                     if not Any then
+                        Tools.Warn := Why;
+                     end if;
+                  else
+                     Castle.Marks.Strip (P + (-0.5, 0.0, 0.0), P + (0.5, 0.0, 0.0), 0.1, Zone);
+                     Castle.Marks.Strip (P + (0.0, -0.5, 0.0), P + (0.0, 0.5, 0.0), 0.1, Zone);
+                  end if;
+               end;
+            elsif Tools.Zone_Started then
                declare
                   Plan : constant Castle.Colony.Lot_Plan :=
                     Castle.Colony.Plan_Housing (Tools.Zone_From.X, Tools.Zone_From.Y, P.X, P.Y, Count => False);
+               begin
+                  if Plan.Ok then
+                     Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
+                  else
+                     Castle.Zone_Marks.Show_Lot (Plan.Corner, P.Z, Castle.Zone_Marks.Refused_C);
+                  end if;
+               end;
+            else
+               Castle.Marks.Strip (P + (-0.5, 0.0, 0.0), P + (0.5, 0.0, 0.0), 0.1, Zone);
+               Castle.Marks.Strip (P + (0.0, -0.5, 0.0), P + (0.0, 0.5, 0.0), 0.1, Zone);
+            end if;
+         when Castle.HUD.Unzone =>
+            --  the box it would take housing out of
+            if Tools.Zone_Started then
+               Castle.Zone_Marks.Show_Lot
+                 ([(Tools.Zone_From.X, Tools.Zone_From.Y, P.Z), (P.X, Tools.Zone_From.Y, P.Z), (P.X, P.Y, P.Z),
+                   (Tools.Zone_From.X, P.Y, P.Z)], P.Z, Castle.Zone_Marks.Refused_C);
+            end if;
+         when Castle.HUD.Stockyard =>
+            --  the lot it would take: square to the grid, its side by the path drawn out to it
+            if Castle.Colony.Yard_Box then                  --  (put down whole: the box held, and its path)
+               declare
+                  Plan : constant Castle.Colony.Box_Plan :=
+                    Castle.Colony.Plan_Box (Castle.Colony.Stockyard_Box, Ground_Point (Cursor_Hit), Tools.Way);
+               begin
+                  if Plan.Lot.Ok then
+                     Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
+                     Castle.Zone_Marks.Show_Path_Line (Plan.Where.From, Plan.Where.To, Lay);
+                     Tools.Warn := Castle.Text.To_Line ("");
+                  else
+                     Castle.Zone_Marks.Show_Lot (Plan.Where.Corner, P.Z, Castle.Zone_Marks.Refused_C);
+                     if Plan.Where.Ok then
+                        Castle.Zone_Marks.Show_Path_Line (Plan.Where.From, Plan.Where.To, Castle.Zone_Marks.Refused_C);
+                     end if;
+                     Tools.Warn := Castle.Text.To_Line (Castle.Colony.Box_Refusal);
+                  end if;
+               end;
+            elsif Tools.Zone_Started then
+               declare
+                  Plan : constant Castle.Colony.Lot_Plan :=
+                    Castle.Colony.Plan_Stockyard (Tools.Zone_From.X, Tools.Zone_From.Y, P.X, P.Y);
                begin
                   if Plan.Ok then
                      Castle.Zone_Marks.Show_Plan (Castle.Zone_Marks.Planned);
@@ -1383,8 +2096,17 @@ procedure Castle_Game is
                           elsif C = "deer" then To_Deer elsif C = "ground" then To_Ground
                           elsif C = "click" then Click elsif C = "rclick" then RClick
                           elsif C = "wheel" then Wheel elsif C = "esc" then Esc
+                          elsif C = "tool" then Tool
+                          elsif C = "follow" then Eye_On
+                          elsif C = "turn" then Turn_Held
                           else raise Constraint_Error with "--pointer: no command " & C);
             end;
+            --  (tool NAME: the colony tool taken up, as its button takes it: stake, path, stockpile,
+            --  camp, housing, stockyard, unzone, edit; for a still of what a click would do)
+            if E.Kind = Tool then
+               Words (2) := To_Unbounded_String
+                 (Integer'Image (Castle.HUD.Tool_Mode'Pos (Castle.HUD.Tool_Mode'Value (To_String (Words (2))))));
+            end if;
             E.A := (if N >= 2 then Float'Value (To_String (Words (2))) else 0.0);
             E.B := (if N >= 3 then Float'Value (To_String (Words (3))) else 0.0);
             Script_N := Script_N + 1;
@@ -1489,6 +2211,10 @@ procedure Castle_Game is
             I := I + 6;
          elsif Arg (0) = "--follow-deer" then
             Follow_Deer := True; I := I + 1;
+         elsif Arg (0) = "--no-whole-back" then    --  a deer's two halves each over its own ground, as they were
+            Castle.Animals.Whole_Back := False; I := I + 1;
+         elsif Arg (0) = "--deer-stats" then       --  at the end: how long the deer's backs were drawn
+            Deer_Stats := True; I := I + 1;
          elsif Arg (0) = "--follow" then
             Follow := True; I := I + 1;
          elsif Arg (0) = "--winter" then
@@ -1557,6 +2283,10 @@ procedure Castle_Game is
             Time_Scale := Long_Float'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--time" then
             Start_Hour := Float'Value (Arg (1)); I := I + 2;
+         elsif Arg (0) = "--no-turn-floor" then
+            Castle.Render.Set_Turn_Floor (False); I := I + 1;
+         elsif Arg (0) = "--clock-add" then
+            Clock_Add := Float'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--msaa" then
             MSAA := Natural'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--novsync" then
@@ -1575,8 +2305,30 @@ procedure Castle_Game is
             Castle.Render.Haze_Rim_M := Float'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--no-far-mirror" then     --  (far water mirrors the sky alone, as it did)
             Castle.Render.Far_Reflections := False; I := I + 1;
+         elsif Arg (0) = "--no-full-thatch" then    --  (a dressed roof drawn thin, its edges straight, as it was)
+            Castle.Mesher.Full_Thatch := False; I := I + 1;
+         elsif Arg (0) = "--no-ragged-roof" then    --  (a dressed roof's top even, only its eaves and verges ragged)
+            Castle.Mesher.Ragged_Surface := False; I := I + 1;
+         elsif Arg (0) = "--no-wheel-roll" then     --  (the cart's wheels slide, as they did)
+            Wheels_Roll := False; I := I + 1;
+         elsif Arg (0) = "--no-doors" then          --  (no leaf drawn in a doorway, as before)
+            Doors_On := False; I := I + 1;
+         elsif Arg (0) = "--no-cover-thatch" then   --  (a covering's smoothed roof with texels of its own and its
+            Castle.Props.Cover_Thatch := False; I := I + 1;   --  rounded edge a metre at a time, as before)
+         elsif Arg (0) = "--turn-houses" then
+            Turn_Houses := True; I := I + 1;
+         elsif Arg (0) = "--no-dev-jobs" then       --  (a person's menu offers the opening jobs alone)
+            Castle.Actions.Dev_Jobs := False; I := I + 1;
+         elsif Arg (0) = "--no-window-trim" then    --  (no trim drawn round a window)
+            Trims_On := False; I := I + 1;
+         elsif Arg (0) = "--doors-open" then        --  (for stills: every door drawn open)
+            Doors_Held := True; I := I + 1;
+         elsif Arg (0) = "--wheel-turn" then        --  (for stills: the cart's wheels turned this far, radians)
+            Cart_Roll := Float'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--no-round-boulders" then --  (a boulder's edges and corners in steps, as they were)
             Castle.Mesher.Round_Boulders := False; I := I + 1;
+         elsif Arg (0) = "--no-boulder-feet" then   --  (a round boulder standing on the ground, as it did)
+            Castle.Mesher.Boulder_Feet := False; I := I + 1;
          elsif Arg (0) = "--no-low-horizon" then    --  (the sun and the moon cut off at eye level, as they were)
             Castle.Render.Low_Horizon := False; I := I + 1;
          elsif Arg (0) = "--no-floor" then          --  (holes in the land show the sky, as they did)
@@ -1623,6 +2375,20 @@ procedure Castle_Game is
             Sim_Ticks := Natural'Value (Arg (1)); I := I + 2;
          elsif Arg (0) = "--no-cloth" then      --  the cloaks as they were: boxes on the body, laid over a sleeper
             Cloth_On := False; I := I + 1;
+         elsif Arg (0) = "--no-form" then       --  the serfs as they were: no neck, nose, cap, shoulders or belt
+            Castle.Bodies.More_Form := False; I := I + 1;
+         elsif Arg (0) = "--no-reference-body" then   --  the serfs as they were before the bought skeleton's proportions
+            Castle.Bodies.Reference_Body := False; I := I + 1;
+         elsif Arg (0) = "--no-head-shape" then   --  the reference body's head as it was before his eight characters
+            Castle.Bodies.Head_Shape := False; I := I + 1;
+         elsif Arg (0) = "--no-rest-arms" then   --  the reference body's arms at rest as they were (no elbows out)
+            Castle.Serfs.Rest_Arms := False; I := I + 1;
+         elsif Arg (0) = "--no-voxel" then   --  the serfs drawn as boxes, as they were (not as voxel parts)
+            Castle.Bodies.Voxels.Voxel_People := False; I := I + 1;
+         elsif Arg (0) = "--no-cloak-fit" then  --  a sleeper's cloak kept off its body's middle lines alone, as it was
+            Cloak_Fit := False; I := I + 1;
+         elsif Arg (0) = "--no-chest-hands" then   --  eating, the hands where they were (the arms behind the back)
+            Castle.Serfs.Hands_Before_Chest := False; I := I + 1;
          elsif Arg (0) = "--full-summaries" then   --  each stack's ground summary kept whole, as it always was
             Castle.World_Blocks.Small_Summaries := False; I := I + 1;
          elsif Arg (0) = "--no-cutaway" then    --  no roof or wall cleared (the H key's third way, for a scripted run)
@@ -2888,7 +3654,7 @@ procedure Castle_Game is
          Put_Line ("load failed: " & To_String (Err));
          return;
       end if;
-      Game_Clock := Castle.Climate.Game_Hours (S.Clock);
+      Game_Clock := Castle.Climate.Game_Hours (S.Clock) + Long_Float (Clock_Add);
       Climate := S.Climate;
       --  the colony as it was (after the edits it made, which came back with them)
       if S.Colony /= null then
@@ -3012,7 +3778,12 @@ procedure Castle_Game is
       Ptr_Held := False;
       Ptr_Wheel := 0.0;
       Ptr_Esc := False;
-      if Castle.Colony.Has_Stake and then Colony_Ground_Ready then
+      --  (and, in a game no option founds a colony in or loads one into, from when the view has filled:
+      --  the founding itself can be pointed at and clicked)
+      if (Castle.Colony.Has_Stake and then Colony_Ground_Ready)
+        or else (not Castle.Colony.Has_Stake and then Fill_Done >= 0.0 and then not Scn.Stake
+                 and then Load_Path = Null_Unbounded_String)
+      then
          Script_Frame := Script_Frame + 1;
          while Script_At <= Script_N and then Script (Script_At).Frame <= Script_Frame loop
             declare
@@ -3028,6 +3799,14 @@ procedure Castle_Game is
                   when RClick    => Ptr_RClick := True;
                   when Wheel     => Ptr_Wheel := E.A;
                   when Esc       => Ptr_Esc := True;
+                  when Tool      =>
+                     Tools.Mode := Castle.HUD.Tool_Mode'Val (Integer (E.A));
+                     Tools.Zone_Started := False;
+                  when Eye_On    =>            --  (follow I: the eye follows member I, as its menu's "follow" has it; 0: nobody)
+                     Tools.Follow := Natural (E.A);
+                  when Turn_Held =>            --  (turn N: what is held to be put down turned to way N, 0 .. 7: east,
+                     Tools.Way := Natural (E.A) mod 8;   --  north-east, north ...; as the Z and X keys turn it)
+                     Tools.Rows := Natural (E.A) mod 3;  --  (and a housing pull's rows: this side, the other, both)
                end case;
             end;
             Script_At := Script_At + 1;
@@ -3085,11 +3864,29 @@ procedure Castle_Game is
          return Castle.Pick.Colony_Person (I);
       end if;
       declare
-         P : constant Vec3 := Castle.Serfs.Where (S);
+         P : Vec3 := Castle.Serfs.Where (S);
          H : constant Float := Castle.Colony.Genome_Of (I).Height;
+         Unused_Yaw : Float := 0.0;
       begin
+         --  (within a house drawn turned: where it is drawn; its heading is the turned one already)
+         if I in Turned_In'Range and then Turned_In (I) > 0 then
+            Through_Turn (Turned_In (I), P, Unused_Yaw, Turned_Part (I));
+         end if;
          case Castle.Colony.Doing (I) is
-            when Castle.Colony.Sleeping | Castle.Colony.Dead =>
+            when Castle.Colony.Sleeping =>
+               --  (as the colony lays it, its feet toward what it lies by: the way a body faced
+               --  when it last walked is nothing to go by in a save just loaded, where the pointer
+               --  found a sleeper only at its feet; in a house drawn turned, through its turn)
+               declare
+                  C : Castle.Pick.Capsule := Castle.Pick.Colony_Person (I);
+               begin
+                  if I in Turned_In'Range and then Turned_In (I) > 0 then
+                     Through_Turn (Turned_In (I), C.A, Unused_Yaw, Turned_Part (I));
+                     Through_Turn (Turned_In (I), C.B, Unused_Yaw, Turned_Part (I));
+                  end if;
+                  return C;
+               end;
+            when Castle.Colony.Dead =>
                return Castle.Pick.Lying (P, Castle.Serfs.Heading (S), H);
             when Castle.Colony.Eating_Seated =>
                return Castle.Pick.Standing (P, 0.75 * H);
@@ -3158,7 +3955,7 @@ procedure Castle_Game is
                declare
                   V : constant Castle.Colony.House_View := Castle.Colony.House_At (T.Index);
                begin
-                  Castle.Zone_Marks.Show_Lot (V.Corner, V.Corner (1).Z + 0.05, Castle.Zone_Marks.Pointed.Edge, 0.12);
+                  Castle.Zone_Marks.Show_Lot (V.Drawn, V.Corner (1).Z + 0.05, Castle.Zone_Marks.Pointed.Edge, 0.12);
                end;
             end if;
          when A_Cart =>
@@ -3242,6 +4039,7 @@ begin
    Last_Dry := Game_Clock;
    Castle.Render.Set_Water_Reach (View_M);
    Castle.Render.Init (W, Arena_Quads, Samples => MSAA);
+   Castle.Props.Set_Texel_Seed (W.Seed);     --  (a covering's roof is painted with the land's own texels of thatch)
    Castle.UI.Init;
    Castle.Render.Set_Flow_Debug (Flow_Debug);
    Castle.Render.Set_Water_Steps (Water_Steps);
@@ -3344,12 +4142,29 @@ begin
                Castle.HUD.Say (Tools, "Roofs and walls: open where you look and point");
          end case;
       end if;
+      --  the advisor's word, simulated (the storehouse asked for on the second
+      --  morning): said in a note when it changes
+      if Castle.Colony.Storehouse_Note_Key /= Store_Note_Seen then
+         Store_Note_Seen := Castle.Colony.Storehouse_Note_Key;
+         if Castle.Colony.Storehouse_Note /= "" then
+            Castle.HUD.Say (Tools, Castle.Colony.Storehouse_Note);
+         end if;
+      end if;
       if Castle.Input.Pressed (Castle.Input.Pause_Game) then
          if Tools.Speed = 0 then
             Tools.Speed := Last_Speed;
          else
             Tools.Speed := 0;
          end if;
+      end if;
+      --  (what is held to be put down, turned an eighth: Z to the left, X to the right)
+      if Castle.Input.Pressed (Castle.Input.Turn_Held_Left) then
+         Tools.Way := (Tools.Way + 1) mod 8;
+         Tools.Rows := (Tools.Rows + 1) mod 3;      --  (a housing pull's rows: this side, the other, both)
+      end if;
+      if Castle.Input.Pressed (Castle.Input.Turn_Held_Right) then
+         Tools.Way := (Tools.Way + 7) mod 8;
+         Tools.Rows := (Tools.Rows + 2) mod 3;
       end if;
       if Castle.Input.Pressed (Castle.Input.Speed_1) then Tools.Speed := 1; end if;
       if Castle.Input.Pressed (Castle.Input.Speed_2) then Tools.Speed := 2; end if;
@@ -3396,14 +4211,21 @@ begin
          --  them.  From above there is no limit of reach.
          Under := (if On_UI then (others => <>)
                    else Castle.Pick.Look (E, Ray, H, Slack => 12.0 * Ty / Float (Integer'Max (1, Integer (Fh))),
-                                          Keep => Under));
+                                          Keep => Under, Cast => Castle.World_Blocks.Cast'Access));
+         --  (a house drawn turned: the block the ray walked into is not what is seen there, and is
+         --  not the cursor's to show, dig or build on)
+         if Under.Turned then
+            Cursor_Hit := (others => <>);
+         end if;
          --  Where the pointer's ray landed, for the roofs it clears next frame
          --  (Follow_Roofs).  On the interface, or with a menu open, the last
          --  place stands: a roof does not close over what its menu is about.
          if not On_UI and then not Castle.HUD.Menu_Open then
             Point_Has := H.Found;
             if H.Found then
-               Point_To := E + Ray * (H.Dist + 0.3);
+               --  (on a house drawn turned, or where one stands and is not drawn: what is seen there)
+               Point_To := (if Under.Turned and then Under.Kind in Castle.Pick.A_House | Castle.Pick.A_Zone
+                            then Under.Point + Ray * 0.3 else E + Ray * (H.Dist + 0.3));
             end if;
          end if;
          Castle.HUD.Point (Under, Ptr_X, Ptr_Y, Ptr_Click, Ptr_RClick, Tools, World_Click);
@@ -3423,10 +4245,15 @@ begin
                if Tools.Mode /= Castle.HUD.Edit then
                   Castle.Render.Set_Outline ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), False);
                   if World_Click then
-                     Castle.HUD.Ground_Click (Ground_Point (H), Tools);
+                     --  (on a house drawn turned, or where one stands and is not drawn: where the ray
+                     --  meets what is seen)
+                     Castle.HUD.Ground_Click ((if Under.Turned then Under.Point else Ground_Point (H)), Tools);
                   end if;
-               elsif Under.Kind in Castle.Pick.A_Person | Castle.Pick.A_Deer or else Castle.HUD.Menu_Open then
+               elsif Under.Kind in Castle.Pick.A_Person | Castle.Pick.A_Deer or else Castle.HUD.Menu_Open
+                 or else Under.Turned
+               then
                   --  pointing at someone, or a menu up: no brush box, and a click digs nothing
+                  --  (nor on a house drawn turned: its blocks are not where they are drawn)
                   Castle.Render.Set_Outline ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), False);
                else
                   Castle.Render.Set_Outline
@@ -3708,6 +4535,9 @@ begin
          Show_Zones;
          Show_Stockpiles;
          Show_Cart;
+         Show_Turns;
+         Show_Doors;
+         Show_Yard_Pieces;
          Show_Beds;
          Show_Cloaks;
          if Castle.Colony.Has_Camp then
@@ -4105,6 +4935,16 @@ begin
       Swap_Buffers (Win);
    end loop;
 
+   if Deer_Stats then
+      declare
+         B : constant Castle.Animals.Back_Count := Castle.Animals.Backs;
+      begin
+         Put_Line ("deer:" & B.Frames'Image & " drawn (a deer a frame);" & B.Long'Image
+                   & " with the hips and the withers more than "
+                   & Castle.Text.Img (Float (Castle.Animals.Long_Back), 2)
+                   & " backs' lengths apart; the furthest " & Castle.Text.Img (B.Longest, 2));
+      end;
+   end if;
    Castle.Streaming.Stop;
    Castle.Platform.Close (Win);
 end Castle_Game;

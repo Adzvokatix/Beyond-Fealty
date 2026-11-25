@@ -97,9 +97,7 @@ begin
                   then
                      Write_Src (X, Y, Zr, (Mat => Footpath, State => 0));
                      Laid := Laid + 1;
-                     if Mat (X, Y, Zr + 1) in Tall_Grass | Wild_Grain | Wild_Vegetables then
-                        Write_Src (X, Y, Zr + 1, Air_Block);
-                     end if;
+                     Cut_Plants (X, Y, Zr);       --  (the whole of a plant: none left in the air)
                   end if;
                end;
             end if;

@@ -61,7 +61,7 @@ package Castle.Blocks with Pure is
    --  lies (and so does the top block of daub of a gable's step under it,
    --  whose top is brought up to the same slope): the mesher marks its faces and the renderer draws them sloped
    --  (Castle.Mesher, "A dressed roof").  Nothing else reads a block's
-   --  state yet.
+   --  state but Seen_Mat (below).
    Dressed     : constant := 128;   --  it is trimmed
    Falls_Mask  : constant := 3;     --  the way its top falls: 0 toward +x, 1 -x, 2 +y, 3 -y
    At_Eave     : constant := 4;     --  it is the lowest of its slope: its edge is cut blunt, half a block thick
@@ -70,6 +70,15 @@ package Castle.Blocks with Pure is
    Verge_Hi    : constant := 32;    --  slope along x, -x for one along y), or up it: that edge is drawn in a little
    Under       : constant := 64;    --  it is the lower of the two blocks of thatch there, where the roof hangs
                                     --  out past a gable: its underside is trimmed to the slope as the top is
+
+   --  A block of a stockyard laid as one of the pieces its design is drawn
+   --  as (2026-11-20; Castle.Colony.Yard_Pieces): a rail or a gateway's
+   --  plank of a stockyard along a path at 45 degrees, the roof of a
+   --  covering once smoothed.  Its state is Piece (log, plank or thatch,
+   --  never dressed), and what draws the land (Castle.Mesher, Castle.Lod)
+   --  leaves it out: the piece is drawn instead.  To everything else it is
+   --  the block it is: the feet, a ray, water, a save.
+   Piece       : constant := 1;
 
    type Brick is record
       Mat     : Material := Air;               --  the ore, or the rock itself
@@ -147,5 +156,9 @@ package Castle.Blocks with Pure is
       Fieldstone    => Castle.Colors.Field_Stone);
 
    function Base_Color (M : Material) return Castle.Colors.RGB is (Castle.Colors.Of_Hex (Base_Hex (M)));
+
+   --  What a block is drawn as: a piece's block (Piece) as air.
+   function Seen_Mat (B : Block) return Material is
+     (if Interfaces."=" (B.State, Piece) and then B.Mat in Log | Plank | Thatch then Air else B.Mat);
 
 end Castle.Blocks;

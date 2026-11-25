@@ -216,16 +216,17 @@ package body Castle.Zone_Marks is
             Z : constant Float := V.Corner (1).Z + Lift_Edge;
          begin
             if V.Phase /= Standing then
-               Show_Lot (V.Corner, Z, C, 0.1);
+               --  (where it is drawn: one turned to a path at 45 degrees, turned)
+               Show_Lot (V.Drawn, Z, C, 0.1);
                --  its door: a short line out from the front wall
                declare
                   --  the way in: from its front wall toward its back
-                  Dx : constant Float := V.Corner (4).X - V.Corner (1).X;
-                  Dy : constant Float := V.Corner (4).Y - V.Corner (1).Y;
+                  Dx : constant Float := V.Drawn (4).X - V.Drawn (1).X;
+                  Dy : constant Float := V.Drawn (4).Y - V.Drawn (1).Y;
                   L  : constant Float := Float'Max (0.01, Sqrt (Dx * Dx + Dy * Dy));
                begin
-                  Castle.Marks.Strip ((V.Door.X, V.Door.Y, Z),
-                                      (V.Door.X + 0.75 * Dx / L, V.Door.Y + 0.75 * Dy / L, Z),
+                  Castle.Marks.Strip ((V.Drawn_Door.X, V.Drawn_Door.Y, Z),
+                                      (V.Drawn_Door.X + 0.75 * Dx / L, V.Drawn_Door.Y + 0.75 * Dy / L, Z),
                                       1.0, (C.R, C.G, C.B, C.A * 0.5), True);
                end;
             end if;

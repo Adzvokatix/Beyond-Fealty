@@ -48,6 +48,37 @@ package Castle.Animals is
    --  Every animal into Castle.Figures for this frame (after
    --  Castle.Serfs.Submit, which begins the frame's figures).
 
+   Whole_Back : Boolean := True;
+   --  A deer's body is one piece.  Its hips and its withers each stand at
+   --  their height over the ground under them, and on steep ground those
+   --  two grounds are far apart: the hindquarters and the forequarters
+   --  were drawn that far apart too (John, 2026-11-22, with a picture of
+   --  one in two halves on a rock face: "deer can split in half when
+   --  running up steep terrain").  Now the back is pitched as the ground
+   --  under its two ends asks, no steeper than Back_Pitch_Tan, and the ends
+   --  stand that much nearer each other across the ground, a back's length
+   --  apart along the back (the length they are apart on level ground),
+   --  each over the ground there.  On ground steeper than a back is drawn
+   --  the higher end stands on its own ground and the lower is held up as
+   --  far as the back lets it hang: its legs reach down for their hooves
+   --  and fall short.  Whatever is left over a back's length is taken in
+   --  about the middle.  The hooves are put down under the joints as they
+   --  then are.  False (the game's --no-whole-back): as it was.  Drawing
+   --  only.
+   Back_Pitch_Tan : constant := 1.0;   --  the steepest a back is drawn: 45 degrees, as steep as a way up may be
+
+   --  How far apart the hips and the withers have been drawn, in backs'
+   --  lengths (1: as on level ground): counted over every deer animated
+   --  since Clear_Backs, for the game's --deer-stats and the checks.
+   Long_Back : constant := 1.1;
+   type Back_Count is record
+      Frames  : Natural := 0;     --  deer animated, a frame each
+      Long    : Natural := 0;     --  of them, drawn more than Long_Back lengths long
+      Longest : Float := 0.0;     --  the longest drawn
+   end record;
+   function Backs return Back_Count;
+   procedure Clear_Backs;
+
    --  for checks and the camera
    function Count return Natural;
    function Where (I : Positive) return Vec3;        --  the ground point under the body

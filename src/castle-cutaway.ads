@@ -46,7 +46,8 @@ package Castle.Cutaway is
    Taper_M    : constant := 1.25;   --  from its walls inward it thins to nothing over this far (metres)
    Fade_S     : constant := 0.25;   --  seconds of drawn time a roof takes to clear, or to come back
    Past_M     : constant := 1.5;    --  the line runs on past what the eye looks at this far
-   Eave_M     : constant := 0.3;    --  a roof hangs out past its walls (a block of eave, and a little)
+   Eave_M     : constant := 0.4;    --  a roof hangs out past its walls (a block of eave, and a ragged edge's reach;
+                                    --  0.3 until the thatch was drawn fuller, 2026-11-19)
    Wall_M     : constant := 0.27;   --  a wall is this thick from its outer side in (a block, and a little)
    Face_Lo    : constant := 0.05;   --  a wall begins to clear when its outward side faces the eye this squarely
    Face_Hi    : constant := 0.30;   --  (the cosine, level), and is clear from here: edge-on it stands whole
@@ -60,13 +61,26 @@ package Castle.Cutaway is
       Half_A : Float := 1.0;                  --  half its walls' length along Along,
       Half_B : Float := 1.0;                  --  and across
       Top_Z  : Float := 0.0;                  --  its ridge
+      Pivot  : Vec3 := (0.0, 0.0, 0.0);       --  a house drawn turned (Castle.Render.Set_Turns): about this
+      Turn_C : Float := 1.0;                  --  point, by the angle of this cosine and sine (1, 0: as it
+      Turn_S : Float := 0.0;                  --  stands)
    end record;
    type Roof_List is array (Positive range <>) of Roof;
 
    function Of_Corners (Id : Positive; Front_Left, Front_Right, Back_Right, Back_Left : Vec3;
-                        Top_Z : Float) return Roof;
+                        Top_Z : Float; Pivot : Vec3 := (0.0, 0.0, 0.0); Radians : Float := 0.0) return Roof;
    --  A house's, from its walls' outer corners on the ground (in order round)
-   --  and its ridge.
+   --  and its ridge, where it stands.  Pivot, Radians: it is drawn turned
+   --  that far about that point (the fourth step of the turned building,
+   --  2026-11-19).  Everything here is then reckoned where the house
+   --  stands, as the land's shader does (it clears by a block's place
+   --  before its turn): the eye, what it looks at and what the pointer is on
+   --  are each taken back through the house's turn first (Home), so the
+   --  roof clears when the eye's line crosses the house as drawn, and the
+   --  walls cleared are those that face the eye as drawn.
+   function Home (R : Roof; P : Vec3) return Vec3;
+   --  A point of the world as it is seen, taken back through R's turn: the
+   --  point of the house as it stands that is drawn there.
 
    function Crosses (From, To : Vec3; R : Roof) return Boolean;
    --  The line from From to To passes through R's house: under its roof's
@@ -116,5 +130,16 @@ package Castle.Cutaway is
    --  The least over every house shown, from where the eye was at the last
    --  Follow (Eye_Now).
    function Eye_Now return Vec3;
+
+   --  A roof's timbers (John, 2026-11-17: "add trusses, ridge beam, and
+   --  cross member support"; the tie beams, king posts, rafters and ridge
+   --  beam a house begun since 2026-11-19 has inside its walls) clear with
+   --  its roof, by their place: timber inside a cleared house's walls,
+   --  Timber_Up_M or more over its floor.  As the thatch does: a share by
+   --  the walls, nothing Taper_M in.  (The trusses in its gable ends are
+   --  of its walls, and clear with those.)
+   Timber_Up_M : constant := 1.9;    --  over a serf's head: nothing of timber stands that high on a floor
+   function Timber_Cover (C : Cleared; X, Y, Z : Float) return Float;
+   function Timber_Cover_At (X, Y, Z : Float) return Float;
 
 end Castle.Cutaway;

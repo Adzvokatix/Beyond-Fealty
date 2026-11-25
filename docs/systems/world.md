@@ -2,7 +2,7 @@
 
 - Packages: Castle.Terrain, Geology, Deposits, Hydrology, Flora, Chunks, Worldgen, Maps, Channels, Stacks
 - Check: none of its own (worldgen_preview's survey checksum; terrain_stats, flora_stats, probe, water_probe, fall_find measure it)
-- Saves: nothing is saved: the world is the seed and Generator_Version (14)
+- Saves: nothing is saved: the world is the seed and Generator_Version (16 since 2026-11-17)
 - Stage: phase A, and the palette and forests of 2026-11-08 (Handoff_2026_11_08_world_look.md); wild vegetables in
   stage 4; trees reshaped and tall grass in drifts, 2026-11-11 (Handoff_2026_11_11_models_pass.md)
 
@@ -110,8 +110,48 @@ The survey prints a content checksum that must not change with `--workers`.
   saves in memory is nothing to speak of (boulders were 0.8 % of the fine
   bricks; the map kept small is 990 MB for 992); in a view of that
   mountainside from above it is 2 % of the quads. It is for the eye.
-  Since 2026-11-16 a boulder is drawn round, its blocks as they were
-  (`rendering.md`, "Boulders drawn round").
+  Since 2026-11-16 a boulder is drawn round (`rendering.md`, "Boulders
+  drawn round").
+* **A boulder goes into the ground** (generator 15, 2026-11-16; John, the
+  boulders drawn round: "make the base of the boulders, so they don't look
+  like balls plopped everywhere, they need extend into the ground").
+  `Castle.Flora.Rock_Column`, column by column, each column by its own
+  ground (so on a slope it follows the slope): the round with its noise as
+  it was; then, on dry ground, everything under the round down into the
+  ground's top block, so nothing is hollow under a boulder (on a slope its
+  downhill side goes down to the ground, where it hung over it); and round
+  its foot a skirt 0.4 wider than the round (`Skirt_Spread`) in the ground's
+  top block and the first over it, and 0.2 in the next (`Skirt_Rise`, 2), on
+  a gentler noise of the column alone, so its edge has no loose blocks. Its
+  centre is where it was (at the ground's level or a block under it: half
+  of it was always buried), so what was missing was spread where the rock
+  meets the ground; the drawing alone could give it a quarter of a metre at
+  most (`rendering.md`, "Boulders drawn round", the foot), which did not
+  show from 60 m. The 16 boulders within 60 m of the reference stake: rock
+  blocks 6,071 -> 9,638, those over the ground 3,554 -> 5,733, the ground
+  they cover 1,006 block columns -> 2,336 (63 m2 -> 146). The boulders and
+  where they are are as they were (4,477; `Boulder_At` untouched);
+  `Rock_Reach` is 11 blocks (8). Making a stack costs what it did (1.45 ms
+  of a worker for 1.43, the whole map held). **All eight reference logs
+  were recorded again**: every run's scene is set as it was, to the line;
+  how each ends moved, both ways (living at the end of the eight: 32
+  before, 29 after). Saves from generator 14 are refused, as any change of
+  generator's.
+* **A tree goes down through a boulder to the ground** (generator 16,
+  2026-11-17; John: "see if we can do something about the trees being on
+  top of the rock, the trees should go through the rock to the ground").
+  697 of the map's 99,220 trees stand where a boulder lies (370 by the
+  round alone, before generator 15); their trunks stood on the rock. Now
+  the rock gives way round a trunk `Trunk_Cleft` blocks (1) each side, from
+  the ground's top block (put back as the column has it) up to the trunk's
+  top, and the trunk itself may take the place of rock (`Trunk_Wood`; a
+  branch may not): the trunk stands on the ground in a cleft of the rock.
+  The mesher's stack-edge corners do not know the cleft (they lean toward
+  the rock as made, both stacks alike). A tree felled there leaves its cleft
+  in the rock, and that is expected (John, the same day: "tree leaving a
+  whole in the stone is expected, no need to change it"). All eight reference logs recorded
+  again: every scene set as it was; one run did not move, the rest ended
+  otherwise (living at the end of the eight: 29 before, 33 after).
 * **Tall grass** (generator 13, `Castle.Geology`; John, 2026-11-11: "grass
   can get a slight overhaul"). It stands in drifts, not evenly: a noise
   about 9 m across (`Grass_Drift_M`, a channel of its own) says how thick.

@@ -16,7 +16,8 @@ function Go_Forage (I : Positive; Only : Item_Kind := Nothing; Asked_Only : Bool
      (if Reserves (Vegetables) = 0 then 0.0
       else Float'Max (0.0, 1.0 - Float (Veg_Have) / Float (Reserves (Vegetables))));
    Pull     : constant Float := Veg_Pull * (1.0 + 0.5 * Demand) * (1.0 + Short);
-   Reach    : constant Float := Float'Min (Forage_Reach_M, Work_Radius_M + 10.0 * Demand + 10.0 * Short);
+   Reach    : constant Float :=
+     Float'Max (Float'Min (Forage_Reach_M, Work_Radius_M + 10.0 * Demand + 10.0 * Short), Food_Reach);
    --  Fending for itself it goes for whatever there is to eat nearest to
    --  where it stands: no kind pulls it further than another, vegetables
    --  are not sought alone, and how far off the stake is counts for nothing
@@ -29,10 +30,15 @@ function Go_Forage (I : Positive; Only : Item_Kind := Nothing; Asked_Only : Bool
    Veg_P  : Block_Pos;
    Found  : Boolean := False;
    Bush_K, Tree_K : Natural := 0;
+   No_Way_Seen : Boolean := False;       --  one it went for could not be got to
    --  a kind it may go for: the one it is filling its basket with, and (on
-   --  a gatherer's errand) only one that is asked for
-   function Open (K : Item_Kind) return Boolean is
+   --  a gatherer's errand) only one that is asked for; and, with the
+   --  overflow on, only one an ordinary stockpile place has room for,
+   --  unless it fends (what it picks it eats)
+   function Wanted_Kind (K : Item_Kind) return Boolean is
      (Only in Nothing | K and then (not Asked_Only or else Asked_For (K)));
+   function Open (K : Item_Kind) return Boolean is
+     (Wanted_Kind (K) and then (M.Fends or else not Room_Gated or else Room_To_Set_Out (K)));
 begin
    if Winter_Now then                    --  the berries gone, the roots under the snow
       M.Why := Winter_Bare;
@@ -80,8 +86,26 @@ begin
                return True;
             end if;
          end if;
+         No_Way_Seen := No_Way_Seen or else M.Why = No_Way;
       end;
    end loop;
-   M.Why := (if Asked_Only and then not (for some G of Gathered => Open (G)) then Enough_Food else No_Bush);
+   --  Why not, as near as it can be said (John, 2026-11-17: "Gatherers can't find berries even when
+   --  they are close"; with eight gatherers they stood beside a bush of a hundred handfuls that was one
+   --  gatherer's, and said "nothing to gather in reach"): a kind wanted that the stores have no room
+   --  for; no way to what it went for; ripe bushes in reach, every one with its pickers; none in reach.
+   M.Why := (if not (for some G of Gathered => Open (G)) and then (for some G of Gathered => Wanted_Kind (G))
+             then Full_Why                  --  (wanted, and nowhere to put it)
+             elsif Asked_Only and then not (for some G of Gathered => Open (G)) then Enough_Food
+             elsif (for some G of Gathered => Wanted_Kind (G) and then not Open (G)) then Full_Why
+             elsif No_Way_Seen then No_Way
+             elsif Open (Berries)
+               and then (for some K in 1 .. N_Bushes =>
+                           Bushes (K).Ripe > 0 and then not Bush_Free (K, I)
+                           and then Flat_Dist (Bushes (K).Centre, Stake_At) <= Food_Reach_M)
+             then Bushes_Taken
+             else No_Bush);
+   if M.Why = No_Bush and then not M.Fends and then Only = Nothing then
+      Look_Further_For (Food => True);       --  (nothing to gather in reach: a ring further, the next time)
+   end if;
    return False;
 end Go_Forage;

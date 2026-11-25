@@ -228,7 +228,9 @@ package body Castle.Edits is
                         end;
                         Maps.Next (D2);
                      end loop;
-                     --  then its block edits, which win over its bricks
+                     --  then its block edits, which win over its bricks (as they are drawn: the rim is the
+                     --  mesher's alone, and a piece's block is drawn as air, or a post beside a rail hidden
+                     --  across the edge lost the face toward it)
                      while Maps.Has_Element (C2) and then Maps.Key (C2) < B2 + Local_Span loop
                         declare
                            L : constant Integer := Integer (Maps.Key (C2) and (Local_Span - 1));
@@ -240,13 +242,13 @@ package body Castle.Edits is
                            if X in -1 .. 32 and then Y in -1 .. 32 then
                               for R in First_Block .. N loop
                                  if Ring (R).X = X and then Ring (R).Y = Y and then Ring (R).Z = Z then
-                                    Ring (R).Mat := Maps.Element (C2).Mat;
+                                    Ring (R).Mat := Seen_Mat (Maps.Element (C2));
                                     Replaced := True;
                                     exit;
                                  end if;
                               end loop;
                               if not Replaced then
-                                 Add_Rim (X, Y, Z, Maps.Element (C2).Mat);
+                                 Add_Rim (X, Y, Z, Seen_Mat (Maps.Element (C2)));
                               end if;
                            end if;
                         end;

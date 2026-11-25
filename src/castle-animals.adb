@@ -80,6 +80,7 @@ package body Castle.Animals is
       Lively  : Float := 1.0;
       Spd     : Float := 0.0;
       P       : Castle.Deer.Pose;
+      Half    : Float := 0.0;       --  each end of its back from its middle across the ground, as last animated (0: not yet)
       Ok      : Castle.Deer.Leg_Flags := [others => True];
       --  scripted walkers
       Walker  : Boolean := False;
@@ -94,6 +95,13 @@ package body Castle.Animals is
 
    Herd  : array (1 .. Max_Animals) of Animal;
    N     : Natural := 0;
+
+   Back_N : Back_Count;
+   function Backs return Back_Count is (Back_N);
+   procedure Clear_Backs is
+   begin
+      Back_N := (others => <>);
+   end Clear_Backs;
 
    --  one look per class and coat, made the first time it is wanted
    Looks : array (Class, Boolean) of Natural := [others => [others => 0]];
@@ -120,7 +128,9 @@ package body Castle.Animals is
    --  facing Fw (flat, unit).
    function Rest (A : Animal; Mid, Fw : Vec3; L : Leg) return Vec3 is
       Rt : constant Vec3 := (Fw.Y, -Fw.X, 0.0);
-      P  : constant Vec3 := Mid + Fw * ((if Is_Fore (L) then 0.5 else -0.5) * A.D.Spine)
+      --  (under its joint: half the spine from the middle, less as the back is pitched: Whole_Back)
+      P  : constant Vec3 := Mid + Fw * ((if Is_Fore (L) then 1.0 else -1.0)
+                                        * (if Whole_Back and then A.Half > 0.0 then A.Half else 0.5 * A.D.Spine))
                             + Rt * ((if Is_Left (L) then -1.0 else 1.0) * A.D.Half_W);
    begin
       return (P.X, P.Y, Ground ((P.X, P.Y, Mid.Z)));
@@ -406,10 +416,28 @@ package body Castle.Animals is
          --  the body over the hooves: hips and withers at their heights over
          --  the ground under them, lifted a little in the bound's flight
          declare
-            Hip_G : constant Vec3 := Mid - Fw * (0.5 * A.D.Spine);
-            Sh_G  : constant Vec3 := Mid + Fw * (0.5 * A.D.Spine);
-            Hz    : constant Float := Ground ((Hip_G.X, Hip_G.Y, Mid.Z));
-            Sz    : constant Float := Ground ((Sh_G.X, Sh_G.Y, Mid.Z));
+            Half0 : constant Float := 0.5 * A.D.Spine;
+            Hip_0 : constant Vec3 := Mid - Fw * Half0;
+            Sh_0  : constant Vec3 := Mid + Fw * Half0;
+            Hz0   : constant Float := Ground ((Hip_0.X, Hip_0.Y, Mid.Z));
+            Sz0   : constant Float := Ground ((Sh_0.X, Sh_0.Y, Mid.Z));
+            --  Whole_Back.  The pitch the ground under the two ends asks of the back, no steeper than
+            --  one is drawn; pitched, the two ends are that much nearer each other across the ground
+            --  (a back's length apart along the back), and it is the ground there they stand over.
+            Rise  : constant Float := A.D.Shoulder_H - A.D.Hip_H;
+            Tan0  : constant Float := Clamp ((Sz0 - Hz0 + Rise) / A.D.Spine, -Back_Pitch_Tan, Back_Pitch_Tan);
+            Half  : constant Float :=
+              (if Whole_Back then 0.5 * Sqrt (A.D.Spine ** 2 + Rise ** 2) / Sqrt (1.0 + Tan0 ** 2) else Half0);
+            Hip_G : constant Vec3 := (if Whole_Back then Mid - Fw * Half else Hip_0);
+            Sh_G  : constant Vec3 := (if Whole_Back then Mid + Fw * Half else Sh_0);
+            Hz1   : constant Float := (if Whole_Back then Ground ((Hip_G.X, Hip_G.Y, Mid.Z)) else Hz0);
+            Sz1   : constant Float := (if Whole_Back then Ground ((Sh_G.X, Sh_G.Y, Mid.Z)) else Sz0);
+            --  Where the ground is steeper than that, the higher end stands on its own ground and
+            --  the lower is held up as far as the back lets it hang: its legs reach down for their
+            --  hooves and fall short (never the higher end sunk into the hill).
+            Most  : constant Float := 2.0 * Half * Back_Pitch_Tan;
+            Hz    : constant Float := (if Whole_Back then Float'Max (Hz1, Sz1 + Rise - Most) else Hz1);
+            Sz    : constant Float := (if Whole_Back then Float'Max (Sz1, Hz1 - Rise - Most) else Sz1);
             Flight : Float := 0.0;
             Down   : Natural := 0;
          begin
@@ -426,6 +454,7 @@ package body Castle.Animals is
                Flight := -0.012 * Size * Cos (4.0 * Pi * A.Phase);
             end if;
             S1.Update (A.Bob, Dt, Flight);
+            A.Half := Half;
             A.P.Hips := (Hip_G.X, Hip_G.Y, Hz + A.D.Hip_H + S1.Value (A.Bob));
             A.P.Shoulders := (Sh_G.X, Sh_G.Y, Sz + A.D.Shoulder_H + S1.Value (A.Bob));
             --  never higher than the planted hooves let the legs reach; each
@@ -466,6 +495,30 @@ package body Castle.Animals is
                begin
                   A.P.Hips.Z := Hip0 - Float'Max (Hip_Drop, 0.5 * Sh_Drop);
                   A.P.Shoulders.Z := Sh0 - Float'Max (Sh_Drop, 0.5 * Hip_Drop);
+               end;
+            end;
+            --  one piece: the hips and the withers no further apart than they stand on level ground
+            declare
+               D    : constant Vec3 := A.P.Shoulders - A.P.Hips;
+               L    : constant Float := Len (D);
+               Rest : constant Float := Sqrt (A.D.Spine ** 2 + (A.D.Shoulder_H - A.D.Hip_H) ** 2);
+            begin
+               if Whole_Back and then L > Rest then
+                  declare
+                     C : constant Vec3 := (A.P.Hips + A.P.Shoulders) * 0.5;
+                  begin
+                     A.P.Hips := C - D * (0.5 * Rest / L);
+                     A.P.Shoulders := C + D * (0.5 * Rest / L);
+                  end;
+               end if;
+               declare
+                  Drawn : constant Float := Len (A.P.Shoulders - A.P.Hips) / Rest;
+               begin
+                  Back_N.Frames := Back_N.Frames + 1;
+                  if Drawn > Long_Back then
+                     Back_N.Long := Back_N.Long + 1;
+                  end if;
+                  Back_N.Longest := Float'Max (Back_N.Longest, Drawn);
                end;
             end;
             A.P.Flex := (if A.G = Bound then 0.08 * Sin (2.0 * Pi * (A.Phase - 0.25)) else 0.0);

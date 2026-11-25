@@ -66,6 +66,8 @@ package Castle.GLFW is
    Key_Page_Down   : constant int := 267;
    Key_Home        : constant int := 268;
    Key_F12         : constant int := 301;
+   Key_X           : constant int := 88;
+   Key_Z           : constant int := 90;
    Key_KP_Subtract : constant int := 333;
    Key_KP_Add      : constant int := 334;
 

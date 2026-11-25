@@ -2,6 +2,7 @@ with Castle.Blocks; use Castle.Blocks;
 with Castle.Hash;   use Castle.Hash;
 with Castle.Maps;   use Castle.Maps;
 with Castle.Stacks; use Castle.Stacks;
+with Castle.Geology; use Castle.Geology;
 
 --  Stage 4: overworld features built from blocks - trees, berry bushes and
 --  boulders.  Each feature is seeded on a jittered grid cell.  Any stack
@@ -73,6 +74,28 @@ package Castle.Flora is
    --  Boulder_Foot up, eased between.  A boulder's chance is rolled once for
    --  its place, so those left on a mountain are of those that were there,
    --  and those of the open land are all still there with more among them.
+   --  A boulder goes into the ground (generator 15; John, 2026-11-16: "make
+   --  the base of the boulders, so they don't look like balls plopped
+   --  everywhere, they need extend into the ground").  Column by column
+   --  (each column's own ground, so on a slope it follows the slope): the
+   --  round with its noise as it was; everything under the round down into
+   --  the ground's top block, so nothing is hollow under a boulder (on a
+   --  slope its downhill side goes down to the ground); and round its foot
+   --  a skirt, Skirt_Spread wider than the round in the ground's top block
+   --  and the first over it and half that in the next (Skirt_Rise blocks),
+   --  on a gentler noise of the column alone, so its edge has no loose
+   --  blocks.  None of that over open water.  (Castle.Flora.Rock_Column.)
+   Skirt_Spread : constant := 0.4;
+   Trunk_Cleft  : constant := 1;
+   --  (generator 16; John, 2026-11-16: "the trees should go through the rock
+   --  to the ground") A tree where a boulder lies: the rock gives way this
+   --  many blocks round its trunk, from the ground up, so the trunk stands
+   --  on the ground in a cleft of the rock, not on top of it.
+   Skirt_Rise   : constant := 2;
+   Rock_Reach   : constant := 11;
+   --  No block of a boulder is further than this from its centre sideways
+   --  (Rh 6 at most: 6 + 1 + Skirt_Spread * 6.5, rounded up, is 10).
+
    Boulders_Open     : constant := 1.3;
    Boulders_Mountain : constant := 0.2;
    Boulder_Foot      : constant := 0.2;
@@ -100,9 +123,17 @@ package Castle.Flora is
    function Bush_At (W : World; I, J : Integer) return Lump;
    function Boulder_At (W : World; I, J : Integer) return Lump;
 
-   function In_Rock (L : Lump; Bx, By, Bz : Integer) return Boolean;
+   function In_Rock (W : World; L : Lump; Bx, By, Bz : Integer) return Boolean;
+
+   function Rock_Reach_Of (L : Lump) return Integer;
+   --  How far sideways from its centre boulder L reaches.
+   type Rock_Span is array (-12 .. 36) of Boolean;
+   procedure Rock_Column (L : Lump; X, Y : Integer; C : Column; Lo : out Integer; Span : out Rock_Span);
+   --  Boulder L in column (X, Y) whose ground is C: block Lo + K is rock
+   --  where Span (K) (In_Rock's own test, for a caller that asks of a
+   --  whole column).
    --  Whether boulder L by its shape takes in block (Bx, By, Bz), whatever
-   --  it would find there: the test the generator draws it by.  For the
+   --  it would find there: the generator's own test (Rock_Column).  For the
    --  mesher, which rounds a boulder off on a stack's edge by what the
    --  stacks on both sides of it can work out alike.
 

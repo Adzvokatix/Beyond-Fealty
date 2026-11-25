@@ -28,14 +28,31 @@ package Castle.Pick is
       Point  : Vec3 := (0.0, 0.0, 0.0);    --  where the ray meets it
       Dist   : Float := 0.0;               --  metres along the ray
       Ground : Castle.Rays.Hit;            --  the block behind it all (not Found: sky)
+      Turned : Boolean := False;           --  that block is not what is seen there: the ray met a house drawn
+                                           --  turned, or walked into one where it stands and is not drawn
    end record;
+
+   type Caster is access function (From, Dir : Vec3; Max_M : Float) return Castle.Rays.Hit;
 
    function Look
      (From, Dir : Vec3;                    --  metres; Dir a unit vector
       Ground    : Castle.Rays.Hit;         --  the ray walked into the blocks
       Reach     : Float := No_Limit;
       Slack     : Float := 0.0;
-      Keep      : Thing := (others => <>)) return Thing;
+      Keep      : Thing := (others => <>);
+      Cast      : Caster := null) return Thing;
+   --  Cast: what walked the ray into the blocks for Ground.  With it, **a
+   --  house drawn turned is pointed at where it is drawn** (the fourth step
+   --  of the turned building, 2026-11-19): the ray, taken back through the
+   --  house's turn, is walked into the blocks again from where it comes to
+   --  the house as it stands, and what it meets there is what the pointer
+   --  is on as the house is drawn; begun and not yet built, the ground it
+   --  is drawn on is the house.  And where Ground is a block of such a
+   --  house as it stands, which is drawn elsewhere, the ray is taken on to
+   --  the level of its pad: the zone there, a body as far as there, never
+   --  the block.  (What stands behind that house's place and before the
+   --  ground is not looked for: the blocks are walked once.)  Without it a
+   --  house is pointed at where it stands.
    --  Slack: how far the ray may miss a person or a deer and still mean it,
    --  in metres for each metre away (a few pixels of the screen, so a figure
    --  far off is no harder to point at than one close by).  Something the

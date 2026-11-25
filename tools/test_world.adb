@@ -1,3 +1,4 @@
+with Interfaces;
 with Castle.Nav;
 with Castle.Colony;
 
@@ -5,6 +6,11 @@ package body Test_World is
 
    type Grid_Access is access Grid;
    G : constant Grid_Access := new Grid'[others => [others => [others => Air]]];
+   --  (each block's state, as the world keeps it: a dressed roof's, a piece's; 0 for whatever is set or
+   --  filled by material alone)
+   type State_Grid is array (Grid'Range (1), Grid'Range (2), Grid'Range (3)) of Interfaces.Unsigned_8;
+   type State_Access is access State_Grid;
+   SG : constant State_Access := new State_Grid'[others => [others => [others => 0]]];
 
    Stacks : constant := W_B / 32;
    Versions : array (0 .. Stacks - 1, 0 .. Stacks - 1) of Natural := [others => [others => 1]];
@@ -30,6 +36,7 @@ package body Test_World is
          for Y in G'Range (2) loop
             for Z in G'Range (3) loop
                G (X, Y, Z) := (if Z < Ground_Row - 1 then Dirt elsif Z = Ground_Row - 1 then Top else Air);
+               SG (X, Y, Z) := 0;
             end loop;
          end loop;
       end loop;
@@ -42,6 +49,7 @@ package body Test_World is
          for Y in Integer'Max (0, B (Y0)) .. Integer'Min (W_B - 1, B (Y1) - 1) loop
             for Z in Integer'Max (0, Z0) .. Integer'Min (H_B - 1, Z1) loop
                G (X, Y, Z) := M;
+               SG (X, Y, Z) := 0;
             end loop;
          end loop;
       end loop;
@@ -55,6 +63,7 @@ package body Test_World is
    begin
       if Inside (Bx, By, Bz) then
          G (Bx, By, Bz) := M;
+         SG (Bx, By, Bz) := 0;
          Bump (Bx, By);
       end if;
    end Set;
@@ -77,11 +86,15 @@ package body Test_World is
    end Column;
 
    function Material_At (Bx, By, Bz : Integer) return Material is (Get (Bx, By, Bz));
-   function Block_At (Bx, By, Bz : Integer) return Block is ((Mat => Get (Bx, By, Bz), State => 0));
+   function Block_At (Bx, By, Bz : Integer) return Block is
+     ((Mat => Get (Bx, By, Bz), State => (if Inside (Bx, By, Bz) then SG (Bx, By, Bz) else 0)));
 
    procedure Write_Block (Bx, By, Bz : Integer; B : Block) is
    begin
       Set (Bx, By, Bz, B.Mat);
+      if Inside (Bx, By, Bz) then
+         SG (Bx, By, Bz) := B.State;
+      end if;
    end Write_Block;
 
    function Version (CX, CY : Integer) return Natural is

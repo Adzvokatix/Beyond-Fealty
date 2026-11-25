@@ -5,7 +5,11 @@
 --  fore, right hind, right fore, a trot lifts the diagonal pairs together, a
 --  bound has all four hooves off the ground between strides, the gait
 --  follows the speed, and the stride is the same at 30 and 120 frames a
---  second.
+--  second; and on a made-up hillside and at a made-up cliff: the hips and
+--  the withers are never drawn further apart than a back's length, the back
+--  is pitched with the hill and no steeper than a back is drawn, and the
+--  higher end is not sunk into the ground (with the rule taken out,
+--  Castle.Animals.Whole_Back, the same runs draw them well apart: said).
 --  ./bin/debug/deer_check   (exits 1 on any failure)
 
 with Ada.Text_IO;      use Ada.Text_IO;
@@ -16,6 +20,7 @@ with Castle.Poses;     use Castle.Poses;
 with Castle.Math;      use Castle.Math;
 with Castle.Deer;      use Castle.Deer;
 with Castle.Animals;   use Castle.Animals;
+with Castle.Serfs;
 with Castle.Text;      use Castle.Text;
 
 procedure Deer_Check is
@@ -158,6 +163,58 @@ procedure Deer_Check is
       return R;
    end Run;
 
+   --  A made-up hillside for the hooves (Castle.Serfs.Set_Ground_Source): level at 10 m as far as
+   --  x = 110 m, then Hill_Rise rows up for every Hill_Run block columns, 8 m up at the most.
+   Hill_Rise : Positive := 1;
+   Hill_Run  : Positive := 1;
+   function Hill_Top (Bx : Integer) return Integer is
+     (40 + (if Bx <= 440 then 0 else Integer'Min (((Bx - 440) * Hill_Rise) / Hill_Run, 32)));
+   function Hill (Bx, By, Bz : Integer) return Boolean is (Bz < Hill_Top (Bx + 0 * By));   --  (the same all along y)
+   function Hill_Z (X : Float) return Float is (Float (Hill_Top (Integer (Float'Floor (X * 4.0)))) * 0.25);
+
+   type Climb_Result is record
+      Longest  : Float := 0.0;      --  the hips and the withers at their furthest apart, in backs' lengths
+      Pitch    : Float := 0.0;      --  the back at its steepest (rad)
+      Sunk     : Float := 99.0;     --  the least the higher end's joint stood over its own ground, as a share of standing
+      Rose     : Float := 0.0;      --  how far up the hill the body got (m)
+   end record;
+
+   --  A doe driven up the hill along +X from the level at Speed, its place given on the hill's own
+   --  ground as the herds give it on theirs.
+   function Climb (Speed, Seconds : Float; Whole : Boolean) return Climb_Result is
+      R     : Climb_Result;
+      Dt    : constant Float := 1.0 / 60.0;
+      Start : constant Vec3 := (106.0, 100.0, Ground_Z);
+      D     : constant Dims := Dims_Of (Doe);
+      I     : Positive;
+      T     : Float := 0.0;
+   begin
+      Castle.Serfs.Set_Ground_Source (Hill'Unrestricted_Access);
+      Castle.Animals.Whole_Back := Whole;
+      I := Spawn (Doe, Start, 0.0, 11, False);
+      Clear_Backs;
+      for K in 1 .. Natural (Seconds / Dt) loop
+         T := T + Dt;
+         Drive (I, (Start.X + Speed * T, Start.Y, Hill_Z (Start.X + Speed * T)), Idle);
+         Update (Dt);
+         declare
+            P  : constant Castle.Deer.Pose := Pose_Of (I);
+            Hi : constant Boolean := P.Shoulders.Z - D.Shoulder_H >= P.Hips.Z - D.Hip_H;
+         begin
+            R.Pitch := Float'Max (R.Pitch, abs (Arctan (P.Shoulders.Z - P.Hips.Z,
+                                                        Dist ((P.Shoulders.X, P.Shoulders.Y, 0.0), (P.Hips.X, P.Hips.Y, 0.0)))));
+            R.Sunk := Float'Min (R.Sunk, (if Hi then (P.Shoulders.Z - Hill_Z (P.Shoulders.X)) / D.Shoulder_H
+                                          else (P.Hips.Z - Hill_Z (P.Hips.X)) / D.Hip_H));
+            R.Rose := Float'Max (R.Rose, 0.5 * (P.Hips.Z + P.Shoulders.Z) - Ground_Z);
+         end;
+      end loop;
+      R.Longest := Backs.Longest;
+      Castle.Serfs.Set_Ground_Source (null);
+      Castle.Animals.Whole_Back := True;
+      Remove (I);
+      return R;
+   end Climb;
+
 begin
    ------------------------------------------------------------------ 1. bodies
    Put_Line ("every class and coat:");
@@ -287,6 +344,47 @@ begin
              "the back stays level enough: no rearing or diving");
       Check (Walk30.Lag < 1.0 and then Bound.Lag < 2.5, "the body keeps up with where it is meant to be ("
              & Img (Walk30.Lag, 2) & " m behind walking, " & Img (Bound.Lag, 2) & " m bounding)");
+   end;
+
+   ------------------------------------------------------------------ 4. steep ground
+   --  (John, 2026-11-22, with a picture: "deer can split in half when running up steep terrain")
+   Put_Line ("a doe on steep ground (a made-up hillside; the ground given to the hooves by Castle.Serfs.Set_Ground_Source):");
+   declare
+      Slope, Slope_Old, Steep, Steep_Old, Cliff, Cliff_Old, Bounding, Bounding_Old : Climb_Result;
+   begin
+      Hill_Rise := 1; Hill_Run := 2;              --  a block up every half metre: 27 degrees
+      Slope := Climb (2.6, 8.0, True);
+      Slope_Old := Climb (2.6, 8.0, False);
+      Hill_Rise := 3; Hill_Run := 2;              --  three blocks up every half metre: 56 degrees
+      Steep := Climb (2.6, 6.0, True);
+      Steep_Old := Climb (2.6, 6.0, False);
+      Bounding := Climb (6.5, 4.0, True);
+      Bounding_Old := Climb (6.5, 4.0, False);
+      Hill_Rise := 12; Hill_Run := 1;             --  a wall of rock 3 m to the block: a cliff
+      Cliff := Climb (2.6, 6.0, True);
+      Cliff_Old := Climb (2.6, 6.0, False);
+      Put_Line ("    the hips and the withers at their furthest apart, in backs' lengths (as it was, the rule out): up 27 degrees "
+                & Img (Slope.Longest, 3) & " (" & Img (Slope_Old.Longest, 2) & "), up 56 degrees " & Img (Steep.Longest, 3)
+                & " (" & Img (Steep_Old.Longest, 2) & "), bounding up it " & Img (Bounding.Longest, 3) & " ("
+                & Img (Bounding_Old.Longest, 2) & "), at a cliff " & Img (Cliff.Longest, 3) & " (" & Img (Cliff_Old.Longest, 2) & ")");
+      Check (Slope.Longest < 1.001 and then Steep.Longest < 1.001 and then Bounding.Longest < 1.001
+             and then Cliff.Longest < 1.001,
+             "its hips and its withers are never drawn further apart than a back's length: it is one piece");
+      Check (Slope_Old.Longest > 1.08 and then Steep_Old.Longest > 1.5 and then Cliff_Old.Longest > 2.0,
+             "(the same runs with the rule out draw them well apart: these runs catch it)");
+      Put_Line ("    the back at its steepest: " & Img (Slope.Pitch * 57.3, 1) & " deg up 27, " & Img (Steep.Pitch * 57.3, 1)
+                & " up 56, " & Img (Cliff.Pitch * 57.3, 1) & " at the cliff");
+      --  (the hill is in steps of a block, so over a step the back is a little steeper than the hill)
+      Check (Slope.Pitch > 0.3 and then Slope.Pitch < 0.75 and then Steep.Pitch < 0.80 and then Cliff.Pitch < 0.80,
+             "the back is pitched with the hill, and no steeper than a back is drawn (45 degrees and a hair)");
+      --  (not asked at the cliff: there the doe's place is dragged through three metres of rock,
+      --  which no way on the walking map does, and its body is in the rock with it, as it was before)
+      Put_Line ("    the higher end's joint over its own ground, at the least, as a share of standing: "
+                & Img (Slope.Sunk, 2) & " up 27, " & Img (Steep.Sunk, 2) & " up 56");
+      Check (Slope.Sunk > 0.8 and then Steep.Sunk > 0.8,
+             "the higher end stands on its own ground: it is not sunk into the hill");
+      Check (Slope.Rose > 2.0 and then Steep.Rose > 4.0, "and the body goes up the hill with its place ("
+             & Img (Slope.Rose, 1) & " m up the one, " & Img (Steep.Rose, 1) & " m up the other)");
    end;
 
    New_Line;

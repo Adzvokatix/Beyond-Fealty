@@ -1,7 +1,7 @@
 # The interface
 
 - Packages: Castle.Font, UI, HUD, Input, Views, Pick, Rays, Settings
-- Check: ui_check (112 checks, under a second), pick_check (41 checks, under a second)
+- Check: ui_check (112 checks, under a second), pick_check (78 checks on 2026-11-22, under a second)
 - Saves: nothing in a game's save; the interface's scale in `saves/settings.txt`
 - Stage: phase A (Handoff_2026_11_07_ui.md); stage 5a, the scaffold (Handoff_2026_11_10_stage_5a_scaffold.md); the Skills tab, stage 5b
 
@@ -116,6 +116,89 @@ pixels, every glyph starting on one, rims one thickness, a button pressed
 exactly where it is drawn, rows and text fitting as at scale 1; the
 settings file there and back).
 
+## Since 2026-11-19
+
+- The band's lists (the Band tab and the Skills tab) name a serf by its trade while it has one:
+  Builder, Stockman, Carpenter (`Castle.Views.Job_Label`; John, 2026-11-17: "Add builder to the job
+  list"). A trade is earned, not given: the menu of jobs a right click offers is as it was.
+- The ground's menu on housing offers "Take housing out from here" (then the other corner: the box is
+  drawn as it is pulled, and "Take housing out to here" is on the ground's menu meanwhile), and on a
+  hovel's lot "Mark this hovel for razing" or "Keep this hovel (lift the mark)". A marked hovel's
+  sheet says "Marked for razing". Orders `Unzone_Housing` and `Mark_Hovel` (`Castle.Actions`); the
+  tool mode `Unzone`.
+
+- Since his answers of the same day: a person's menu offers **Builder** after the opening jobs, as a
+  development entry (`Castle.Actions.Dev_Jobs`; `--no-dev-jobs`: the opening jobs alone, as the player
+  is to have it: "the player won't need to delegate further, past opening positions"). The ground's
+  menu on a hovel's lot offers "Raze this hovel (nobody's)" only when nobody owns it, and "Keep this
+  hovel (lift the mark)" on one marked; taking housing out says how many hovels there are to be taken
+  down and how many, lived in, were left.
+
+- Since his word of 2026-11-22 ("The cook is earned by skill, but the development UI is the backend we
+  can assign jobs however we want with the development UI, the player won't be able to", and, asked
+  whether to put them there, "yes add the cook and the stockman and carpenter"): **the development
+  entries of a person's menu are Cook, Builder, Stockman and Carpenter**. Cook keeps the row it had,
+  after Porter; Builder, Stockman and Carpenter follow, each with the person's skill at it, and
+  Follow comes last. Stockman makes the person a porter and the storehouse's stockman whatever its
+  portering (`Castle.Colony.Name_Stockman`); Carpenter a forester and its carpenter
+  (`Name_Carpenter`); named before the storehouse stands, it is a porter or a forester like any
+  other until it does. The row of the trade is the one marked, not the job's. `--no-dev-jobs` gives
+  what the player is to have: no job, gatherer, forester, hunter, porter, and Follow: **no Cook**
+  (until this it still offered Cook). An order for the cook's job is carried out either way (the
+  scripts' `--cooks`); `--name-stockman I` and `--name-carpenter I` are the scripts' way to the two
+  new orders (`Make_Stockman`, `Make_Carpenter`).
+- **A stockpile's menu removes it** (2026-11-23; `Castle.Actions.Remove_Stockpile`): the menu of a
+  stockpile one points at has "Remove this stockpile" under its reserves, and "Keep this stockpile"
+  once that is ordered (never the stockyard's menu, nor the Stores tab's, which is of no one
+  stockpile). The message line says "the stockpile is to go: what lies on it is carried off first".
+  What the colony then does: `colony.md`, "The player removes a stockpile".
+
+## Since 2026-11-20
+
+- **A zone put down whole is held and turned** (John: "if the player places it, it will be a square
+  box ... the player can rotate the placement"; `colony.md`, "Zones put down whole"). The Stockpile
+  tool holds a stockpile of 10 m by 10 m with its path by its middle under the cursor, shown as it
+  would lie (its ground filled, its path as a path being drawn is). **Z and X turn it** an eighth of
+  a turn a press (`Castle.Input.Turn_Held_Left`, `Turn_Held_Right`; `Tool_State.Way`); a click puts it
+  down and the tool stays in hand; Esc puts it away (`Castle.HUD.Cancel`). The ground's menu offers
+  "Stockpile, 10 by 10 m, with its path", which takes the tool up. With
+  `Castle.Colony.Set_Box_Place (False)` (`--no-box-place`) the tool is the two corners it was.
+- **Housing is pulled with its path** (2026-11-20; `Castle.Actions.Housing_Pull`, `--no-housing-pull`).
+  The Housing tool takes two clicks: where it begins and where it is pulled to. Between them the game
+  shows the path's line (`Castle.Colony.Pull_Line`, one of the eight ways) and each row asked as it
+  would be zoned (`Plan_Housing_Pull`), or its outline in the refused colour with the reason by the
+  cursor (`Pull_Refusal`). **Z and X step the rows** (`Tool_State.Rows`: this side, the other side,
+  both), and the hint under the tools says which. The ground's menu offers "Housing with its path, from
+  here"; "Housing to here" in the menu finishes one. With the switch off the tool is the strip beside a
+  path, as before.
+- **Held where it would be refused, it says why at once**: the box and its path are drawn in the
+  refused colour and the reason stands by the cursor in place of the tooltip (`Tool_State.Warn`, which
+  the game sets from `Castle.Colony.Box_Refusal` as it draws the box and clears every frame first, so
+  it does not stay once the cursor is off the ground or over a panel; `Tip_Panel`). Nothing is said
+  after a wait and nothing has to be clicked to learn it.
+- **The Path tool's own path goes through housing** (2026-11-20, his "a paths pull through housing
+  should give way as built, if the path can pass and not interfere with anything built";
+  `Castle.Colony.Lay_Path_Through`, which the `Lay_Path` order calls; `Set_Path_Through`,
+  `--no-path-through`): the housing gives way under it and the tool says so ("the path goes through the
+  housing, which gave way under it"); through a hovel's lot, begun or standing, it is refused ("a
+  hovel's lot is in the way: a path goes through housing only where nothing is built"); through any
+  other zone or the lord's cart, as before.
+- **The camp's sheet says what of a square's walls is left** ("Walls: N blocks of stone still to
+  lay", while any is), and whoever is at them says so ("fetching stone for the square's wall",
+  "carrying N stone to the square's wall", "laying stone in the square's wall").
+- **The Homestake tool holds the square the colony is founded on** (the homestake and the campfire
+  one: `colony.md`, "The homestake and the campfire one"): 10 m of floor and the path round it, held
+  by its middle, turned by Z and X (it can lie two ways: squarely or aslant), founded by a click;
+  refused, it says why by the cursor as a box does. The ground's menu, before there is a colony,
+  offers "The homestake: a square of 11 m, its path round it" (of 10 m with `--square-10`), which takes
+  the tool up. With
+  `Castle.Actions.Square_Stake` off (`--no-square`) the tool raises the post and the Campfire tool
+  zones the camp apart, as before.
+- The scripted pointer has `turn N` (what is held turned to way N, 0 to 7: east, north-east, north
+  ...), and in a game that no option founds a colony in or loads one into it runs from when the view
+  has filled, so the founding can be pointed at and clicked (`--pointer "100:tool stake, 110:turn 1,
+  120:ground X Y, 150:click"`). **Not exercised headless: the Z, X and Esc keys themselves.**
+
 ## Pointing at things
 
 `Castle.Pick.Look` says what a ray points at: a person, a deer, a zone, a
@@ -129,7 +212,22 @@ cleared on the camera's ray (`rendering.md`, "A roof cleared on the
 camera's ray") is drawn at less than half: through the open middle of a
 cleared roof the pointer finds what is inside (a sleeper, the floor: the
 house), and at its edge, drawn at half, the thatch. So the dig brush, too,
-reaches the floor through a cleared roof. **Pointing at a house opens its
+reaches the floor through a cleared roof. **A house drawn turned is pointed
+at where it is drawn** (since 2026-11-19; `Look`'s `Cast`, which the game
+gives as `Castle.World_Blocks.Cast`): the ray is taken back through the
+house's turn and walked into the blocks again from where it comes to the
+house as it stands, and what it meets of the house there is what the
+pointer is on; where the first walk ended in a block of such a house as it
+stands, which is drawn elsewhere, the ray is taken on to the level of its
+pad and the zone there is what is pointed at, never the block
+(`Thing.Turned`: no brush box, no digging, and a tool's click on the ground
+goes where the ray meets what is seen). What stands behind that place and
+before the ground is not looked for. **A storehouse that is walked where it
+is drawn** (2026-11-20, `habitation.md`) is pointed at the same way, and
+whoever is in it is pointed at where they stand; the ground within its
+walls as they stand is `Turned` at the pad's own row too (come to by a ray
+through a doorway of it as it stands): not the cursor's to dig or build
+on, for what is dug there is not walked by. **Pointing at a house opens its
 roof** (John, 2026-11-13: "let's run it to the mouse and the camera"): the
 house the pointer's ray passes through is cleared as the one on the
 camera's line is, and stays cleared while the pointer is on the interface
@@ -244,13 +342,52 @@ first (hide every panel with F4 and it all still works):
   inside the round of paths the point lies in, at once and with no
   preview (`Fill_Housing`; `habitation.md`): the note is the strip's, or
   "no housing there: the paths round that ground do not close (or it is
-  more than 50 m from there to them)". A path
+  more than 50 m from there to them)". **Since 2026-11-18 (his playtest
+  notes) the Stockpile tool places it with one click**, ten metres square
+  beside a path ("click beside a path", "10 x 10 m, once": the order
+  `Place_Stockpile`; the square it would take is shown under the cursor,
+  `Plan_Stockpile_At`), and the button and the ground's "Stockpile here,
+  10 by 10 m" are gone once one is zoned; **a Stockyard tool** takes two
+  corners beside a path (`Zone_Stockyard`, "Stockyard from here" in the
+  ground's menu; the lot shown square to the grid, `Plan_Stockyard`) and
+  is gone once it is zoned; a refusal says why in the note. **Since
+  2026-11-21 the Stockyard tool holds a box** (his "expand the zones to
+  20x20"; `Castle.Colony.Yard_Box`, `--no-yard-box` is the two corners):
+  "20 x 20 m, with its path", turned by Z and X, put down by a click (the
+  order `Place_Stockyard`; the ground's menu: "Stockyard, 20 by 20 m, with
+  its path", taken in hand); its box and its path are shown as a
+  stockpile's are (`Plan_Box` with `Stockyard_Box`), a refusal's reason by
+  the cursor ("its ground will not take the storehouse ...", "the lord's
+  cart stands on it", "that ground cannot all be taken ..."), and Esc puts
+  it away. **`--storehouse LONG DEEP STAGING`** (metres) is the storehouse
+  the colony begins from then on and the ground before its front wall: 12
+  8 1.5 unless told, 10 5 4.5 the storehouse of before
+  (`Castle.Colony.Set_Store_Size`); **`--one-cart-place`** brings the
+  lord's cart only to the one place before the storehouse it had before
+  2026-11-21 (`Set_Cart_Search`); **`--no-store-stacks`** keeps a place on
+  the storehouse's floor to its own worth and a barrel's place to one
+  barrel (`Set_Store_Stacks`). None is saved. The Z and X keys are the game's own, whatever is held. The stores'
+  sheet (a stockpile's or the stockyard's, titled so) lists the staples
+  always, "none" where it has none (berries, wood, stone, straw, meat,
+  hides, vegetables, apples, salt), says "Closed: the stores are in the
+  stockyard" of a stockpile emptied into it, and "Keep in store" has
+  apples. A deer whose herd is left to breed says so ("Hunted: not ...").
+  A path
   planned and not yet laid is shown as the block columns it will turn,
   each on its own ground, as far as it is still to lay (`Show_Paths`:
   read from the colony when what is left changes, and every thirty
   frames besides), and the line being drawn with the Path tool the same
   way (`Show_Path_Line`, `Castle.Colony.For_Path_Line`: piece by piece as
-  `Lay_Path` would record it). Until 2026-11-12 each was one strip from
+  `Lay_Path` would record it). **Since 2026-11-19 a path's line is straight
+  or at 45 degrees** (`Castle.Actions.Path_Snap`, `Path_Begin`,
+  `Path_Reach`; `--no-path-snap`): the first point is put on a corner of
+  four blocks (on a path, on its middle line; by a path's end, at that
+  end), and the line shown runs along the nearest of the eight ways to
+  the pointer, a whole number of blocks long, up to the middle line of a
+  path it comes to. The order is made with the same two functions and
+  `Perform` applies them again (they give back such a point as it is), so
+  the line shown is the line laid, and a line goes on from where the last
+  ended. Until 2026-11-12 each was one strip from
   end to end, straight in height from the ground at one end to the
   ground at the other: over a hollow it hung in the air and through a
   rise it was buried (John: "the pathing zone also just forms a stright
@@ -301,6 +438,8 @@ at its frame, counted from the first frame with a colony on loaded ground
 | `deer K` | the same for deer K |
 | `ground X Y` | the ground at X, Y (metres) |
 | `click`, `rclick`, `wheel N`, `esc` | a left click, a right click, N wheel steps, Esc |
+| `tool NAME` | the colony tool taken up, as its button takes it (`stake`, `path`, `stockpile`, `camp`, `housing`, `stockyard`, `unzone`, `edit`): with `ground` and `click`, a still of what a tool's click would do |
+| `follow I` | the eye follows member I, as "follow" in its menu has it (0: nobody) |
 
 An arrow is drawn where the pointer is (with `--mouse` too). A menu opens
 where it is clicked and stays there while its person walks on, so aim at

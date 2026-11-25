@@ -390,6 +390,21 @@ begin
       begin
          Put (Unsigned_64 (Hs.Zone), 2);
          Put (Hs.Seed, 8);
+         --  (26: what it is; a storehouse's yard)
+         Put (Unsigned_64 (Castle.Buildings.Building_Kind'Pos (Hs.F.Kind)), 1);
+         if Hs.F.Kind = Castle.Buildings.Storehouse then
+            Put (Unsigned_64 (Hs.F.W), 1);          --  (44: its walls, as it was begun)
+            Put (Unsigned_64 (Hs.F.D), 1);
+            Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Yard_U0)), 2);
+            Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Yard_U1)), 2);
+            Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Yard_V0)), 2);
+            Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Yard_V1)), 2);
+            Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Gate_U)), 2);
+            Put (Unsigned_64 (Hs.F.Covers), 1);
+            for K in 1 .. Hs.F.Covers loop
+               Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Cover_U (K))), 2);
+            end loop;
+         end if;
          Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Fx)), 2);
          Put (Unsigned_64 (Unsigned_16'Mod (Hs.F.Fy)), 2);
          Put ((if Hs.F.Vx > 0 then 0 elsif Hs.F.Vx < 0 then 1 elsif Hs.F.Vy > 0 then 2 else 3), 1);
@@ -401,6 +416,24 @@ begin
          end loop;
          Put (Unsigned_64 (Hs.F.Reach_L), 1);       --  (and how far its ground reaches to a neighbour's)
          Put (Unsigned_64 (Hs.F.Reach_R), 1);
+         Put_B (Hs.F.Truss);                        --  (31: how it was begun)
+         Put_B (Hs.F.Sill);
+         Put_B (Hs.Raze);                           --  (and whether it is marked for razing)
+         Put_B (Hs.F.Jambs);                        --  (32: plank beside its windows, a hovel's ridge beam)
+         Put_B (Hs.F.Ridge);
+         --  (36: the eighth of a turn it is drawn by, and 1; 37: and 4 if its ground is made where it is drawn)
+         --  (40: and 8 if it is walked where it is drawn)
+         Put (Unsigned_64 (Hs.F.Turn + 1 + (if Hs.F.Turn_Ground then 4 else 0) + (if Hs.F.Walk then 8 else 0)), 1);
+         if Is_Store (Hs.F) then                    --  (39: what a storehouse drawn turned is turned about)
+            Put_F (Hs.F.Piv_U);
+            Put_F (Hs.F.Piv_V);
+            --  (41: 1 if its coverings' roofs are smoothed, and 2 if its fence is laid in pieces)
+            --  (and, with no new version: 4 if its stockyard's way in is at the low end of its front, 8 if
+            --  at the high end, in a corner of the zone.  A build of before reads neither: it had no such
+            --  way, and says the blob is bad.)
+            Put (Unsigned_64 ((if Hs.F.Smooth_Covers then 1 else 0) + (if Hs.F.Fence_Pieces then 2 else 0)
+                              + 4 * Hs.F.Way_End), 1);
+         end if;
          Put (Unsigned_64 (Hs.Got (Stone)), 2);
          Put (Unsigned_64 (Hs.Lying (Stone)), 2);
          Put (Unsigned_64 (Hs.Stone_Left), 2);
@@ -451,6 +484,7 @@ begin
          for U in F.Front'Range loop
             Put (Unsigned_64 (F.Front (U)), 1);
          end loop;
+         Put (Unsigned_64 (F.Turn + 1 + (if F.Turn_Ground then 4 else 0) + (if F.Walk then 8 else 0)), 1);      --  (37; 40)
       end;
    end loop;
    --  the pass's fourth round (23): whether the cook keeps a pot's fill;
@@ -496,6 +530,133 @@ begin
    Put_V (Goal_P);
    Put_F (Goal_Turn);
    Put_V (Cart_From);
+   --  the stockpile's first pass (26): how many may be builders at once
+   Put (Unsigned_64 (Builders_Cap), 1);
+   Put_F (Least_M);                     --  and how large a stockpile has to be,
+   Put_B (Overflow_On);                 --  whether one gets overflow places, and which places they are
+   for K in 1 .. N_Cells loop
+      Put_B (Cells (K).Overflow);
+   end loop;
+   --  the storehouse: whether it is asked for, the stake's day, whether the
+   --  request has been made, its house; the places closed for it
+   Put_B (Store_On);
+   Put (Unsigned_64 (Unsigned_16'Mod (Stake_Day)), 2);
+   Put_B (Store_Asked);
+   Put (Unsigned_64 (Store_House), 1);
+   for K in 1 .. N_Cells loop
+      Put_B (Cells (K).Closed);
+   end loop;
+   --  the storehouse used (28): each place's fitting and whether its shelf
+   --  or barrel is made; whether a stockman and a carpenter are made, who,
+   --  and whether water is brought in
+   for K in 1 .. N_Cells loop
+      Put (Unsigned_64 (Fitting'Pos (Cells (K).Fit)), 1);
+      --  (2: a second barrel on the first; only of a barrel's place, as the loader reads it)
+      Put ((if Cells (K).Second and then Cells (K).Fit in Meat_Barrel | Water_Barrel then 2
+            elsif Cells (K).Made then 1 else 0), 1);
+   end loop;
+   Put_B (Keep_On);
+   Put (Unsigned_64 (Keeper_N), 1);
+   Put_B (Carp_On);
+   Put (Unsigned_64 (Carp_N), 1);
+   Put_B (Water_Is_On);
+   Put (Unsigned_64 (Store_Built_By), 1);
+   --  the playtest round of 2026-11-18 (29): the stores' last places kept, the
+   --  one stockpile placed, long grass cut from the top, bushes shared
+   Put (Unsigned_64 (Last_N), 2);
+   Put_B (One_Pile_On);
+   Put_B (Top_Cut_On);
+   Put_B (Share_On);
+   --  the stockyard (30): which zone is it, and whether its ground is levelled
+   for Z in 1 .. N_Zones loop
+      Put_B (Zones (Z).Yard);
+   end loop;
+   Put_B (Yard_Level_On);
+   Put_B (Move_On);
+   --  the next pass of his notes (31): whoever stands where a block goes steps aside, a path
+   --  levelled as it is laid, and how a house begun from now on is made: its roof's timbers,
+   --  its windows' timber (each house's own with the house, above)
+   Put_B (Way_On);
+   Put_B (Path_Level_On);
+   Put_B (Truss_On);
+   Put_B (Sill_On);
+   --  his answers of 2026-11-19 (32): who is set to building, one a member
+   for I in 1 .. N_Members loop
+      Put_B (Band (I).Build_First);
+   end loop;
+   --  how far the foresters look for a tree (33), and whether they look further than the work radius
+   Put_F (Wood_Reach);
+   Put_B (Wood_Far_On);
+   Put_F (Wood_From);                        --  (34)
+   Put_F (Food_Reach);                       --  (35)
+   Put_F (Haul_Reach);
+   Put_B (Turn_On);                          --  (36: whether a hovel beside a path at 45 degrees is turned)
+   Put_B (Turn_Ground_On);                   --  (37: and its ground made where it is drawn)
+   Put_B (Keep_Off_On);                      --  (37: and that ground kept off by who walks)
+   declare                                   --  (and the trees none could get to, each until when)
+      N : Natural := 0;
+   begin
+      for K in 1 .. N_Trees loop
+         if Trees (K).No_Way_Till > Tick_N then
+            N := N + 1;
+         end if;
+      end loop;
+      Put (Unsigned_64 (N), 2);
+      for K in 1 .. N_Trees loop
+         if Trees (K).No_Way_Till > Tick_N then
+            Put (Unsigned_64 (K), 2);
+            Put (Unsigned_64 (Trees (K).No_Way_Till), 4);
+         end if;
+      end loop;
+   end;
+   --  (38: whether the band is told of ways that are not there, and what it has been told)
+   Put_B (Ways_Told_On);
+   declare
+      N : Natural := 0;
+   begin
+      for T of Told loop
+         if T.Until_Tick > Tick_N then
+            N := N + 1;
+         end if;
+      end loop;
+      Put (Unsigned_64 (N), 2);
+      for T of Told loop
+         if T.Until_Tick > Tick_N then
+            Put (Unsigned_64 (T.Id), 4);
+            Put (Unsigned_64 (T.Until_Tick), 4);
+         end if;
+      end loop;
+   end;
+   Put_B (Yard_Turn_On);                     --  (39: whether a stockyard beside a path at 45 degrees is laid out along it)
+   Put_B (Hovel_Walk_On);                    --  (40: whether a hovel placed turned is walked where it is drawn)
+   Put_B (Smooth_Covers_On);                 --  (41: whether a storehouse begun from now on has its coverings'
+   Put_B (Fence_Pieces_On);                  --  roofs smoothed, and its fence laid in pieces along a turned yard)
+   Put_B (Box_On);                           --  (42: whether the player's stockpile is put down whole with its
+   for Z in 1 .. N_Zones loop                --  path, and the frame of each zone that was)
+      Put_B (Zones (Z).Placed);
+      if Zones (Z).Placed then
+         Put (Unsigned_64 (Unsigned_16'Mod (Zones (Z).Fx)), 2);
+         Put (Unsigned_64 (Unsigned_16'Mod (Zones (Z).Fy)), 2);
+         Put (Unsigned_64 (Zones (Z).Way), 1);
+         --  (the square the colony was founded on, where it was founded with its walls outside its
+         --  floor: that, and the rings kept outside its four sides, two bits a side, over the blocks
+         --  of its frame, which are fewer than 128.  A square of before the rule, and every other
+         --  zone, is saved as it always was, to the byte.)
+         Put (Unsigned_64 (Zones (Z).Along_B
+                           + (if Z = Camp_Zone_N and then Camp_Square and then Square_Outside
+                              then 128 + 256 * (Square_Strip (1) + 4 * Square_Strip (2) + 16 * Square_Strip (3)
+                                                + 64 * Square_Strip (4))
+                              else 0)), 2);
+      end if;
+   end loop;
+   Put_B (Camp_Square);                      --  (43: whether the colony was founded on a square)
+   for Z in 1 .. N_Zones loop                --  (46: which stockpiles are ordered removed)
+      Put_B (Zones (Z).Leaving);
+   end loop;
+   Put_B (Full_On);                          --  (45: whether a house begun from now on has the fuller truss,
+   for H in 1 .. N_Houses loop               --  and which houses have)
+      Put_B (Houses (H).F.Full);
+   end loop;
    declare
       Result : constant Bytes := Buf (0 .. Size - 1);
    begin

@@ -2,8 +2,8 @@
 
 - Packages: Castle.Colony, Castle.Actions, Castle.Scenario
 - Source: `src/castle-colony.ads` (the tunables and capacities), `src/castle-colony.adb` (state, helpers, and a stub per larger subprogram: the index), `src/castle-colony-<name>.adb` (one subprogram each)
-- Check: colony_check (635 checks, about 85 s); colony_run --expect for runs on the real world; tools/reference_check.sh
-- Saves: the colony blob, version 25, inside the game save
+- Check: colony_check (1,110 checks on 2026-11-23); colony_run --expect for runs on the real world; tools/reference_check.sh; tools/today_check.sh (the game as it is played); the three site scripts
+- Saves: the colony blob, version 46 on 2026-11-23, inside the game save (30 to 45 still read; 18 to 29 refused)
 - Stage: stages 1 to 3, 4R, 5a to 5c, and the camp and zones work of 2026-11-10 (Handoff_2026_11_07_ui.md, _08_stage_2.md, _08_stage_3.md, _09_stage_4R_runner.md, _10_stage_5a_scaffold.md, _10_stage_5b_skills.md, _10_stage_5c_demand.md, _10_camp_and_zones.md, _10_paths_and_reach.md, _11_hands_and_level.md)
 
 ## The colony
@@ -19,8 +19,11 @@ wood.
 
 * **The homestake.** Homestake in the tools panel, then a click on the
   ground (or "Raise the homestake here" in the ground's menu): a post
-  1.75 m tall is raised there and the band (six by default,
-  one of them old) arrives round it, none assigned, each with a name of
+  1.75 m tall is raised there and the band (thirteen by default since
+  2026-11-17, `Castle.Colony.Arrivals`: John, "So we need 13 starting
+  serfs, basically the player begins by delegating the tasks, as we have
+  done"; six before, and six in the reference runs and the stress test,
+  `--band 6`) arrives round it, none assigned, each with a name of
   its own (twenty to a sex). Once per colony; the
   stake is the middle of everything that follows.
 * **Paths.** The player plans a path and the band lays it (John,
@@ -161,6 +164,747 @@ wood.
   (`Plan_Stockpile`: the same routine the zoning runs), or its outline in
   red where it would be refused; why is said on the click
   (`Stockpile_Refusal`).
+  * **At least 15 m by 15 m** (2026-11-17; John: "make the minimum zoning
+    area 15x15m for the stockpile, it can be larger the workers will
+    adapt, but that will fit the storehouse with the 5m of staging area at
+    the front, the fence and coverings for the outdoor stocks"). The
+    ground a lot fills (drawn out to its path) has to reach
+    `Stockpile_Least_M` along its path and as far across it, measured by
+    the middles of its block columns, a block and a half spared for a lot
+    aslant the block grid; else "it is too small" (`Too_Small`), its
+    outline red while it is drawn. A tree, a bush or a stone inside leaves
+    its places out but not its size. `--stockpile-least M` (0: any size,
+    as before; `Set_Stockpile_Least`, saved: blob 26).
+  * **Its overflow** (the same day: "for the 5 blocks of overflow, if
+    there is no space in the stockpile, just have them use 5 free blocks
+    around the stockpile as an overflow to set things down so they arent
+    carrything them everywhere, and then they won't collect anymore until
+    space frees up"). Zoned with the overflow on, a stockpile gets up to
+    `Overflow_Places` (5) places more, 1 m square on its lot's own whole
+    metres in the ring just outside it, each wholly on free ground (no
+    path's, no zone's, nothing on it but what grows and is cut, within
+    half a metre of level), those nearest a path first: at the two ends
+    of a lot beside its path. Their ground is the zone's (other zones and
+    paths stop at it, it is outlined with the zone, and the zone's size
+    counts it); they are its places, flagged (`Cell_View.Overflow`; the
+    zone's sheet has a row "Overflow"). A load goes to an ordinary place
+    while one takes it, and only then to an overflow place (`Go_Store`,
+    the butchering's); scripted supplies never go there (`Supply`), nor
+    does the lord's cart. What is taken out of the stores, to eat, to cook
+    or to build, is taken from an overflow place first (`Go_Eat`,
+    `Go_Take`), so it empties first. **Nobody sets out to bring in a kind
+    without room for a whole load of it in an ordinary place**
+    (`Room_For`: a porter, a hunter and a forester hauling already asked
+    it, for one more; now for a load, and of an ordinary place); a
+    gatherer and a porter also count the loads of that kind already being
+    gathered (`Room_To_Set_Out`: without it four gatherers went for the
+    last room and three came home to none). **The overflow is a signal**
+    (his answer the same day: "So the overflow, signals to the serfs,
+    don't carry anything else to the stockpile, they can go spend their
+    leisure time at the campfire if they aren't doing anything else, if
+    they are carylrying something put it in the overflow and do the same.
+    When space opens up in the stockpile someone can move it from the
+    overflow to the stockpile. And then once a spot opens up at the
+    stockpile, people can go back to work."): while an overflow place
+    holds anything or has a load coming (`Overflow_Busy`), nobody sets out
+    to bring anything in, whatever its kind (`Room_For` is false for
+    all). One with nothing to do for want of room (a gatherer, a porter,
+    a hunter, a forester with logs to haul) moves a load out of the
+    overflow into an ordinary place that has room for it
+    (`Go_Clear_Overflow`, counting the loads already on their way), and
+    otherwise spends its leisure about the camp, or the stake with no
+    camp yet (`Wait_For_Room`: `Rest`), saying "the stockpiles are full".
+    With the overflow empty and room again, it goes back to work. One that
+    fends picks as before (it eats what it picks). What a serf does when
+    the five are full too he has not said: it stands with its load as
+    before (0.2 serf-hours in the runs measured: below). `--no-overflow`
+    (`Set_Overflow (False)`, saved: blob 26): no overflow places, and a
+    gatherer picks with nowhere to put it, as before.
+  * **What was measured** (`colony_run --store-stats`, 41 days at the
+    reference site, a band of thirteen with housing on both sides of a
+    path west): on a stockpile of 15 m by 15 m no load ever found no
+    place, with the overflow or without (45 of 222 places in use at the
+    end). On one of 18 places (`--stockpile-least 0`, so that it fills)
+    without the overflow the band stood 2,104 serf-hours with a load and
+    nowhere to put it (berries most of it), with it none: 23 loads went to
+    the overflow, and the band stood 844 serf-hours empty-handed for want
+    of room instead. The crowd of forty-eight on the same 18 places, 20
+    days: 245 serf-hours then none (19 loads to the overflow). Nobody died
+    in any of them. With the overflow a signal and moved back (the same
+    18 places): 0.2 serf-hours held; the overflow held something 135 of
+    984 game hours, at most three places of it, 42 loads moved back into
+    the stockpile, nothing in it at the end; the band stood 1,616
+    serf-hours empty-handed for want of room (about the camp); the crowd
+    630, its overflow busy 18 hours. Hides and earth leave the overflow
+    the same way, when a place opens for them.
+  * **The storehouse** (the stockpile's second pass, 2026-11-17; John:
+    "On the second day, the advisor asks the player to zone more area, if
+    the stockpile isn't big enough, to build the storehouse, the stockpile
+    will then be "upgraded" if it meets the requirements, the builders will
+    build a stockhouse, compact the land of the stockpile, build a fence
+    with a gate, build coverings for outside materials, etc... Stockhouse
+    gets a wood floor", "But we aren't doing the player and advisor thing
+    just yet, so just simulate the request", "make the stockhouse some
+    reasonable size, 5x10m same as the houses, but door is on the end of
+    the warehouse, path to the door"). At `Store_Morning_H` (7 h) on the
+    day after the stake's, the request is made (`Ask_Storehouse`, from
+    `Advance`, once a colony second): the first stockpile whose places make
+    a lot at least `Storehouse_Lot_M` (15 m) by as much, square to the
+    block grid, with ground for the storehouse at one end
+    (`Place_Storehouse`, by `Try_Lot` as a hovel's site is found), is
+    upgraded; with none the request stands and is made again every game
+    hour, so a stockpile zoned large enough later takes it within the hour.
+    The advisor is a note (`Storehouse_Note`, its key `Storehouse_Note_Key`:
+    the game says it at the foot of the screen when the key moves, the
+    runner logs it as "advisor, day D at H h: ..."): "The storehouse goes on
+    stockpile N: ..." or "A storehouse wants a stockpile of 15 m by 15 m
+    ...: zone more ground". A stockpile is named by its number among the
+    stockpiles (`Stockpile_Number`), the player seeing no zone's number.
+    **The storehouse is a house of another kind** (`Castle.Buildings`:
+    `Building_Kind`, `Storehouse_Design`; `habitation.md`, "The
+    storehouse"): 5 m by 10 m at the end of the lot nearest the stake, its
+    length running back from the path, its door of 2 m in the end toward
+    the path, `Store_Yard_B` (4.5 m) of staging before it to the lot's
+    front. **The places under it and before it are closed** (`Cell.Closed`,
+    `Cell_View.Closed`): nothing is put there, what lies there is taken
+    first (as from an overflow place), and its builder carries what is left
+    there into the stockpile before its ground is made ready
+    (`Go_Clear_Closed`). Then the builders raise it as they raise a hovel,
+    from the stores, and its yard after (below); it is nobody's home and
+    counts for nothing in housing. `--no-storehouse` (`Set_Storehouse
+    (False)`, saved: blob 27, 28 since): none asked for, as before. The reference
+    runs, the stress test and the look costs run with it off.
+  * **What it cost the band** (41 and 50 days, the reference site, the
+    band of thirteen with housing, 15 m by 15 m): asked at 7.0 h on the
+    second morning (day 21), begun by one builder, standing five days on
+    (18 logs, 43 sheaves); nobody died, six hovels stood by day 41 with it
+    or without. **But the fence's one gate lengthens the band's walk**:
+    its work lies south of the stockpile and the gate is on the north by
+    the path, so every load from the south walks round. Over 50 days with
+    it: 104,321 of stew cooked against 113,980 without the storehouse,
+    18,099 berries eaten raw against 10,993, 2,181 hungry serf-hours
+    against 1,116, confidence at its lowest 25 % against 59 % (the first
+    winter); 26,955 routes planned in 41 days against 31,031 with no fence
+    (fewer trips), 7.05 million floors looked at against 4.10 (longer
+    ones). With the storehouse and no fence (a scratch build): 111,256 of
+    stew, 1,262 hungry serf-hours, lowest 44 %. So the fence is most of
+    the cost, the places closed the rest. A second gate is his call
+    (`docs/handoffs/Handoff_2026_11_17_storehouse.md`); he set it aside
+    for now ("we don't need to worry about travel distance right now or
+    winter survival, just yet").
+  * **The storehouse used** (the third pass, the same day;
+    `docs/handoffs/Handoff_2026_11_17_storehouse_used.md`). When it
+    stands its stockpile's places are fitted out (`Fit_Storehouse`;
+    `Cell.Fit`, `Cell.Made`, `Cell_View.Fit`, `.Made`, `.Wall`): inside on
+    its plank floor (the row by the door kept clear) a shelf of
+    `Shelf_Places` along each long wall for hides, barrels in the two back
+    rows (`Water_Barrels` for water, the rest for meat), the rest floor for
+    baskets and sacks of salt (John: "they can just be stacked in the
+    baskets in the storehouse by the stockman"); in the yard, the places
+    under a covering (`Cover`, `Cover_Holds` times a place's own) and those
+    along the outside of its long wall (`Lean`, a ladder each). **What a
+    place takes is one test, as before** (`Takes`, now `Open_To` and
+    `Room_In`, by `Place_Limit`): an ordinary place anything but water, a
+    water barrel water; a place fitted out takes only what it is for
+    (`For_Fit`) and only from the stockman (`Keeps`, in `Go_Store`); `Supply`
+    only ordinary places. Anyone takes from any place. **The stockman**
+    (`Choose_Keeper`, `Think_Keeper`, before a porter's work; `Is_Keeper`,
+    `Trade_Of` = `As_Stockman`): the porter with the most portering; the
+    overflow, the cart to the storehouse's front and its salt in
+    (`Go_Tow_Front`, `Go_Unload`, `Cart_At_Storehouse`), then the yard
+    sorted (`Go_Sort`: from an ordinary place, or one fitted out for
+    something else, a load no larger than the room for it). `--no-stockman`.
+    For development one can be named by hand (`Name_Stockman`, 2026-11-22:
+    a porter, the stockman whatever its portering for as long as it lives
+    and porters; named before the storehouse stands, its stockman from the
+    moment it does: nobody is, and `Stockman` is 0, until then).
+    **The carpenter** (`Choose_Carpenter`, `Think_Carpenter`, `Step_Fitting`,
+    states `To_Fitting`, `Fitting_Out`, work `Joinery`; `As_Carpenter`): the
+    storehouse's builder, else the free forester with the most building;
+    no house; a log from the stores (`Free_For_Building`) to each shelf and
+    barrel, made there (`Shelf_S`, `Barrel_S`); the logs in the stores'
+    once rows (`Fittings_Left`). `--no-carpenter`. Named by hand likewise
+    (`Name_Carpenter`: a forester; a house it was building is left to
+    another builder, then or when the storehouse stands). **Water**: `Wanted`
+    gives a porter water after straw and stone while the water barrels
+    have room (`Room_To_Set_Out (Water)`). `--no-water`. Saved: blob 28.
+    The runner logs who and when ("stockman, day D at H h: ...",
+    "carpenter, ...") and what the storehouse holds on its `storehouse:`
+    line. Measured: standing on day 25, its stockman and carpenter the same
+    second, the cart at its front half an hour on, the fourteen shelves and
+    barrels made in 43 hours; nobody died in 50 days.
+  * **His playtest notes, 2026-11-17, built 2026-11-18**
+    (`docs/handoffs/Handoff_2026_11_18_playtest_round.md` has the notes
+    whole, each fault as it was reproduced, what was measured and his
+    calls). **What is said above of the overflow, the 15 m and the
+    storehouse on a stockpile is how it was; this is how it is.**
+    - **The player's stockpile is placed once, ten metres square** ("a
+      onetime placement of a 10x10 zone"): `Place_Stockpile (X, Y)`, one
+      click beside a path (within `Square_Snap_M` of its middle): the
+      square on the click's side of the nearest path, its front on the
+      path's edge, on the whole metres of its lot (`Square_Of`), then
+      zoned as any stockpile is; refused once a stockpile is zoned
+      (`One_Stockpile`, `Stockpile_Count`; `Plan_Stockpile_At` for the
+      preview). `Zone_Stockpile` (two corners, any size) is the scripts'
+      and the checks'. No overflow unless `--overflow`; no least size
+      unless `--stockpile-least`.
+    - **The stores' last places are kept** ("use the last 10 blocks as a
+      singal to the serfs to slow/cease production"): while the empty
+      ordinary places (`Empty_Places`) are no more than `Kept_Places`
+      (`Last_Places`, 10, and never more than a tenth of the ordinary
+      places), `Ordinary_Loads` counts no empty place, so
+      `Room_To_Set_Out` is true only of a kind that has a place of its own
+      with room; `Room_For` (a load in hand or lying out) still takes any
+      place. A gatherer, a porter, a hunter and a forester about to fell
+      ask `Room_To_Set_Out`; held back, they say `Nearly_Full` ("the
+      stockpile is nearly full: nothing more brought in") and rest
+      (`Wait_For_Room`). One test says whether the band waits for room at
+      all: `Room_Gated` (the overflow on, or places kept).
+      `--last-places 0`: none kept, as before.
+    - **The storehouse stands on a stockyard** ("Keep stockpile, move
+      storehouse to a new stockyard zone"): a stockpile's zone marked as
+      the yard (`Zone_Rec.Yard`, `Zone_View.Yard`, `Stockyard`):
+      `Zone_Stockyard (X0, Y0, X1, Y1)`, a lot square to the block grid
+      whatever way its path runs (`Plan_Stockyard_Lot`: `Plan_Lot` with
+      `Clear_All`, which takes ground that things stand on), 15 m to 25 m
+      a side, its side nearest a path drawn out toward it by
+      `Yard_Snap_M` (the fill stops at the path), its own lot within a
+      metre of the path somewhere along that side; one, placed once; its
+      places closed until the storehouse stands; **refused if no
+      storehouse could stand on it** (`Place_Storehouse (.., Try_Only)`).
+      `Ask_Storehouse` looks for it on the second morning and every game
+      hour, and `Zone_Stockyard` begins the storehouse at once if it has
+      been asked for. How it is laid out, levelled and fitted out is in
+      `habitation.md`, "The storehouse". `--stockyard X0 Y0 X1 Y1`.
+    - **The player's stockyard is put down whole, twenty metres square with its path** (John,
+      2026-11-21: "For the stockyard, lets expand the zones to 20x20"; `Place_Box` with
+      `Stockyard_Box`, the spec's "placements"; `Set_Yard_Box`, `--no-yard-box` is the two corners;
+      `--stockyard-box X Y WAY`; no blob change). Held by its middle, turned by Z and X, drawn to a
+      path as a stockpile's box is; 80 blocks of front squarely, 57 slanting ones (20.15 m) at 45
+      degrees; its four hundred places on its own whole metres from its front's beginning, all of
+      them or none.
+      - **Its storehouse is tried on the planned ground before anything is laid**
+        (`Try_Store_On_Plan`, in `Plan_Box_Lot`, while the box's own path still counts as lying
+        there): `Lot_Grid_Of_Plan` is the grid `Try_Lot` works on, made from the plan as
+        `Lot_Grid_Of_Zone` makes it from a zone. So the ghost refuses what the click would
+        ("its ground will not take the storehouse"), and no path is laid for a stockyard that is
+        then not taken. Two corners still learn it after the zone is made, and take it back.
+      - **Its front is the side its own path lies along** (`Front_Of_Zone`: a placed zone lies on
+        the left of its way), whatever other path is as near another side: a stockyard zoned
+        between two corners fronts the nearest path's side, first found south, north, west, east
+        (a box turned north from the end of a path that then runs along its south side would front
+        that). `Store_Squarely` and `Store_Turned` work the storehouse out from a lot's bounds and
+        that way; `Place_Storehouse` and the plan's trial both go through them, from the same
+        bounds, read off the places (a placed lot's metres are its own, not the world's: at 45
+        degrees they are not whole numbers along and across, and are not rounded).
+      - **Measured** (`colony_run --box-stats`, `Storehouse_Lie`): at each of the eight ways and
+        with its middle on each quarter of a metre, four hundred places and the storehouse 4.5 m
+        from its path's edge (to 4.75 at 45 degrees, where its ground is stepped), 10.5 m of yard
+        behind it, 4.75 and 5.25 m beside its ends. A stockyard between two corners has the ground
+        drawn out to its path before it: 5.0 m where its corner was given on the whole metre.
+        **Those are the storehouse of before** (`--storehouse 10 5 4.5`). Since 2026-11-21 it is
+        12 m by 8 m, 1.5 m from its path (`Set_Store_Size`; his "so that it is now 8x12";
+        `habitation.md`, "The storehouse twelve metres by eight"): 1.5 m before its front wall,
+        10.5 m of yard behind, 3.75 and 4.25 m beside its ends; along a path at 45 degrees 3.5 m
+        before it and 8.5 m behind, because its own blocks stand square to the grid and must all
+        lie on its stockyard's ground.
+      - **Over the lord's cart it is refused by name** ("the lord's cart stands on it"): a
+        stockyard is all of its lot. A stockpile's box is laid round the cart.
+      - (`--yard-census-corners M` counts stockyards zoned between two corners, M metres a side,
+        in the place of ones put down whole; `--yard-walls` with either says where each taken
+        stockyard's stone stands and how its path lies at its front's two ends and middle.)
+      - **What it costs.** `colony_run --square-scan R STEP --yard-census` holds one against each
+        side of every square of the scan's grid, along that side's own path: of 1,292 sides at
+        the ten places 845 take one (two corners of 20 m: 848; of 15 m, the least there is: 985;
+        a stockpile's box: 1,288); the others: no storehouse could stand 98, ground that cannot
+        all be taken 319, no ground for its path 30. The plan and the click disagreed at none.
+        Holding it costs the frame 1.3 ms of the main thread and 0.3 ms of the card (a
+        stockpile's box 0.4 and none): its plan fills four times the ground (2.1 ms a plan
+        squarely and 2.4 at 45 degrees on the mean over those 1,292, a stockpile's 0.85 and
+        0.94).
+    - **A stockyard's stair stands in a corner of the zone** (John, 2026-11-21: "The path level at
+      one corner is great, move the stair to the opposite corner instead of the center, if a stair
+      is to be had it's to be at the corner of the zone", and "I was talking about the stockyard
+      having the stair in the corner rather than the middle"; the spec, "The stockyard's stair in a
+      corner of the zone"; `Set_Yard_Stair_Corner`, `--yard-stair-middle` is as it was; not saved).
+      A stockyard's way in was two metres at the middle of its storehouse's front, across the
+      staging, with steps wherever the path lay more than a block off the floor there; the
+      storehouse's doors are in its ends. The floor's level is chosen as it was (by the land and by
+      the path at that middle), and a stockyard with no steps there is as it was. One that would
+      have steps there has its way in at an end of its front instead: two metres wide, a block
+      column in from the side's rim, a block a step from the path's edge inward, as many steps as
+      there are blocks between path and floor at that end (two to eight), on past the line of the
+      front wall beside the storehouse's end where the flight is longer than the staging is deep.
+      Which end: where the path comes in level at one, the other (the opposite corner); with a
+      bank at both, the lower (of two as high the nearer the homestake); where an end is level and
+      no end takes a stair, none. Only of a stockyard that is levelled (`--no-yard-level`: its way
+      stays at the middle). A storehouse keeps the way it was begun with
+      (`Castle.Buildings.House.Way_End`, in spare values of its byte of blob 41). At the ten
+      places 115 of 828 stockyards had steps at the middle: 114 have a stair in a corner now (365
+      steps for 296, 123,041 blocks of stone in all the stockyards for 126,866), none a pit, and
+      the way from the fire into the storehouse is shorter at 35 of them and longer at 21.
+      `colony_run --yard-map`, `--yard-pits`, `--yard-built`; the handoff of 2026-11-21 has the
+      counts.
+    - **A stockyard's floor at its path's level at the lower corner of its front** (John,
+      2026-11-22: "Set the floors level of the stockyard to the path level at the lower corner, the
+      higher corner along the path gets the stairs", and "After 2m no stair built"; the spec of
+      that name; `Set_Yard_Floor_Low`, `--yard-floor-by-land` is the rule above alone; not saved).
+      The floor is no longer chosen from the land under the stockyard and held to three steps of
+      the path at the middle of its front: it is the row of the path at the lower of the front's
+      two corners (the path's own nearest block column beside the way's two metres there, the
+      middle one of the eight: `Path_At`), so the path comes in level there at every stockyard;
+      the stair stands at the other corner where the path stands two to eight blocks over the
+      floor, down from the path; over eight, two metres, none, and the level corner is the way in;
+      a front level from corner to corner keeps its way at the middle of the storehouse's front.
+      The row is read once, when the storehouse is begun, and kept with it. A stockyard put down
+      whole reads its front by the line of its own path, laid or not. **A floor can stand over
+      the land**, filled and held up by its walls; nothing but a fall of more than 3 m from end to
+      end refuses one put down whole. At the ten places: 839 stockyards taken for 828, 195 stairs
+      for 114 (692 steps for 365), half as much stone again (177,492 blocks for 117,954), a floor
+      moved at 319 of 828; built on the spot, no pit. **Where the staging's rim is a wall the
+      lord's cart has no place before the storehouse** (its bed wants a block clear of anything
+      higher on every side, and a metre and a half less a block of wall is too narrow): it stays
+      where it stood; squarely at 50 stockyards of the ten places for 30 before. The handoff of
+      2026-11-22 has the counts.
+    - **The stores move in** ("change all deliveries and pickups to the
+      stokyard from the stockpile"): when the storehouse stands
+      (`Finish_House`) every stockpile's places are closed (`Cell.Closed`:
+      nothing put there, taken from first); a load at a time is carried
+      over (`Go_Move_In`: `Go_Clear_Closed` over the stockpiles) by the
+      stockman before it sorts and by a porter with nothing else to
+      fetch. `Set_Stores_Move`, `--stockpile-stays`. The band's hunger over
+      50 days goes by which of the two is nearer the camp (the handoff's
+      table: 2,430 hungry serf-hours against 1,019 with the stockyard 20 m
+      further off; 1,000 against 1,779 with it nearer).
+    - **A bush takes as many pickers as it has basketfuls** (`Bush_Free`,
+      `Pickers`; `Set_Bush_Sharing`, `--one-to-a-bush`): he found
+      gatherers standing by ripe berries ("Gatherers can't find berries
+      even when they are close"); a bush was one gatherer's.
+      `Reserved_By` is one of its pickers (another takes it over in
+      `Release`).
+    - **Why one is idle is said as nearly as it can be**: a hunter with
+      deer in reach whose herds are all down to `Spare_Last`
+      (`Herds_Breeding`), or whose herd it has just shot at
+      (`Herd_Settling`); a gatherer held back by room (`Nearly_Full`,
+      `No_Room`), by no way (`No_Way`), by bushes with their pickers
+      (`Bushes_Taken`), and only then "nothing to gather in reach".
+    - **A plant is cut whole** (`Cut_Plants`) wherever ground is cleared
+      (a stockpile's places, a path, a yard beaten; the camp's zoning
+      with the band's labour on), and a porter cuts long grass from the
+      top of its tuft (`Set_Top_Cut`, `--no-top-cut`): the upper block
+      of a tuft two high was left standing on air.
+      `colony_run --floating` counts plants over air near the stake.
+    Colony blob 30 (18 to 29 refused).
+  * **The next pass of his notes (2026-11-19; `docs/handoffs/Handoff_2026_11_19_next_pass.md`).**
+    - *A path levelled as it is laid* (`Set_Path_Level`, `--no-path-level`; "paths still need to be
+      leveled as well to elimiate small bumps and holes in the road, some holes get filled, others
+      don't"). The path has a line of its own: at each quarter metre along a stretch the middle
+      height of the ground across its width (closed hollows filled first), smoothed over
+      `Path_Level_Span_B` (a metre) before and behind. Each column laid is cut or filled to that
+      line where it is within `Path_Level_B` (half a metre) of it and no water lies in the way: a
+      bump or a dent is gone, a slope keeps its steps, the path is level across its width. Only a
+      metre laid from now on.
+    - *A path stepped where it meets trodden ground* (2026-11-23; `Set_Paths_Meet`, `--no-paths-meet`,
+      not saved; `Step_Seams`, at the end of `Lay_Metre`; his "we need to figure out a way to handle how
+      paths and zone buildings meet up ... we have the .5m jumps where a path is extended from square").
+      A metre of path is brought to its own line and the square's path to its floor's level, each by
+      itself: where one met the other, or the land stepped two blocks under one, trodden ground lay
+      half a metre off the trodden ground beside it. When a metre is laid the columns of path within
+      `Meet_Reach_B` (two metres) of it are looked at again: one that stands two blocks or more over
+      trodden ground beside it has a block cut off it, one that lies two blocks or more under ground
+      that is never moved has a block of earth put under it, and so on until none does or it has been
+      moved `Meet_Most_B` (two) blocks. A jump of half a metre becomes two steps of a quarter, a
+      quarter metre apart. A column at the edge of what is looked at is never moved (what lies beside
+      it out there is not seen). **Never moved: the square's own path, the strips kept for its walls, and
+      any zone's ground** (a floor, a door's way). Counted at eight layouts of a square with housing
+      along and off its path, sixteen days each (`colony_run --seam-stats`: pairs of block columns
+      side by side, both with footpath on top, two blocks or more apart): 33 in all before (14 where
+      two paths leave the corners of the square of the game as it is played), 8 with this rule and
+      the next, all eight where a hovel fronts the square's own path.
+    - *Making way* (`Set_Make_Way`, `--no-make-way`; "need make sure serfs have a way to continue
+      their work if they meet obstacles"). A builder lays no block where someone stands, and waited
+      for as long as they stood (nineteen game hours, made up in the check). One standing still
+      there is put on the nearest free ground of the same zone from which there is a way to the
+      stake, and goes on with what it was doing. `Builders_Blocked_S`, and `colony_run --who` at its
+      end, say how long builders have waited: never, in 41 days of the band of thirteen.
+    - *Ground taken out of the housing* (`Unzone_Housing`, `Mark_Hovel`, `Hovel_At`; "Add away to
+      delete parts of a zone, and if a structure exists, mark a structure for razing"). Housing only.
+      The block columns in the box leave their zone, the lots still to begin are laid out anew, a
+      hovel begun or standing there keeps its lot and is marked. **The mark is a label: nothing is
+      taken down.** A zone left with no ground keeps its place in the list and is the next housing
+      zoned.
+    - The band's lists name a serf by its trade while it has one (`Castle.Views.Job_Label`).
+    Colony blob 31; a blob of 30 is still read.
+  * **His answers of 2026-11-19 (`docs/handoffs/Handoff_2026_11_19_answers_round.md`).**
+    - *Razing* ("limit razing buildings to unowned, this happens when a serf passes to a new job
+      and they house somewhere else, for example when the farm is built"). Only a hovel nobody owns
+      is marked (one still being built is nobody's); one lived in is refused, and the box that takes
+      housing out leaves it with its lot (`Unzone_Lived_In`). A marked hovel is taken down: nobody's
+      to draw, asking for nothing, its builder before its door taking its blueprint's blocks off in
+      reverse, twice a bout's laying to a bout; what they took lies at the site; at nothing, half
+      goes to the stores (`Razed_Came_Back`), the hovel leaves the list (`Remove_House`: every later
+      house a number lower) and its lot the zone. The mark lifted, it is built up again.
+    - *Jobs* ("serfs fill jobs as the have been, as the are needed, dictated by skill ... the player
+      won't need to delegate further, past opening positions"). The opening jobs are the player's;
+      a builder is the forester best at building, the stockman the porter with the most portering,
+      the carpenter whoever raised the storehouse (by skill since his next answer, below). For development a forester can be set to building
+      (`Set_Builder`): it takes a house before any not so set.
+    Colony blob 32; blobs of 30 and 31 are still read.
+  * **Foresters with no tree in reach, and paths straight or at 45 degrees (2026-11-19;
+    `docs/handoffs/Handoff_2026_11_19_foresters_and_paths.md`).**
+    - *How far a forester goes for a tree* (`Set_Wood_Reach`, `--no-wood-reach`, `Fell_Reach_M`;
+      "Still having issues with the foresters not finding trees in range"). A felled tree does not
+      grow back, and work was looked for within `Work_Radius_M` (60 m) of the stake: at the
+      reference site the band of thirteen had felled every tree that near by its hundred and
+      thirtieth day, with 189 standing 60 to 80 m off, and a stake on open land has few to begin
+      with. A forester with no tree left to fell that it can get to looks a ring further
+      (`Reach_Step_M`), and another, to `Fell_Reach_Max_M` (124 m) at the most; the reach never
+      comes back in. The colony's ground (`Ground_Reach_M`) and what it looks through
+      (`Index_Some`) reach as far. The choice among the trees in reach is as it was. A tree
+      somebody else is felling is no reason to look further. A tree's way is asked with `Refuse`
+      (the walking map's pieces of ground alone say out of reach: no search) and a budget
+      (`Fell_Budget` floors: a tree 70 m off and 330 m round by a ford is left); one there is no
+      way to is nobody's to try for `Tree_No_Way_S` (an hour), one with only a long way round for
+      `Tree_Round_S` (a day), unless the forester that found it so has no short way home itself.
+      `Fell_Tries` trees are asked in one thought at the most, `Fell_Round_Tries` of them by a
+      search that ran out. Why it has no tree is said (`Why_Idle`: `Trees_No_Way`, `Trees_Taken`,
+      `Trees_Spared`, `Trees_Further`; "no trees to fell in reach" only when there are none).
+      `colony_run --tree-stats` is the measure. Off, `Go_Fell` is as it was to the line.
+    - *A path's line* (`Castle.Actions.Path_Snap`, `--no-path-snap`, `Path_Line_Start`,
+      `Path_Line_End`; "I think we need to lock the paths to straight and 45 degree angles,
+      slighty being off doesn't really work in a voxel world"). An order to lay a path is laid
+      along the nearest of the eight ways, a whole number of blocks long, from a corner of four
+      blocks: four blocks across all along when straight, five at 45 degrees with a step a
+      block. A line begun on a path begins on its middle line (by its end, at that end); one
+      drawn up to a path ends on its middle line. Both functions give back a point that is such a
+      point already, so the tool's line and the order are one line. `Lay_Path` itself lays any
+      line (the checks and `tools/stockyard_sites.sh`'s first site do); the rule is not saved.
+      **The height of a line's point under a tree is the ground's under it** (`Line_Point`;
+      `Set_Line_Ground`, `--no-line-ground`; 2026-11-22): the walking map's first floor there is
+      a bough, and a stretch whose end had a bough's height looked for the ground of its metres
+      by that end four and five metres up and found none (never counted, never laid: 4 of some
+      1,680 parts of the paths of stockyards put down whole at ten places, none now).
+      Beside a path at 45 degrees a house stands square to the blocks, stepped back, and fewer
+      fit; a stockyard there is taken only where a corner of its box comes to the path (none of
+      ten boxes on the hillside east of the reference stake). (A hovel there is *drawn* turned to
+      the path since the same day, its ground made where it is drawn: `habitation.md`.  And since
+      2026-11-20 **a stockyard there is laid out along the path**, its yard made for real, its
+      storehouse drawn turned and walked where it is drawn: `Set_Yard_Turn`, `--no-yard-turn`,
+      blob 39; `habitation.md`, "A stockyard along a path at 45 degrees".  Later the same day a
+      turned hovel is walked where it is drawn too, `Set_Hovel_Walk`, `--no-hovel-walk`, blob 40; a
+      stockyard's coverings' roofs are smoothed by its builder and a turned one's fence drawn along
+      the path, `Set_Smooth_Covers`, `--no-smooth-covers`, `Set_Fence_Pieces`, `--no-fence-pieces`,
+      blob 41; `colony_run --turn-stats` says a walked house's serf-seconds in a wall as drawn and
+      whether its bed is got to by its door, and a storehouse's pieces; `habitation.md`, "Turned
+      hovels walked where they are drawn; a stockyard's pieces".)
+    Colony blob 33; blobs of 30 to 32 are still read.
+  * **Zones put down whole (2026-11-20; `docs/handoffs/Handoff_2026_11_20_placements_with_paths_and_the_square.md`;
+    his words: "let's lock the size of the stockpile, if the player places it, it will be a square box,
+    lets fix the path artifcats by including the path in front of the stockpile, the player can rotate
+    the placement ... Along with a warning for overlap ... and allow us to make the angled zones their
+    own grid").** The spec's section "placements" is the description; in short:
+    - `Box_At (Kind, Middle, Way)` says where a box held by its middle and turned one of the eight
+      ways lies: its path a stretch along its front (from a corner of blocks, a whole number of blocks:
+      40 straight, 29 aslant for 10 m), the box on the left of that way from the path's edge back. It
+      is drawn to a path near it by the least move: along it (its path that path's line, nothing new
+      laid; an end put at the path's end or against a box already along that line), to its end, or to
+      its middle (where the box's own line crosses the path's); where it meets a path so, the box
+      begins as many blocks on as keep it off that path.
+    - `Plan_Box` is what it would take (`Box_Refusal`: no ground, a zone or the cart in its path's
+      way, its box over a zone or a path, no place); `Place_Box` lays what of its path no stretch
+      lies along (`Path_Gaps`) and zones its lot through `Plan_Lot`, its own path taken as lying
+      there. A stockpile's box is a stockpile's zone in every way; a bush or a boulder in it leaves
+      places out. **A tree in it is felled and taken out** (his "fell the tree in the stockpile";
+      `Set_Box_Fell`, `--no-box-fell`, not saved): its foot is the stockpile's ground, the place over
+      it closed until whoever has a place at an extra task has felled it (`Go_Fell_Box`) and its
+      stump and roots are earth; **the stump of a tree a forester felled before the stockpile was put
+      down is taken out the same way** (`Box_Stump`), in the time the tree took to fell. A tree or a
+      stump to take out is one of the reasons `Think` turns to the band's building at all.
+    - The zone keeps its frame (`Zone_View.Placed`, `From`, `Way`, `Along_B`; blob 42).
+    - `Set_Box_Place` (`--no-box-place`: set where the option is read, so a colony the player founds
+      by hand has it too) is the player's tool alone; `--stockpile X0 Y0 X1 Y1` is as
+      it was, `--stockpile-box X Y WAY` puts one down as the tool does, `colony_run --box-stats` counts
+      a placed zone's block columns by whose they are (on open ground all its own, none between it and
+      its path).
+  * **The homestake and the campfire one (2026-11-20; the same handoff; his words: "Let's merge the
+    homestake and the campfire, no physical stake now, lets expand the campfire/homestake, to a 10x10
+    area, terriform so the entire area is flat, and build a path around the perimeter ... it can become
+    the village center, or town square").** The spec's section of that name is the description; in
+    short:
+    - `Place_Square (Middle, Way, Band, Seed)` founds the colony on a square: no post; the stake's
+      place is the fire's, the square's middle, on a corner of blocks, and whatever is measured from
+      the stake is measured from there; the square is the camp's zone (**11 m a side, 11.02 m aslant**,
+      since 2026-11-21: "expand the campfire/homestake square to 13x13m (with the footpath) so the
+      campfire is in the center"; 10 m and 9.96 before, and with `Set_Square_Wide` off, `--square-10`)
+      and **all of it is the camp's floor** (`Camp_Square`): made ready a square metre at a time, dug
+      and filled to one level, trodden bare, before the hearth is built. The square metres are counted
+      from the floor's edges, eleven each way, so the fire stands in the middle of the middle one (on
+      ten metres it stood where four of them met). **A square keeps the size it was founded with**: it
+      is read from its zone's frame, which is saved, never from the size of the day. Round the outside
+      lie four stretches of path, 13 m over all, laid by the band at the square's level where the
+      ground is within half a metre of it (a slice of its width at a time while its banks are walled:
+      below).
+    - Refused where there is water, where the ground lies more than 1.5 m off its middle's (read
+      under whatever stands on it), where a tree's foot or a boulder stands within 4 m of its middle,
+      or where its floor, made level, would lie cut off (no two metres of its edge within a step of
+      the ground beside it: a knoll, a hollow). **A tree on it is felled and taken out** (his answer
+      of 2026-11-20): the band fells every tree on its floor or its path before the ground is made
+      under it, stump and roots are earth from then on, its logs lie on the floor, and the camp is not
+      built while one stands (`Set_Square_Fell`, `--no-square-fell`: off, a tree is left, its foot not
+      the square's ground, and spared by the foresters, as is the tree of any square founded so).
+      A boulder further out than 4 m is left standing. **Bushes on its floor, and what hangs within a
+      serf's height over it of a tree, are cleared at the founding**, and their ground is floor like
+      the rest (a bush left where the floor is filled stands in a pit).
+    - **It is founded on the ground its plan read** (`Set_Fire_Ground`, `--no-fire-ground`; 2026-11-21).
+      A plan's middle has the height of the highest floor there (`Castle.Nav.Surface_Z`: under a
+      crown, a bough or the tree's top); the plan reads the fire's own ground under it (`Top_By`).
+      `Place_Square` hands `Place_Stake` that ground (`As_Read`), beside a tree's foot that stands on
+      the fire's own place the ground by it. Before, the stake was asked for near the plan's
+      middle's height (`Ground_Row`, the highest solid thing within reach): with a bough over the
+      fire's own block column the stake's place was the bough, 4 to 7 m up, the band arrived on the
+      crowns round it ("the floor nearest the square's height") and whoever could not get down
+      starved (11 squares of 323 at seed 1's ten places; somebody said to be starving at 7 of 10
+      run twelve days); with the bough beside that column no ground was found within 4 m and the
+      square its plan had shown as taken was refused (3 more). `colony_run --square-scan` counts
+      squares planned and not founded and fires more than 2 m off their floor's level;
+      `tools/square_sites.sh` fails on either and runs four such squares twelve days.
+    - `colony_run --square-census R STEP` counts the places round a stake that take one;
+      `--square-scan R STEP` (`--square-scan-list` for a line a square) founds one at every place of
+      a grid that takes it, makes its floor and its path on the spot, and asks of every spot round it
+      that can be got to from the fire the way back (a pit), and of the land 14 m off on each side
+      the way to the fire and back. Ten places of seed 1, 524 squares, 1,553 trees felled for them:
+      no pit, no fire out of reach. `--square-pits` looks round this colony's square so at the end of
+      a run (a save's too); `--feet-stats` says who is off the floor under them.
+    - **Its banks are walled with stone, and stairs cut through them** (his answer of 2026-11-20:
+      "stone wall and stair, also step the stone walls towards the higher ground if over 1m. so from
+      lower ground for each 1m of retaining wall step inwards .25"; the spec, "The square's walls and
+      stair"; `Set_Square_Walls`, `--no-square-walls`, not saved). Once the hearth stands, wherever
+      the laid path lies more than a block over or under the floor, the floor's edge is a wall of
+      fieldstone on the square's own outermost quarter metre: against higher ground flush with the
+      path, over lower ground holding the floor up. **A wall over a metre is set back**: counted up
+      from the lower ground, each further metre of it stands a block column nearer the higher
+      ground (aslant: a diagonal row, 18 cm). **A stair** at the middle of each side whose bank
+      there is three to eight blocks over all the stair's width, cut into the floor, a block a
+      step. Nothing is kept: `Plan_Walls` reads what each column is to be from the floor's level,
+      the square's frame and the laid path outside its strip, `Column_Work` what is left to do from
+      the blocks, and the count and the laying go by those two (what cannot be laid is never
+      counted: no wall against a stretch of path still to lay, a boulder, or under a tree; rock is
+      left). **They are built from the bank outward and dug from the path inward** (`Wall_Ready`),
+      so that no half-built wall leaves a place to drop into and not climb out of. The labour is
+      an extra task after the paths, once the fire has been lit (or, with none lit at all, from
+      the colony's third day): a load of stone `For_Wall`, from a
+      stockpile (what the hearth and the houses do not want) or prised off a boulder in reach,
+      carried to the nearest patch that can be worked, a stone sixteen blocks and `Tamp_S` seconds;
+      a carrier is not left off for night or hunger. Whoever stands at a wall's foot is settled on
+      the ground of its own block column (`Own_Ground`), not on the wall's top, which is the
+      walking map's floor there. **With the walls on, a slice of the square's path is brought to the
+      floor's level whole or not at all** (`Lay_Metre`'s `Read_Slices`), so the bank stands at the
+      floor's edge and never along the middle of the path. `colony_run --wall-map` draws the plan
+      and the ground as it stands, `--walls-now` builds camp, paths and walls on the spot
+      (`--camp-now`: the camp and its paths so, the walls left to the band),
+      `--box-stats` says what is left and when they were begun and done; `--square-scan` builds
+      them at every square and counts them. Of the 524 squares at ten places 95 are walled, 30
+      with a wall set back, 38 with a stair (58 stairs), the highest bank 1.75 m: no pit, and the
+      way from the middle of a side's path to the fire and back is 14.7 m at the longest where it
+      was 30.1; the most stone for one is 660 blocks (41 stones), ten stones for a walled one on
+      average.
+    - **A special zone's area is kept whole: the walls stand outside the floor, the path beyond them**
+      (his rule of 2026-11-21: "the area of a special zone like these takes precedent, so if a
+      retaining wall is needed put it on the zones edge, shift the path. So the area of the campfire
+      stays 11x11m + the wall on the sides if needed then the path that follows, the size can change
+      overall"; the spec, "A special zone's area is kept whole"; `Set_Square_Outside`,
+      `--square-walls-inside` is the paragraph above as it stood). A square founded under the rule
+      has a **strip** kept outside each side where that side's bank will want a wall: `Square_Strip`
+      rings, a ring a block column squarely and a diagonal row aslant: squarely one for each lift of
+      the highest wall that side is to have, three at the most; **aslant two wherever a wall is
+      wanted** (35 cm). The wall stands in the strip (against
+      higher ground the lowest lift beside the floor and the top one, flush with the path, furthest
+      out; holding the floor up, a rim flush with the floor and the lower lifts further out), the
+      path lies beyond, the four stretches run between the corners where the four lines meet, and
+      the whole is wider than thirteen metres by as much. Nothing of the floor is wall or ledge;
+      **a stair's steps are still cut into the floor from its edge**, the strip before them a landing
+      of stone at the path's level.
+    - **A square's stair in a corner of the zone, not at the middle of its side: a rule behind its
+      switch, off** (`Set_Square_Stair_Corner`, `--square-stair-corner`; not saved; the spec, "A
+      square's stair in a corner of the zone"). **A square's stair stands at the middle of its
+      side.** The rule was built for the square on his words of 2026-11-21, afternoon ("The path
+      level at one corner is great, move the stair to the opposite corner instead of the center, if
+      a stair is to be had it's to be at the corner of the zone"), which he then said were of the
+      stockyard's stair ("No let's go back to square stair middle, I was talking about the stockyard
+      having the stair in the corner rather than the middle"). What follows is the rule as it works
+      with the switch on. Of a square whose
+      walls stand outside its floor (one with its walls on its own edge keeps its stair at the
+      middle: the wall of the side it would meet in the corner stands on the floor's outermost
+      columns there). **The same sides have a stair as had one**: a side whose bank at its middle is
+      three to eight blocks, all one way, over a stair's width. It stands at one of that side's two
+      ends, the last metre of the floor along it (four block columns from the floor's corner, five
+      where the floor's edge is not the edge of a cell of the walking map; aslant nine diagonal
+      rows), its outer flank the wall of the side it meets there, its landing the strip before it.
+      **It is judged where it stands** (`Plan_Walls`: `Banks` of each side at its low end, its
+      middle and its high end; `Takes`): an end takes it if the bank there is three to eight blocks
+      all one way. So a side whose path comes in level at one end has its stair at the other, **the
+      opposite corner**. Of two ends that both take it: **the one whose corner is not a level way
+      in already** (`Level_Corner`: the path of the side met there within a block of the floor; a
+      side banked from end to end, the next side level where they meet, has its stair at the far
+      end from that corner, though the bank is higher there); else the lower bank; of two as high
+      the end come to last going round the square with the floor on the right (two sides banked
+      evenly, one up and one down, then have their stairs in corners diagonally across). With
+      neither end taking it the side has none (`Stairs_Lost`). **One stair to a corner**: of two
+      sides' there, the lower bank's (`Stairs_Shared`). A side with one end only that takes it has
+      it there, be that corner a level way in on the other side (`Stairs_By_Level` counts them:
+      his to say). `Walls_View.Stair_At` says where each side's stands,
+      `Square_Stair_Sites` the bank at each of the three places (for counting);
+      `colony_run --box-stats` and `--square-scan` say both, and `--square-pits` how far it is from
+      the middle of each side's path to the fire and back.
+      - **Counted before it was built** (323 squares at the ten places, `--square-scan 100 20`): 35
+        have a stair, 55 stairs at the middles. Every one of those 55 sides takes a stair at an end:
+        30 at one end only (the other end level at 13, a bank under a stair's at 16, over one's or
+        mixed at 1), 25 at both (8 as high at both), none at neither. **In corners: 52 stairs at the
+        same 35 squares** (three sides' are another side's in the corner they share), the highest
+        bank one stands against eight blocks (seven at a middle), 233 blocks of bank gone up or down
+        in all for 216, 18,629 blocks of stone in all the walls for 18,453. Two of the 52 stand
+        beside a level way in (the only end of their side that takes one; with the lower bank alone
+        deciding between two ends it was nine of 53). **The other reading of "the
+        opposite corner", the corner diagonally across the square from a level one, was counted and
+        not built**: of 1,172 level corners the one across is level too at 1,132 and takes a stair
+        at 28: 20 of the 35 squares would have no stair. (A stair at every corner that takes one:
+        105 at 53 squares.)
+      - **What it costs: the way from the middle of a walled side.** From the middle of each side's
+        path to the fire and back, 54 sides' ways are longer and none shorter: 5.5 m more on the
+        mean, the longest 26.0 m where it was 13.0 (1200 720 on seed 1); at the 35 squares the mean
+        is 14.9 m for 12.7. Twelve days of the band of thirteen at 23 squares (11 with a stair; the
+        12 without end in the same state by both): member-hours with an empty belly 234 for 229,
+        hungry serf-hours 3,746 for 3,658 at the eleven, nobody dead, no pit, no column of a floor
+        stone but a stair's. (Not even: at 1146 1110, the square of his picture, 21 for 13 and the
+        lowest confidence 32 % for 49; at 1172 1092 the walls were done after 23 h for 15.)
+      - **What he praised is the measure, where he praised it**: by the level corner of his
+        picture (a corner level on both its sides, or with no stair come to stand in it) no block
+        column stands otherwise within 3 m, strip and path with it (the check, on ground level at
+        two corners: 0 of 1,152; at 1146 1110, 1238 1058 and 1258 1058 built on the spot by both
+        rules every column that differs is a stair's own place, 67, 97 and 140 of them); the still
+        of 1238 1058's level corner is the same to the pixel (0 of 448,000). **Not so of every
+        corner where a path comes in level**: a side's stair can come to stand in one that is level
+        on the other side only (1146 1110's south-west: 13 of its 67 columns), which is the call
+        put to him.
+      - **A square loaded with its stair laid at a middle keeps that stone** (nothing takes laid
+        stone up) and is built the one in its corner as well: three saves of the build before run
+        on so, no pit. No rule was made for them.
+      - **The strips are judged when the square is planned** (`Forecast_Strips`, in
+        `Plan_Square_Lot`, so the tool's ghost shows the path where it will lie): each side's path is
+        tried where it lies and further out while a quarter metre of its length would leave a bank
+        of more lifts than the rings kept. It reads the ground as `Lay_Metre` will bring it: a
+        quarter metre all within `Path_Level_B` of the floor's level, strip and all, is brought to
+        it; a tree's foot is the level ground it will be once felled. **They are judged against
+        the level the square is founded at** (`Square_Plan.Level_Row`: `Level_For` with
+        `With_Feet`, which counts the ground under the feet of the trees on it among what is to be
+        filled, as `Choose_Level` does at the founding; the level by which a square is judged cut
+        off or not is reckoned without them, as it always was. Until the gate of 2026-11-21 the
+        strips were judged against that one, and three squares of 320 on seed 1 were founded a
+        block lower than their strips had been judged for). They are saved with the
+        square (over the blocks of its zone's frame, which are fewer than 128: no new bytes, blob
+        43 still, and a square of before the rule is saved as it always was, to the byte).
+      - **Where a side's path lies level with the floor the strip between is laid with it, as path**
+        (`Lay_Metre`: a slice is brought level strip and all, or not at all), so the path is that
+        much wider there and the strip is a wall's only beside a bank. Beside a bank, what of the
+        strip the wall does not want is brought to the path's level and capped with stone.
+      - **The path stepped with stone where a levelled stretch of it ends** (John, 2026-11-21:
+        "we need to do something about having the .5m jumps in the path around the square too";
+        2026-11-22, of four ways: "Steps of stone"; the spec, "The square's path stepped with
+        stone"; `Set_Path_Steps`, `--no-path-steps`; not saved). A quarter metre of the path is
+        brought to the floor's level whole or left as the land lies, so the path stood two or
+        three blocks off a levelled stretch's end at once. From that end the path now goes a block
+        a quarter metre toward the land: the first quarter metre past it a step one block off the
+        level, the next two, while the path there lies at least that far off; every column of a
+        step a tread of fieldstone, the wall builders' work, planned with the walls from the path
+        as it is laid (`Plan_Steps` in `Plan_Walls`; nothing kept). None before a stair, and
+        before the middle of a side that has none only steps of one and two blocks (whether a
+        side has a stair is read from the path there: the steps leave that reading what it was,
+        and no stair is moved, lost or made). The walls and strips beside a step are planned
+        against it.
+      - **The corners of the path** (John, 2026-11-22, of the 37 jumps then left at them: "stick
+        with whatever you think is best"; the spec, "The corners of the square's path").
+        **The square metre where two sides' paths cross is laid as one** (`Set_Corner_Whole`,
+        `--no-corner-whole`; `Lay_Metre`'s `Lay_Crossing`, `Cross_Of`): all of it when the first
+        metre that has a column of it is laid, at the floor's level whole where every column of
+        it lies within half a metre of that, else whole as its ground lies; by its own columns
+        alone, so it is the same square metre whichever side's metre comes first (a quarter
+        metre of each side's at a time, 41 quarter metres at 26 of 323 squares stood otherwise
+        laid last metre first; now none). Every column a stretch finds to lay in it is laid,
+        whatever the corner's own reading says (one passed over is counted as left for ever).
+        **And the steps run into it and through it** (`Set_Corner_Steps`, `--no-corner-steps`):
+        the corner's square metre is one step of a flight, a landing, all its columns of stone
+        at one row, and a flight that comes to it along one side goes on along the other: the
+        path is one round of quarter metres and four landings, a flight running from each level
+        one either way. At the ten places **16 jumps of two and three blocks are left of 272**
+        (50 before the corners: 2 before a stair, 5 at a boulder, 2 by a side's end, 7 the
+        land's own), with 691 quarter metres stepped; laid last metre first no square stands
+        otherwise.
+      - **A strip's column waits for the path it is planned against** (`Set_Strip_Wait`,
+        `--no-strip-wait`): nothing planned, nothing counted as left, while the path column it
+        reads on either of its sides, or a quarter metre within a flight's reach of that one, is
+        still to lay (`Column_To_Lay`: the very test a stretch finds its columns by, so ground
+        no stretch ever comes to holds nothing up). Walled by one side's path before the
+        other's was laid, a corner of two strips kept the higher stone; capped beside a quarter
+        metre that later became a step, a column stood a block over it. With their walls built
+        when half their paths are laid, no square of 323 stands otherwise than built in order
+        (25).
+      - **What is built is still read from the path as laid** (`Plan_Walls`), so the forecast can be
+        wrong without anything sticking: a wall that wants more lifts than its strip has rings
+        stands steeper in the rings it has; on a side with no strip a bank is left earth, as banks
+        were before there were walls; neither takes any floor. `Square_Walls_State` has the rings
+        kept and asked, and counts both. Where a boulder stands in the path's line the wall runs on
+        before it at the height it has beside it (`Near_Reading`).
+      - **`Part_Of (Geo, Bx, By)` says what of a square a block column is** (floor, strip, path, none
+        of it), for the founded square (`Geo_Now`) or one being planned; everything that asked how
+        far out a column lay asks that. **A strip is nobody's to zone** (`Strip_Kept`, asked by a
+        lot's planner and by housing's two): housing pulled along a walled side with a row toward
+        the square is refused there as it is beside a floor. **Aslant a strip is two rings or none**, because a path at 45
+        degrees that a stockpile or a turned house can lie along runs on every other diagonal of the
+        block grid: with a ring a lift, two sides whose strips were an odd number apart had lines
+        that crossed at the middle of a block's edge, and a stockpile held by such a side was
+        refused ("it overlaps a path") or put down along a path of its own 18 cm beside the
+        square's.
+      - Of 323 squares at ten places (a 20 m grid; `tools/square_sites.sh`): 70 have a strip on 212
+        sides; the path as laid asks more rings than were kept on none of those sides, fewer on 74
+        (an angled side keeps two for a wall of one lift), and a wall on no side with none; every
+        one is founded at the level its plan said; no column of any floor is stone but a stair's or
+        the earth beside its steps; no pit; nothing left to lay; 18,453 blocks of stone in all where
+        walls inside took 13,991.
+    - A `Raise_Stake` order says which founding it is; the scripts' `--stake` and `--camp` are the post
+      and the camp apart, as ever, and `--square X Y WAY` the square. `Castle.Actions.Square_Stake`
+      (`--no-square`) is what the player's tool gives. Blob 43.
+  * **Housing pulled with its path (2026-11-20; the same handoff; his words: "it will include the path
+    with the zone placement, it will allow either an overlap, extension, or intersection with an
+    existing path").** The spec's section of that name is the description; `habitation.md` has the
+    player's side of it. `Pull_Line` reads a pull from its two points once; `Plan_Housing_Pull` and
+    `Pull_Housing` take what it gives. Along a path that is there it is `Zone_Housing`'s strip for the
+    same two points and lays nothing, past an end the path goes on, anywhere else it is a line of its
+    own as the path tool draws one; housing with no hovel's lot on it gives way under its path. No blob
+    change.
+  * **His answers to those two rounds (2026-11-19; `docs/handoffs/Handoff_2026_11_19_stockpiles_and_reach.md`).**
+    - *Stockpiles* ("we go back to variable size stockpile, placed along the path"). The player's
+      stockpile is zoned corner to corner (the two corners opposite along and across its path), as
+      often as wanted; `--one-stockpile` is the 10 m square placed once. A stockpile stays open when
+      the storehouse stands; `--stores-move` closes them and has them carried over. A blob of 30 to
+      33 loads with these rules.
+    - *The carpenter* is the free forester best at carpentry, not whoever raised the storehouse.
+    - *Foresters to 250 m* ("Let workers go 250m for resources, wood is a vital resource").
+      `Fell_Reach_Max_M` 250; the reach grows only when every tree in reach has been tried; a
+      search's budget goes by how far off the tree is (`Fell_Budget` and `Fell_Budget_M` a metre);
+      no way is left a day, a long way round ten; `--wood-from M` for measuring. Porters, gatherers
+      and hunters are as they were (owed).
+    Colony blob 34; blobs of 30 to 33 are still read.
+    - *Gatherers and porters to 250 m* (the same evening). A gatherer that finds nothing to gather
+      in reach, and a porter that finds none of what it is sent for, looks a ring further the next
+      time (`Look_Further_For`; `Food_Reach_M`, `Haul_Reach_M`; never back in; and since 2026-11-20
+      what one of them finds there is no way to, the others are told, so that one whose nearest
+      is across water looks past it: `Set_Ways_Told`, `--no-ways-told`, `Route_Asked`,
+      `Tell_No_Way`, a day before it is tried again; `colony_run --work-stats`; `--no-wood-reach`
+      holds them off with the foresters). Bushes are looked for as far as the gatherers look
+      (`Index_Some`: a stack looked through for its trees alone is looked through again). Colony
+      blob 35. They ask their way of the walking map's pieces first since 2026-11-20, and tell
+      each other where there is none (blob 38). The hunters are as they were: the deer live within
+      70 m of the stake by the herds' own rule.
 * **Zones.** A zone is ground the player has marked for a use, and a thing
   of its own: a kind, its ground, and what is on it. Stockpiles and the
   camp are the first two kinds, housing the third (`Zone_Kind`; stage 6a:
@@ -318,7 +1062,12 @@ wood.
   band panel); their reach grows the same way from 60 m to 80 m from the
   stake. With no vegetables in store at all it goes for nothing else while
   there are any in reach, and a basket part full is filled with the same.
-  It reserves a bush or an apple tree, so no two work one; it walks there
+  It reserves a bush or an apple tree, so no two work one (**a reservation
+  is not saved: the loader gives each back by whose errand the bush or the
+  tree is**; a tree's by `M.Tree` in every state since 2026-11-21, when an
+  apple tree being picked turned out to be nobody's after a load; of two
+  pickers at one bush the loader makes the later of the band its holder,
+  which a straight run does not: owed); it walks there
   by `Castle.Nav`; a full basket, or what it has when there is nothing
   left in reach, goes to the nearest stockpile cell with room (room is
   reserved too). When it can't work it says why: nothing to gather in
@@ -335,7 +1084,8 @@ wood.
   is winter.
 * **Felling.** A forester goes for the standing tree with the lowest
   score, as a gatherer does for a bush (its distance plus half its distance
-  from the stake, within 60 m of the stake), reserves it and walks to the
+  from the stake, within 60 m of the stake, or as far as the foresters have
+  had to look since 2026-11-19: `Fell_Reach_M`), reserves it and walks to the
   trunk. It chops two-handed (12 s for a slim trunk, 24 s for a thick one):
   the axe wound up over the dominant shoulder, swung down into the trunk at
   waist height, the bit left in the wood a moment. Then the tree comes down
@@ -381,9 +1131,10 @@ wood.
     demand. A colony starts wanting 20 (`Stone_Quota`, for paving the paths
     once there are masons); the work that uses stone will ask for more
     (`Castle.Colony.Want`) and take it away as it is used.
-  * Water is not fetched yet: it waits for a use and for barrels to keep
-    it in. (The fetching can find and draw it, two buckets at a time where
-    it can be waded; it is just not asked for.)
+  * Water is fetched since the storehouse was fitted out (2026-11-17): a
+    porter draws it where it runs and can be waded, two pails at a time,
+    into the storehouse's water barrels while they have room ("Water",
+    above). Nothing takes it out of the barrels again: it waits for a use.
   When the colony looks through a stack it notes whether there is tall
   grass, a boulder or shallow water in it; a porter searches only stacks
   noted for what it wants, nearest first, and a stack found to have none
@@ -406,6 +1157,14 @@ wood.
   fawn 20, all of it kept if the stockpiles hold a pound of salt for every
   ten of meat, a quarter of it if they hold none. (Until then, and with
   `--no-curing`: joints, doe 8, stag 10, young stag 6, fawn 3.)
+* **Where none of its 204 places takes the lord's cart there is no cart** (looked into
+  2026-11-22, and left by his "leave the cart doing whatever it's doing right now, we are
+  going to work on the logistics soon"): a metre apart from 4 m to 20 m from the fire on
+  twelve bearings; a place takes it where the ground under its bed and half a metre round
+  lies level within a block, is grass or earth, no zone's, with no path by. On a hillside
+  none may (three of the squares run with a band that day: no salt, a quarter of each deer
+  kept). A mend that looks further is a patch outside the repository
+  (`~/CASTLE_GAME/releases/wip/lords_cart_looked_for_further.patch`), his call.
 * **The lord's cart** (John, 2026-11-12: "we need to up the amount of meat
   a single deer can provide, we are looking at 60lbs of field dressed meat
   from a deer that should be enough to feed a camp for a couple of days
@@ -470,7 +1229,13 @@ wood.
     (`Keep_Cart`, `Set_Cart_Down`, every step). **Nothing is put on a
     place under it** (`Under_Cart`, in `Takes`, the one test of what a
     place takes: `Go_Store`, `Room_For`, `Can_Store`, the butchering's,
-    `Supply`'s). Standing on a stockpile's ground it stays. Nothing else
+    `Supply`'s). **Nor beside its wheels or under its shafts** (2026-11-23;
+    `Cart_Reaches`, `Set_Cart_Room`, `--no-cart-room`, not saved; his
+    picture of a sack under its wheel): the cart as it is drawn reaches past
+    its bed, so the two places to either side of the bed and the two its
+    shafts lie over take nothing either (six places more of a stockpile's
+    hundred); what lies there already stays until it is taken. Where the cart
+    goes and stands is untouched. Standing on a stockpile's ground it stays. Nothing else
     of it changes: its salt is fetched to the stockpile and used as before,
     and nobody sets out with it while a hunter is at it for salt.
     `--no-cart-pull` (`Set_Cart_Pull (False)`, saved: blob 25) leaves it
@@ -774,11 +1539,160 @@ save blob (`state: ...`) and `--expect HASH` turns that into a test. It
 takes the colony's options above (they are parsed and applied by
 `Castle.Scenario`, which the game uses too), and `--seed N`, `--day D`,
 `--time H`, `--days N`, `--log-hours H`, `--workers N`, `--load FILE`, `--nav-stats` (at the end: what the colony's steps, the walking map and the routes cost, the twelve slowest plans, how often the herds were frightened, how many of their ways were refused as out of reach dry, how many plans ran out of budget and what the pieces of ground had said of them, and how many were answered from the memory of one that had), `--nav-log FILE` (run it with `--no-memos`, or the askings answered from memory are left out; a line for each plan that runs out of budget as it happens: the day and hour, from where to where, its budget and wade, what the pieces said, how far short it ended, and who of the band stood nearest where it began and what they were doing), `--try-plan X0 Y0 Z0 X1 Y1 Z1 WADE` (at the end: a herd's way asked of the ground as it then is, with what it came to; `--try-budget N` the floors it may look at, `--try-within X Y R` the ground it keeps to, `--try-refuse` not made for if out of reach), `--prove-dry` (slow: every dry way the pieces of ground call out of reach is searched for whole, and the run stops if one is there; `routes.md`), `--full-summaries` and `--whole-bricks` (each stack's ground summary kept whole, each fine brick written whole, as before they were kept small: storage only, the run the same), `--ground-stacks N`, `--mem` and `--no-mesh` (measuring what the ground costs to keep: the ground within N stacks of the stake brought in, in batches, 400 being the whole map; what is kept of every stack that is in, counted by part, with what the process holds; the workers making no meshes, which the runner throws away anyway. A run with more ground in ends in the very state of a run on the colony's own ground, since 2026-11-15: the colony reads its own ground and nothing beyond, "The colony's own ground" below; before that it was another run. `world.md`, "What a stack costs to keep"), `--no-mending` and `--no-memos` (the walking map read whole after every change; every search for a source reading the ground again, nothing of housing kept, and no plan that ran out of budget remembered: what only saves work, so a run must end the same with them off),
-`--save FILE` (a save the game opens with `--load`), and `--deer-track
+`--save FILE` (a save the game opens with `--load`), `--floating` (at the end: plants standing on air within the band's reach of the stake, each with where), `--who` (with every log line what each of the band is doing, and where one that starves or cannot get somewhere stands), `--tree-stats` (with every log line the trees standing by how far from the stake they are: to fell within the work radius and how many of those are somebody's, apple trees, and to fell 60 to 80 m, 80 to 100 m and further off, and where each stands when twelve or fewer are left near; at the end how many of the trees to fell within the foresters' reach can be got to from the stake at all, and each forester's serf-hours by what its status said), `--haul-stats` (at the end: the kilometres walked with something in the arms, sampled a colony second at a time; the loads it counts are every time arms are emptied), `--store-stats` (at
+the end: the serf-hours the living stood with a load and nowhere to put it,
+by what they held, and empty-handed for want of room; when a load first
+found no place; the places in use; loads sent to an overflow place, the
+most of those in use at once and at the end: a measure, nothing decided
+by it), and `--deer-track
 FILE` (a line for every deer after every colony second: the second, the
 deer, its herd, where it is, whether it is in panic, the rows of water it
 stands in, its herd's node; for looking at how the herds move: `deer.md`,
 "Measured").
+
+**Measures of 2026-11-23**: `--builder-stats` (who stands still with a block in its own block column,
+by what it is doing, and how far a builder walks from one square metre of a site's ground to the next:
+`habitation.md`), `--builder-track FILE` (where each square metre was worked from), `--seam-stats [M]`
+(within M metres of the stake, 60: trodden ground two blocks or more off the trodden ground beside it,
+and earth left standing between a path and what is built; `--seam-hours H` counts every H game hours
+too, `--seam-list N` says the first N), `--ground-map X0 Y0 X1 Y1` (at the end, the block columns of
+that box drawn twice, north at the top: each one's top over the lowest, and whose each is: a path laid,
+stone, a house, a hovel's lot, a path planned, a zone's number), `--watch MEMBER S0 S1` (that member
+each colony second from S0 to S1: where its feet are, the top of the ground in its own block column,
+the walking map's floors of the cell it is in, what its status says and where its hands go: for finding
+why someone stands in the ground or over it). **Read the whole of "in the ground", not only the part
+that is a builder making ground ready**: the rest of it was people standing in a step at the stockpile
+(`routes.md`, "At the height of the place stepped into"), and the round that changed the ground where
+people stand had made it five times what it was before anyone looked (517 serf-seconds to 2,540 in
+eighteen days; 703 with the places made level alone taken out, 238 with that and the cart's room).
+
+**A deer is butchered by whoever carries it home** (2026-11-23; `Set_Kill_Home`, `--no-kill-home`, not
+saved; `Carcasses_Dropped`; his "a hunter placed the deer in the stockpile without quatering it, I have
+only seen it happen once"). A whole deer is laid down in three ways: its carrier is given another job,
+there is nowhere to butcher it (no room, or no way) and its carrier is hungry or night has come, or its
+carrier dies. By the band's own doing none lay in a stockpile in six runs of 41 days (187 deer). A
+hunter given another job as it carries its kill put it down where it stood, and with no other hunter it
+lay there for good; it brings the deer home and butchers it first now, and only with nowhere to butcher
+it puts it down as before. `colony_run --carcass-stats` counts each way and says every whole deer that
+comes to lie on a stockpile's ground.
+
+**The player removes a stockpile** (2026-11-23; `Remove_Stockpile`, `Removal_Refusal`,
+`Stockpiles_Removed`; order `Castle.Actions.Remove_Stockpile`, on a stockpile's own menu: "Remove this
+stockpile", then "Keep this stockpile"; his "the stockpile zones just disappeared at some point, let
+the player remove them if they want to"). Nothing but this order takes a stockpile away. Ordered
+removed (`Zone_Rec.Leaving`, `Zone_View.Leaving`; saved: blob 46, 30 to 45 still read), its places are
+closed: nothing more is put there, what lies there is taken from first, and a porter with empty hands
+carries a load of it to a place with room elsewhere before anything else of its work (`Go_Move_In`,
+`Go_Clear_Closed`: the stores' move, which takes nothing unless there is room for it elsewhere). When
+nothing lies there, nothing is on its way and nobody's errand names one of its places, it is gone
+(`Drop_Emptied`, once a colony second): its strips out of the list, **its places out of theirs, and
+whoever holds a place's number after them told the new one** (a member's `Cell` and `Cell2`, a fail
+memo of a place: anything new that keeps a place's number is renumbered there). The zone keeps its
+number, empty. The order taken back opens its places again (one a tree stands in stays closed). The
+stockyard is refused. **With nowhere else to carry to the stockpile stays, closed, for good: a band
+whose only stockpile is ordered removed, with none put down in its place, can store nothing and
+starves** (`tools/today_run.sh 41 --later 72 remove-stockpile 2`: everyone hungry from the seventh
+day, thirteen dead by the twenty-eighth; found after the round's gate and put to John, 2026-11-23). In the game as it is played with no storehouse, a second stockpile put down
+after two days and the first ordered removed after three: gone 23.3 game hours later, thirteen living
+at the end of eight days, the cart pulled to the other stockpile by the band as it pulls it to any.
+`colony_run --later HOURS remove-stockpile ZONE`.
+
+**A stockpile's place is made level when something is first put on it** (2026-11-23;
+`Level_Places`, once a colony second; `Set_Place_Level`, `--no-place-level`, not saved; his "the straw
+half in the ground and half outside ... we might have to flatten stockpiles"). A place is a square
+metre, sixteen block columns, and what lies on it is drawn at the height of its middle (the highest
+of the four columns round it); on ground that steps under it the columns a block higher stood
+through what lay there, and those a block lower left it over air. In the game as it is played: of
+the 47 places that held something at the end of the third day, 21 had a column over the place's level
+and the other 26 one under it (`colony_run --place-stats`), and of the 13 at the end of 41 days, 5 and
+8; with the rule, none of 51 and none of 11. From the moment a
+place of a stockpile holds something or has something on its way, its block columns that are the
+zone's ground are brought to the place's own level, `Place_Level_B` (three blocks) at the most, their
+tops as they were. Each place by itself, so a stockpile on a slope becomes steps a metre square;
+nothing is moved under a place nothing is put on. Not the stockyard's places, nor under a tree's
+foot, through water or under the cart. The earth is the turf's. **Each place is then a step from the
+next, where people stand to take and to eat**: that is what showed the walkers' height at a step
+(`routes.md`, "At the height of the place stepped into"): with that rule off, the round with this
+one in it has five times the feet in the ground that the game had before it. `colony_run --carcass-stats`,
+`--place-stats`: the two measures of this day's stores.
+
+**A stockpile is refused on ground too steep** (2026-11-23, afternoon; `Plan_Lot`, `Steep_B`;
+`Set_Steep_Refuse`, `--no-steep-refuse`, not saved; his "let's block the players placement if it's
+too steep, let's say anything where a part is over 1/2 slope"). Read as: some part of the ground it
+would take rises more than `Steep_Rise_B` blocks (half a metre) over a metre, along the block grid
+either way (two block columns of its ground four apart); or a ledge lies in its lot (two
+neighbouring block columns more than `Zone_Step_M` apart: as it was, the stockpile ended there). A
+boulder and a tree's foot are not counted. It is refused whole, dragged or put down whole, with the
+reason at the pointer: "the ground is too steep for a stockpile there (some of it rises more than
+half a metre in a metre)". Not asked of the stockyard, nor of a stockpile that is to be one level.
+Counted: of 58 stockpiles (the game as it is played, four at each of fourteen awkward squares, the
+reference run's) 2 are refused, both at the square at 1010 890; his own, whose ground rises four
+metres across it, about one in three, is taken.
+
+**A stockpile is one level: built, and set aside the same day** (2026-11-23; `Flatten_Pile`;
+`Set_Pile_Flat`, **off by default: `--pile-flat` gives it**; not saved; his "flatten the stockpile,
+let's just make this easy for ourselves", and, of the picture of his own stockpile cut four metres
+into its hill, "let's go back to the stepped version, not the cut one";
+`docs/handoffs/Handoff_2026_11_23_a_stockpile_is_one_level.md`). The game's stockpiles are stepped,
+each place by itself, as above. What follows is the rule as it is when asked for.
+Where a stockpile is put down, dragged or whole, all its ground is brought to one level at once and
+by nobody, and every place of it has that height.
+
+- **The level** is the middle one (the lower of two) of the tops of its ground's block columns that
+  have a path's column beside them, so that it is walked into from its path; with no such column,
+  of all its ground. Counted over 58 stockpiles before it was built (the handoff's table): at the
+  middle of all its ground four of them have no way in from their path, his own among them.
+- **The land is cut or filled whatever it is made of** (`Of_The_Land`: earth, rock, a boulder, ore
+  at the surface), as far as `Flat_Most_B` (24 blocks, six metres; the deepest cut at the 58 is
+  eighteen). What lay on top lies on top, but no block of a boulder is left in the floor's top
+  (`Flat_Top`): the band prises stone off a boulder wherever a block of it has air over it and an
+  open side, and did so out of a stockpile's floor. A boulder cut away is gone, as the earth is.
+  Where the land beside stands off the floor it stands as a bank: no wall, no stair.
+- **It is all of what was marked.** `Plan_Lot` with `One_Level`: the lot takes the ledges in its box
+  (a step as high as `Flat_Most_B`, for `Zone_Step_M`) and a place lies on it however the land falls
+  under the place (for half a metre).
+- **What the zoning still leaves out inside it goes with it.** A block column that is no zone's and
+  cannot be got to from outside without crossing the stockpile's ground is an island of it (a bush
+  stands there): brought to the level too. The bushes on it are lifted off first (their stacks
+  looked through for bushes first: a stockpile put down with the stake comes before that) and put
+  back as far up or down as the ground of each block's own column went. Left as it lay under a
+  floor filled in round it, such an island is a pit a serf walks into and not out of.
+- **What a block column is to the level** is said in one place, `Flat_Kind`, by `Flat_Column`: at
+  it; to move; waiting for a tree on it to be felled (`Box_Tree_Felled` makes the stockpile level
+  again where it stood; until then the tree stands on a pillar of its own earth, or in a hollow) or
+  for the cart to go from it and a metre round it (its bed is blocks; `Level_Places` makes the
+  stockpile level again while the cart is in tow, by where it was lifted from: no place is planned
+  where the cart stands and the columns its bed stood in are no zone's); or left for good (more
+  than `Flat_Most_B` off, water in what would be moved, water beside it higher than it would be
+  cut to, something built on top or standing where the earth would go). **A place with a column
+  left for good in it is closed, and kept closed** (`Cell_In_Rock`).
+- `Level_Places`, with this rule, makes every open place level as soon as it can and as far as it
+  takes, and looks again each second at one something was in the way of. Looked at once, a place
+  with a trunk in the way was never looked at again, and a run loaded before the felling made it
+  level where the straight run did not.
+- Whoever stands on its ground is put on it as it is now (`Settle_On`), and logs or a deer lying
+  there; every way being walked is found again. Made level again with nothing of it to move, it
+  touches nothing.
+
+In the game as it is played the stockpile's floor lies at 19.75 m: a cut of sixteen blocks at its
+far corner, a fill of two at its front, 9,572 blocks moved; the frame of the click takes 27 to 29
+ms of the main thread for 5 or 6 (the gated build's own game, three runs each way). `colony_run --flat-scan` (each stockpile's ground as it lies, what each of
+four levels would mean for it, and the rule's own reading of every block column of it),
+`--column BX BY` (a block column's blocks from six rows over its ground down, and what it is to
+its stockpile's level), and `--place-stats`, which now also asks the walking map for a way from the
+stake to every open place and back. **The runner's measures have one list of what is ground**
+(`Is_Land`: the land whatever it is made of, a path's surface, stone laid dry). Until 2026-11-23
+each had its own, none with ore or a boulder in it, and where bog iron lies in the turf the ground
+read a block low (27 of 29 places at the reference stake read as a block under their level).
+
+**An order given later in a run** (2026-11-23): `--later HOURS ORDER ...` gives one of the player's
+orders that many game hours into the run, through `Castle.Actions.Perform` as a click gives it, and
+says what came of it (with `--box-stats`, how every placed zone's ground stands just after):
+`housing-pull X0 Y0 X1 Y1 ROWS`, `path X0 Y0 X1 Y1`, `stockpile-box X Y WAY`, `remove-stockpile ZONE`,
+`job MEMBER JOB`. Sixteen at the most. A colony founded with everything ordered at once never meets
+what a second order days in meets: the zones' lost ground of 2026-11-23 (housing pulled on to housing
+once the square's floor was made) was in no kept log for that reason, and
+`tools/today_run.sh 4 --later 72 housing-pull 1284 1058 1300 1058 2` shows it in one line.
 
 ```sh
 tools/reference_run.sh 5        # the reference run: seed 1, the reference stake and camp, the standard band

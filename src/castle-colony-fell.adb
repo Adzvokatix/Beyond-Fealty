@@ -5,6 +5,8 @@ procedure Fell (K : Positive; From : Vec3; By : Positive) is
    Dx   : Float := Base.X - From.X;
    Dy   : Float := Base.Y - From.Y;
    L    : constant Float := Sqrt (Dx * Dx + Dy * Dy);
+   On_Square : constant Boolean := Camp_Square and then Tree_On_Square (K) and then not Tree_Spared (K);
+   In_Box    : constant Natural := Tree_In_Box (K);     --  (a stockpile put down whole that it stands in: 0, none)
 
    --  Whether bark at (Bx, By, Bz), outside this tree's own trunk, is a
    --  neighbour's trunk: a branch drawn alone can cross a column where
@@ -55,8 +57,15 @@ begin
          end loop;
       end loop;
    end if;
+   --  (on the square the colony was founded on it is taken out, stump and roots: its place is ground)
+   if On_Square or else In_Box /= 0 then
+      Stump_Out (K);
+   end if;
    T.Down := True;
    N_Felled := N_Felled + 1;
+   if In_Box /= 0 then
+      Box_Tree_Felled (In_Box);        --  (the places it stood in are the stockpile's to use)
+   end if;
    declare
       R    : constant Float := Half_W (K) + 1.0;
       Px   : constant Float := Base.X + Dx * R;
@@ -75,6 +84,13 @@ begin
          Slot := N_Piles;
       end if;
       if Slot > 0 then
+         --  (felled on the square the colony was founded on, among others still standing: the highest
+         --  floor where its logs fall may be another tree's top; they lie at its own foot's height then)
+         if On_Square and then Z >= 0.0 and then abs (Z - Base.Z) > 1.5 then
+            Piles (Slot) := (Centre => (Px, Py, Base.Z),
+                             Turn => Arctan (Dy, Dx), Count => Logs_Of (T.Info), Claimed => 0, Owner => By);
+            return;
+         end if;
          Piles (Slot) := (Centre => (Px, Py, (if Z >= 0.0 then Z else Base.Z)),
                           Turn => Arctan (Dy, Dx), Count => Logs_Of (T.Info), Claimed => 0, Owner => By);
       end if;

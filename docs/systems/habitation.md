@@ -3,7 +3,7 @@
 - Packages: Castle.Buildings (the hovel: its design and its blueprint), Castle.Colony ("housing": zones, lots, the builder, residency), Castle.Buildings.Layout and Iso (the older preview)
 - Source: `src/castle-buildings.*`, `src/castle-colony.ads` ("housing"), `src/castle-colony.adb` ("housing: where a house stands", "housing: blueprints, lots, the ground", "housing: the builder", "housing: zoning", "beds"), `src/castle-colony-think_house.adb`, `src/castle-colony-step_house.adb`, `src/castle-colony-think_bed.adb`; the sleeper, the bed and the cloak as drawn: `src/castle-serfs.adb` (`Sleep`), `src/castle-props.adb` (`Pallet`, `Cloak_Folded`, `Cloak_Spread`), `game/castle_game.adb` (`Show_Beds`, `Show_Cloaks`)
 - Check: colony_check ("housing", "beds", "a ladder for the roof", "a builder given other work mid build" and "a lot with a couple of holes in it", 159 checks: thirteen of them the fourth round's, three the fifth's), pick_check (6); `tools/reference_check.sh` (`reference_run_stage6.txt`, with beds and at today's pace; the seven older logs with `--no-beds --pace 1`); `tools/stress.sh runner` (the housing run kept and not kept, and on two workers)
-- Saves: in the colony blob, version 25
+- Saves: in the colony blob (version 25 when this was written; 44 on 2026-11-22)
 - Stage: 6a (2026-11-12; `docs/production/briefs/Stage_6_brief.md`, `docs/handoffs/Handoff_2026_11_12_stage_6a_habitation.md`). Built on rules drawn from the design documents with first values of mine and put to John; two of them he answered while it was being built ("one hovel per person for now, dirt discarded is fine for now"). Accepted as built on 2026-11-12 ("ok the building looks great, I am impressed, works wonderfully on my end as is"); the calls he did not take up stand by default.
 - References: John's, added 2026-11-12 while it was being built, in `~/CASTLE_GAME/Design Refrences/` (outside git: fifteen pictures of twelfth-century peasant houses and villages) with a text on the peasant house of that century; the handoff has his words and the text. How the hovel is made is drawn from them ("The hovel", below; what of them is not built is under "Not there yet").
 - A pass after 6a (2026-11-12; `docs/handoffs/Handoff_2026_11_12_housing_pass.md` has John's words whole): housing pulled along a path and combined where it meets housing; a house's ground walled with stone where it rises and falls, its door's stair of stone; roofs trimmed by their builders. Built from his message with first values of mine and put to him. **A second round on his answers** (the same day, his words whole in the same handoff): the lots of the houses still to begin laid out when housing is zoned, never passed over, a hovel nobody's until it stands and then drawn for by lot; the ground between two neighbours made one and their walls met; serfs asleep on their sides; a bed of straw each, by the fire and again in its hovel; cloaks. **A third round on what he found trying the second** (the same day, his words whole in the same handoff): each of the band finds level ground by the fire and lies across the way to it; a bed has the stockpile's straw before a hovel has; no housing across the road that leads off a path's end; housing of all the ground inside a round of paths; a planned path drawn on its ground. **A fourth round on what he found trying the third** (the same day, his words whole in the same handoff): a stair of stone to a door only where the path lies more than a block off the floor; a ladder for the roof, made at the stockpile and thatched from. (Of the same round, in `needs.md` and `colony.md`: the cook's hold, meat by the pound, the lord's cart of salt.) **A fifth round on what he found trying the fourth** (2026-11-13, his words whole in the same handoff): a hovel's lot levelled as if its holes were filled, and they are; a builder takes up a house left further on than its own. (Of the same round, in `needs.md` and `colony.md`: a load taken where it was going before its carrier eats; holes under a path filled.) **The pass was accepted on 2026-11-13** (John, whole: "accepted"): on `main`. Its rules are first values, his to tune.
@@ -197,7 +197,21 @@ are the band's own.
   long: the stair is made over the shortest (`Door_Run`), and what the
   longer ones have past it lies at the level of the stair's foot, out to
   the path's edge (as first built they ended in a stub of the yard's wall
-  across half the stair's foot). A floor can so lie only a step above or below the path where the
+  across half the stair's foot). **Its steps are made again to the path as it
+  lies** (2026-11-23, his "we have blocks that aren't knocked down";
+  `Meet_Door`, `Set_Door_Meet`, `--no-door-meet`, not saved): the way is
+  planned when the hovel is placed, against the ground where it will meet
+  its path (`Door_Row`), and the path is laid afterwards, brought to its own
+  line or the square's level and stepped where it meets other paths. So a
+  step of the way could stand a block over a path that had come to lie
+  lower, or the way end half a metre off it. When the hovel's ground is
+  ready, and again when it stands, the columns of its way past the landing
+  are made again between the landing's level and the laid path's top beyond
+  the way's end, a block a column from the path's side back; and where the
+  way has not columns enough, the path's edge before it is stepped as a path
+  is (never the square's own). Only where the path is laid there; not a
+  storehouse's way, nor a hovel's whose ground is made where it is drawn
+  turned. A floor can so lie only a step above or below the path where the
   path is hard by, and a step more for each further block: a pad that would
   lie higher is cut down to that, and a house whose pad would lie lower
   stands further back from the path until its stair is long enough. The
@@ -252,7 +266,13 @@ are the band's own.
   first earned trade). A forester takes a house that has no builder, the
   best at building first, and is its builder until it stands
   (`Site_Of`, `Trade_Of`). Nobody is appointed (it is not a job in anyone's
-  menu) and no skill is asked. Building is its own work, not an extra task:
+  menu) and no skill is asked. **At most four at once** (2026-11-17, John:
+  "let's limit the number of builders that can be promoted to four";
+  `Most_Builders`, `Set_Builders`, saved: blob 26): a fifth forester fells,
+  and no more houses are begun at once than there can be builders for
+  (`Begin_Houses`). `--builders 0`: no limit, as before (`colony_check`:
+  six foresters and room for eight hovels, four builders and four hovels
+  begun; with no limit six and six). Building is its own work, not an extra task:
   it counts against no limit on hands, and the camp's building and the
   paths come first for it as for anyone. Given another job, it leaves the
   house to the next forester free to take it, and a log in its hands goes
@@ -271,9 +291,52 @@ are the band's own.
   game minutes later, and back at its own when that one stands; 910
   minutes the old way), and then the one behind (the other keeps to its
   own).
+* **A builder with no house of its own helps at a larger one** (2026-11-23, his "let's also have
+  builders who finish their project help finish larger projects together"; `Set_Build_Help`,
+  `--no-build-help`, not saved; `Helping`, `Builders_At`; in `Think_House`). A forester that could take
+  a house (the best free at building, while fewer than `Most_Builders` build) and finds none without a
+  builder goes to a larger house that is being built: one whose blueprint is more than `Help_Over_B`
+  (6,000 blocks: a hovel's is some 3,400, the storehouse's some 15,000), the one with the most still
+  to lay, where no more than `Help_Most` (3) build already. `M.Site` is that house for it too: it makes ready a
+  square metre nobody else of its builders is at, stands on no place another of them stands on,
+  fetches what the house is short of, and lays the next blocks of its blueprint. **The house is its
+  first builder's** (`Builder_Of`: the lowest number); a helper is whoever else has it (`Helping`),
+  which nothing saves. It leaves when a house has no builder (it takes that one) and while the roof is
+  thatched (one ladder, one thatcher); else it stays until the house stands. Today the rule means the
+  storehouse. Helpers count among the `Most_Builders`. Measured (`colony_run --builder-stats`,
+  "helping"; the build gated on 2026-11-23): in the game as it is played, eight hovels to build, the
+  storehouse stands after 16.04 days for 17.26 (three builders at it at the most, 4,859 serf-seconds
+  of help: the foresters are at hovels until the fourteenth day); with two hovels to build, after
+  9.97 days for 15.21; at three other squares with no hovels to build, after 8.44, 8.24 and 8.07 days
+  for 15.35, 13.29 and 13.46. **Three at one floor walk round one another**: each takes the nearest
+  square metre of the same row, so a builder's next is 1.7 to 2.9 m from its last where one alone
+  has 1.4 to 1.8 m (having each take first what it stands nearest to measured no better).
 * **The ground first**, a square metre at a time (`Tamp_S`, at its rate for
   `Site_Work`), **from the path back** (`Go_Level`, `Patch_Band`: whoever
-  digs is never left in a pit). What grows on the site is cut; a
+  digs is never left in a pit). **Worked from beside it** (2026-11-23, his
+  "the builder is standing on the blocks their placing and when the place
+  them they fall through, maybe extend their reach a little bit";
+  `Go_Beside`, `Set_Reach_Out`, `--no-reach-out`, not saved): its builder
+  stands on a place of the walking map within `Site_Reach_M` (1.75 m) of
+  the middle of the work, none of whose block columns that bout writes, for
+  choice one with no work left in it and of those the nearest to where it
+  stands, **and only one with a way back to the stake** (a square metre dug
+  down beside higher ground can be walked into and not out of: the three
+  best places are tried); with none, on the square metre as before, and
+  whoever is then left with earth or stone over its feet is stood on it
+  (`Stand_On_Fill`, `Stood_On_Fill`). **It goes all the way to the place
+  chosen** (`Goes_Beside`: its goal is the place, its spot the middle of the
+  work, both saved; so `Near_Of` is `Beside_Near_M` and the walk ends at the
+  way's end): until late on 2026-11-23 it stopped within half a metre, as a
+  builder stops short of any work, and half a metre short of a place none
+  of whose columns is written is another place; a way found again on the
+  way could end `Build_Reach_M` off. A place lost on the way is chosen
+  again at once (the house is not left alone for it). Before the rule a
+  builder stood on the middle of the work: in the game as it is played,
+  eighteen days, 102 serf-seconds making ground ready with a block in its
+  own block column at its feet (one or two blocks deep), and none with the
+  rule there or at five other stockyards
+  (`colony_run --builder-stats`: "in the ground"). What grows on the site is cut; a
   neighbouring tree's leaves and boughs hanging where the house and its
   eaves will be are lopped (the tree stands, and is felled as any other:
   nothing of a felled tree is taken out of a house, `In_A_House`); earth
@@ -495,6 +558,370 @@ are the band's own.
   stacks under every housing zone stay loaded wherever the camera is, as
   the ground the band works on does.
 
+## The storehouse
+
+The stockpile's second pass (2026-11-17; why and when it is asked for:
+`colony.md`, "The storehouse"; his words whole: the brief and
+`docs/handoffs/Handoff_2026_11_17_storehouse.md`). **It is a house of
+another kind** (`Castle.Buildings.Building_Kind`: `Hovel`, `Storehouse`;
+`House.Kind`), so everything of a hovel's building is its: the site found
+by `Try_Lot`, its ground levelled and walled as a hovel's, its blueprint
+laid from the stores by a builder, ladders at its eaves. What differs:
+
+* **Its design is fixed** (`Storehouse_Design`, not drawn from a seed):
+  `Store_W_B` by `Store_D_B` (5 m by 10 m), the ridge along its length,
+  its door of `Store_Door_W_B` (2 m) in the end toward the path, a floor
+  of plank (`House.Floor`: a hovel's is beaten earth), no windows.
+* **Its yard is the stockpile's lot** (`Yard_U0` to `Yard_V1`, in the
+  house's own frame, the front `Store_Yard_B` before the door), laid in
+  the blueprint after the roof's trimming, so built after the storehouse
+  (`House_Phase` `Yard`): the lot's ground beaten (`Beaten`, a footpath
+  block where the ground is grass or earth, plants over it cut), a fence of
+  logs on its outer line (`Fence`: a post of `Fence_H_B` every
+  `Fence_Post_B` blocks, two rails between) from the gateway round, the
+  gateway before the door (two posts `Gate_Post_H_B` high either side of
+  an opening as wide as the door, a plank across their tops: no leaf),
+  and the coverings along the back beside the storehouse (`Cover`: thatch
+  on four posts, `Cover_W_B` along the fence by `Cover_D_B` deep, its
+  front `Cover_Front_H_B` high and its back `Cover_Back_H_B`, as many as
+  fit, at most `Max_Covers`: two on a lot of 15 m). **The yard is laid on
+  the ground as it lies** (`Lay_Bout` maps a yard block's height from the
+  column's top when it is laid, `Top_By`), not on the storehouse's pad: a
+  covering's posts go down to their own ground under a roof as high as its
+  highest. A block of the yard that cannot be laid (no grass or earth to
+  beat) is passed over and takes nothing.
+* **What it takes** is counted from its blueprint as a hovel's is: the
+  storehouse's wood (frame and plank) and straw, then the yard's wood
+  (fence, gateway, posts) and straw (the coverings' thatch), in that order
+  (`Next_Kind`); 18 logs and 43 sheaves on a lot of 15 m.
+* **It is nobody's home**: no lot is drawn for it (`Draw_Owner`), housing
+  counts hovels only (`Houses_Open`, the log's `housing:` line), and its
+  sheet says "the storehouse" with what is being built.
+* **Standing, it is fitted out and kept** (the third pass; `colony.md`,
+  "The storehouse used"): its stockpile's places inside it on the floor,
+  shelves and barrels made by **a carpenter**, its builder: a forester that
+  builds no house from then on, so its place among the builders
+  (`Most_Builders`) is another forester's. Shelves and barrels are drawn
+  (`Castle.Props.Shelf`, `Castle.Props.Barrel`), never blocks: the walking
+  map goes through them, as through baskets.
+
+### The storehouse on a stockyard (2026-11-18)
+
+John's notes of 2026-11-17, after trying the storehouse ("Keep stockpile, move storehouse to a new
+stockyard zone. Storehouse to be built with doors at each end of the building, the fence is to be
+placed around the stockyard with the gates extending from the storehouse, inline with the inside wall
+of the storehouse to the stockyard"; "level the stockyard, same as houses"; "Fell apple trees in the
+stockyard"; "The newstockyard zone will make it easier to build the storehouse on angled paths").
+**What is said above of where the storehouse stands and how it is fitted out is how it was.**
+`docs/handoffs/Handoff_2026_11_18_playtest_round.md`; the zone itself is in `colony.md`.
+
+- **Its design** (`Castle.Buildings.Storehouse_Design`): `Store_W_B` (10 m) along its front, the side
+  toward the path, `Store_D_B` (5 m) back; its ridge along its length; a door `Store_Door_W_B` wide
+  in the middle of each end (`Openings` 1 and 2, `Left` and `Right`), none in its front. A door is an
+  opening from the floor up, on any wall: the blueprint gives each one jambs, a lintel and a
+  threshold (it gave them to the first opening, in the front wall).
+- **Where** (`Place_Storehouse`): in the middle of the lot's front, its left wall on the last block of a
+  place so that whole places lie inside it (nine along, four deep), its front wall `Store_Yard_B` back
+  from the lot's front.
+- **Its yard in the blueprint**: the ground beaten; the fence round the yard behind it, from the left
+  gateway's post out to the side, back, along the back, forward and in to the right gateway's post;
+  **a gateway beside each end, from its corner out, in the line of its back wall** (`Store_Gate_W_B`,
+  a post at its far side raised to `Gate_Post_H_B`, a plank across; the eave's end is over the block
+  nearest the wall); the coverings side by side along the back, on the lot's whole metres.
+- **Its ground is all its lot** (`Yard_Site`; `Apron_L`, `Apron_R`, `V_Hi`, `Lot_Left`, `Lot_Right`,
+  `Lot_Back` take a storehouse's from its yard): chosen, read and worked by the routines a hovel's is
+  (`Check_Lot`, `Choose_Pad`, `Front_Yard`, `Site_Patches`, `Level_Column`, `Wall_Patch`), walled with
+  stone where the land beside it stands more than a block over or under. Its fall may be `Yard_Fall_B`
+  (3 m) from end to end. `Set_Yard_Level`, `--no-yard-level`: its own pad and the bank round it alone.
+- **Its way in** is the middle of its front (`Way_Lo`, `Way_Hi`: a hovel's is its door's columns;
+  `Store_Way_U` puts a storehouse's on two whole patches of its ground), found by `Door_Way` as far out
+  as `Front_Most`; its floor lies within `Yard_Step_B` (2 m) of the path where the way meets it, a stair
+  between them as a hovel's door has.
+  **Since the evening of 2026-11-21 a stockyard's stair stands in a corner of the zone** (John: "I was
+  talking about the stockyard having the stair in the corner rather than the middle"; the spec, "The
+  stockyard's stair in a corner of the zone"; `Set_Yard_Stair_Corner`, `--yard-stair-middle` is as it
+  was). The floor's level is judged by the way at the middle of the front as ever; where that way would
+  have steps, `Choose_Way_End` puts the way in at an end of the stockyard's front (`House.Way_End`):
+  two metres, a block column in from the side's rim, a block a step from the path's edge inward
+  (`End_Steps`), on past the front wall's line beside the storehouse's end if the flight is longer than
+  the staging is deep. The end away from one where the path comes in level; of two banked ends the
+  lower; none where an end is level and no end takes a stair. `Way_Lo` and `Way_Hi` are that way;
+  `Mid_Lo` and `Mid_Hi` are the middle of the storehouse's front, which the cart, the ladder and a
+  razing go by still.
+  **Since 2026-11-22 its floor lies at its path's level at the lower corner of its front** (John: "Set
+  the floors level of the stockyard to the path level at the lower corner, the higher corner along the
+  path gets the stairs"; `Set_Yard_Floor_Low`, `--yard-floor-by-land` is the paragraph above alone):
+  `Floor_By_Path` in `Try_Lot` reads the path at the front's two ends and at the middle of the
+  storehouse's front (`Path_At`: the path's own nearest block column, the middle one of the way's
+  eight), sets `Pad` by the lower end and puts the way in at the higher end where the path stands two
+  to eight blocks over the floor there (over eight: no stair, the level end), at the middle where all
+  three lie within a block. `Door_Row` is the row the floor was set against. A floor can stand over the
+  land it is put on (filled; walls of stone hold it up), which no house's pad did before.
+- **Its rows are worked there and back** (2026-11-23, his "they walk back and fourth like a typewriter
+  instead of a zigzag"; `Set_Zigzag`, `--no-zigzag`, not saved): the rows of that order are a metre deep,
+  and within a row the square metre nearest to where its builder stands is next, so a row is begun where
+  the last one ended. Each row used to be begun at the same end (equal distances went by the patch's
+  number) and its builder walked the row's length back. Counted at six stockyards, eighteen days each,
+  the storehouse's ground alone (the build gated on 2026-11-23, one builder a house): one square metre
+  lay 3.2 to 6.3 m from the one before on the average (77 to 247 of some 290 to 550 more than 3 m
+  off), and 1.4 to 1.8 m now (13 to 40 of some 260 to 510); the walk to a square metre 3.7 to 6.5 m,
+  now 1.8 to 2.5 (`colony_run --builder-stats`). With helpers at the same floor, 1.7 to 2.9 m ("Three
+  at one floor", above). The order of the rows is as
+  it was. A stockyard whose way in is at the middle of its front has two arms to a row, and its builder
+  crosses from one to the other once a row.
+- **It is dug in the order it is walked when all is made** (`Yard_Order`, in `Go_Level`): down the stair
+  of the way in from the path, then outward over the floor from the stair's foot. **A hovel's rows from
+  the path would leave its builder in a pit**: a stockyard's staging is 4.5 m deep and more, and beside
+  a path aslant up a hillside its far corner, dug first, lay 2 m under the path and under everything
+  round it (found on the reference site with the debug build; `tools/stockyard_sites.sh` runs the two
+  sites it was found on and fails on anyone starving).
+- **What stands on it is cleared**: its trees are felled by its builder before its ground is touched
+  (`Go_Fell_Yard`, from `Think_House`: whatever their kind and whatever the order to spare apple trees;
+  the logs are its own to carry home, as any tree's it fells); a stump, a bush, what hangs over the yard
+  of a tree beside it go with the ground (`Stands_Over`, `Level_Column`), a boulder as ground does.
+- **Fitted out** (`Fit_Storehouse`): inside, columns along its length and rows from its front wall: the
+  two middle places by each door kept clear (`Kept_Clear`: no place at all), a barrel in each corner and
+  the place beside it along the front and the back wall (the two back corners' for water), a shelf's
+  `Shelf_Places` in the middle of the front wall and of the back, the rest floor. In the yard: `Cover`
+  under the coverings, `Lean` in the row behind its back wall (a ladder each, against the wall's
+  outside: `Fit_Wall`), the rest ordinary places, open now. The staging, the ground beside its ends and
+  the row its back wall and the gateways stand in are `Kept_Clear`.
+- **The cart** is brought to the staging beside the middle of the storehouse's front (`Cart_Front`;
+  where the way in was, and is unless it has steps).
+- **A storehouse whose yard is being laid is opened by the camera** as one that stands is (the game's
+  `Follow_Roofs` offers the `Yard` phase).
+- Limits that grew for it: `Max_House_Blocks` 24,576 (the largest stockyard's blueprint is 15,088),
+  `Max_Site_Patches` 1,134 (`Patch_Bands` 42: a patch number is not what it was, so a save of the build
+  before is refused), ladders' fail memos from 21,400.
+
+### A stockyard along a path at 45 degrees (2026-11-20)
+
+John, of three ways put to him: "Ok go on with the second way for the stockyard"
+(`docs/handoffs/Handoff_2026_11_20_stockyard_along_a_path.md`). `Set_Yard_Turn`, `--no-yard-turn`: off,
+a stockyard is square to the grid beside any path, as above. Saved (blob 39).
+
+- **The lot lies along the path**: `Plan_Stockyard_Lot`, where the path nearest its two corners runs at
+  45 degrees, takes the whole metres the corners span along and across the path's way (`Way_Of_Path`,
+  `Plan_Lot` as a stockpile's), 15 m to 25 m each way, every place of it or none. The two corners are
+  opposite corners of the lot: two straight along the path's way, or straight across it, are a strip a
+  metre wide (`tools/yard_corners.py` works corners out for a script).
+- **The storehouse's own blocks stand square to the grid, and are drawn turned an eighth**
+  (`Place_Storehouse_Turned`; `Castle.Buildings.Yard_Turned`: a storehouse with `Turn /= 0`). It stands
+  with its middle on the block corner nearest where its middle is to be drawn, and is turned about the
+  point (`House.Piv_U`, `Piv_V`, near its middle) that carries its walls, as drawn, onto its places'
+  lines: its left wall on the last block of a place, its front wall `Store_Yard_B` back from the lot's
+  front, as a square one's.
+- **Its frame and its design.** Its *frame* (`H_X`, `H_U`, `H_Point`) is where its own blocks are.
+  Everything else of it is *designed* in that frame exactly as a square stockyard's is (`Yard_U0` ..,
+  `Front`, the way in, the gateways, the coverings, a place's fitting) and made where the turn puts it:
+  the design's place (U, V) at `Fore_Turn (U, V)`. `Design_Of` (the colony's `D_U`, `D_V`) says which
+  place of the design a column of the frame is made as. Every column has one; a place of the design has
+  one column, two or none. **So a piece of ground is gone over by the frame's columns and asked of the
+  design** (`In_Site`, `Level_Of`, `In_Door_Way`, `Is_Stair`, `Patch_Of`; `Site_U_Lo` .. are the frame's
+  box of it), and a line or a spot goes from the design to the world (`Y_Point`, `Y_X`, `Y_Y`). With no
+  turn the two are one, and a square stockyard's code is the same code.
+- **What is made for real, block by block**: its ground at its floor's level, walled in stone where
+  the land beside stands over or under; the stair of its way in, its treads lying across the way as
+  the design has them (so aslant on the grid); its yard beaten; **its fence and its gateways' planks,
+  a line of columns each beside the one before** (`Add_Col`: where two of the design's fall corner to
+  corner on the grid the column between is added, or a body would pass); its coverings, each column at
+  the height its place in the covering has (their edges stepped). A fence at 45 degrees has more blocks
+  in it: a 16 m yard takes 21 logs for a square one's 19.
+- **Nothing of the yard stands among the storehouse's own blocks** (they are drawn turned: it would be
+  seen elsewhere). `Yard_Clashes` counts what would, and a stockyard is taken only where it is nought
+  (every size from 15 m to 25 m is: `colony_check`). The end of each gateway's plank, under the eave,
+  is laid in the frame as one of the storehouse's own blocks, and so is drawn at its corner as drawn.
+- **The feet go by the storehouse as it is drawn, once its walls and roof are up** (`Walked_Drawn`:
+  its blocks laid as far as its roof's trimming; `Walk_Drawn` tells `Castle.Nav.Set_Drawn`; `routes.md`).
+  Its walls as drawn are walls, its two doorways as drawn the ways in, and where its blocks stand is
+  walked as the yard it looks like. So its places inside are within it as drawn, whoever is in it is
+  where they are seen, and it has no hidden square: its doors are in its ends, 10 m apart, and no point
+  to turn it about holds both (drawn through the turn, as a hovel's people are, whoever walked in would
+  have jumped 4 m). While its frame, walls and roof go up its builder works at the blocks and is drawn
+  through the turn (`House_View.People_Turned`), eased over 6 m beyond where it works (the game's
+  `Ease_M`).
+- **Fitted out as a square one**: `Fit_Storehouse` takes each place's square in the design (four
+  blocks each way about its middle); a 16 m yard has 18 places of floor, 6 of shelf, 6 and 2 barrels,
+  24 under the coverings, 9 against the wall, 63 of the yard, 128 kept clear, either way it lies.
+- **The instant build** (`Raise_Now`) lays such a yard by `Yard_Row`, as `Step_House` does (on the
+  ground as it lies); a square one's is written as drawn up, as before.
+- The rule for the fall is the stockyard's own (3 m from end to end, `Yard_Fall_B`), taken over the lot
+  as it lies. Limits: the largest's blueprint is 15,550 blocks.
+
+
+### Turned hovels walked where they are drawn; a stockyard's pieces (2026-11-20)
+
+His word: "Let's do that, and what do you think about turning the fence too? The outdoor roof
+covering needs a smoothing pass." (`Handoff_2026_11_20_walked_hovels_and_yard_pieces.md`.)
+
+- **A hovel placed turned is walked where it is drawn** (`Set_Hovel_Walk`, `--no-hovel-walk`;
+  `House.Walk`, fixed when it is placed, saved in its turn's byte): once its walls and roof are up
+  the walking map goes by it as drawn (`routes.md`, "A building walked where it is drawn"): its
+  walls as drawn slow the feet to a hundredth (they do not shut: on hillsides that made pits), its
+  doorway is held open, the square its blocks stand on is walked as the turf it looks. Its bed is
+  in it as drawn (`Bed_Place`; `House_Inward` for the way a sleeper faces), nobody in it is drawn
+  through its turn (but its builder while it goes up), and nothing is kept off it. A hovel of an
+  older blob stays walked as it stands.
+- **A covering's roof is smoothed** (`Set_Smooth_Covers`, `--no-smooth-covers`; `House.Smooth_Covers`,
+  said when a storehouse is begun): the blueprint's last stage, `Smooth`, is each covering's thatch
+  again, a row at a time from its front, laid with the state `Castle.Blocks.Piece` (work alone: the
+  builder "smoothing the coverings' roofs by the storehouse"). A smoothed row is left out of what
+  the land draws and drawn as part of one plane from the covering's front edge to its back, a
+  rounded edge all round but where two coverings meet (`rendering.md`, "A stockyard's pieces").
+  Every stockyard's, square ones too. **Since his answer of the same day** ("connect the rounded edges
+  together along the length, and texture the roof of the outdoor storage the same as all the other
+  roofs, that is the defult for all thatch roofs"): the rounded edge is one roll from corner to corner
+  (its pieces lap 15 cm into one another, every second a hair narrower so that none shows through its
+  neighbour), and the roof's texels are the land's own for a block of thatch, a variant a block
+  (`Castle.Props.Cover_Thatch`; the game's `--no-cover-thatch`: as it was drawn). It is still a
+  piece lit as the cart and the barrels are, and one even plane: a covering falls a quarter block a
+  block, where a dressed roof's block falls a whole one.
+- **A turned stockyard's fence in pieces** (`Set_Fence_Pieces`, `--no-fence-pieces`;
+  `House.Fence_Pieces`): its rails and the planks over its gateways are laid as pieces and drawn
+  straight from post to post, and from a gateway's post to the storehouse's corner as drawn. Its posts
+  stay columns of blocks where they are laid. The pieces' blocks stay where they are laid: the feet,
+  a ray, water and a save meet them as ever.
+- `Castle.Colony.Yard_Pieces` is what is drawn (kept per house until its place or its count of
+  blocks laid changes, and not kept while its ground is not yet in). `colony_run --turn-stats` says
+  it for each storehouse.
+
+### The storehouse twelve metres by eight, a metre and a half from its path (2026-11-21)
+
+His words: "bring the storehouse forward 3m towards the path so that the fenced area becomes 3m deeper
+, add 2m to the width of the storehouse, so that it is now 8x12." Read as the result he names: the
+storehouse of before (10 m along its front, 5 m back) with his 2 m and his 3 m, its front wall 3 m
+nearer its path and its back wall where it was. **So the fenced yard is as deep as it was** (the
+fence and the gateways stand in the back wall's line: 10.5 m of a stockyard of 20 behind it, with the
+storehouse of before and with this one; 5 m more than the least stockyard of before had, by the
+larger zone alone). His "so that the fenced area becomes 3m deeper" and his "8x12" cannot both be had
+on 20 m: 1.5 + 8 + 10.5. A storehouse 5 m back brought forward gives the 13.5 m (`--storehouse 12 5
+1.5`). Put to him as his call. (`Handoff_2026_11_21_square_thirteen_and_stockyard_twenty.md`.)
+
+- **Its size is the colony's setting, and a storehouse keeps what it was begun with**
+  (`Castle.Colony.Set_Store_Size (Long_B, Deep_B, Staging_B)`, in blocks; `--storehouse LONG DEEP
+  STAGING`, in metres: 12 8 1.5 unless told, `--storehouse 10 5 4.5` is the storehouse of before; not
+  saved: it speaks of the next one). `Castle.Buildings.Storehouse_Design (W, D)` makes it at any size
+  of whole metres, its two doors in the middle of its ends. Its walls are saved with it (blob 44, a
+  byte each after its kind); a storehouse of an older blob is 40 by 20 blocks.
+- **Beside a path at 45 degrees it stands 3.5 m from the path, not 1.5** (`Store_Turned`): its own
+  blocks stand square to the grid about its middle and are drawn turned, so a corner of them reaches
+  (W + D) / 2 x 0.707 blocks toward the path, further than the front wall is drawn; nearer than 14
+  blocks a corner stood across the path (28 block columns of it with 6). The staging there is what
+  keeps every one of its own blocks on its stockyard's ground, for either size, and the plan refuses
+  a place where one would not be (`Storehouse_Lie`'s `Own_Out`, `Own_On_Path`; `colony_run
+  --box-stats` says "0 block columns its own blocks stand in are not its stockyard's").
+- **How it lies on a stockyard put down whole** (`colony_run --box-stats`): squarely 1.5 m of ground
+  before its front wall to its path's edge, 10.5 m of yard behind its back wall, 3.75 and 4.25 m
+  beside its ends; along a path at 45 degrees 3.5 m (to 3.75 where its ground is stepped), 8.5 m
+  behind, the same beside. Inside, seven places by eleven: 57 on its floor, 8 barrels, 6 shelves, 6
+  kept clear before its doors (`Fit_Storehouse`: a place is kept clear only where it lies before a
+  door, now that the ends are wider than the doors).
+- **What it takes**: 15,054 to 15,263 blocks in its blueprint on a stockyard of 20 m (19,307 on the
+  largest of two corners; the ceiling is 24,576), 33 to 35 logs and 78 to 79 sheaves, where the
+  storehouse of before took 11,952 to 12,123 blocks, 21 to 24 logs and 47 sheaves. It is in use two
+  days later (10.1 to 10.5 days after the founding for 8.1 to 8.2).
+- **Where it does not go.** A place whose floor would lie too far off its path's level for three
+  steps (the hillside sites of `tools/stockyard_sites.sh`: refused when the stockyard is put down,
+  "it falls more than 3 m, or lies too far off its path's level"), and the two stockyards of two
+  corners along a path at 45 degrees in that script that are 15.4 m and 14.4 m a side (the largest,
+  24.4 m, takes it; two of 16 m squarely take it too). Of 1,292 sides of the ten places' squares 828
+  take a stockyard of 20 m with it, where 845 took one with the storehouse of before (426 for 442
+  squarely, 402 for 403 aslant).
+- **The lord's cart's place before it is looked for** (`Cart_Front`; `Set_Cart_Search`,
+  `--one-cart-place` is the one place of before; not saved). It was one place: across the staging,
+  hard by the way in, on the wider side of the yard. Where the bed did not fit there (a bank beside
+  it, a stair, the storehouse's own blocks at 45 degrees) the cart was never brought and its salt
+  stayed in it: at four of the nine test stockyards, older than this pass. Now the old place first,
+  then along the front (which 1.5 m of staging has room for), the other side of the way in, and
+  further from the way a metre at a time: the first that takes the bed. With the storehouse of
+  before and the search on, the cart is brought and its salt carried in at all nine.
+- **With `--storehouse 10 5 4.5 --one-cart-place` everything is as it was**: the nine sites' logs
+  are 82fa10b's line for line, and twenty-seven saves of the builds before (two corners and boxes,
+  not begun, half built, standing) run on to the same logs (in the commit of the size itself; since
+  the lot's timbers are given back on load, the four of them with lots still to begin run on to
+  houses with their timbers, and so to other logs). A stockyard of an older save that is not
+  yet begun and that the larger storehouse does not fit gets none (the advisor's note says its ground
+  will no longer take one): there is no save compatibility during production.
+
+### Food and full barrels stacked in the storehouse (2026-11-21)
+
+His words: "Allow food and full barrels to be stacked in the storehouse." (`Set_Store_Stacks`,
+`--no-store-stacks` is as before; held off in both `Reset`s; not saved.)
+
+- **A place on the storehouse's floor holds its baskets of food three high** (`Floor_Stack`; berries,
+  apples, vegetables, grain: 360 berries for 120; salt, the yard's places and the places under the
+  coverings as they were). `Place_Limit` alone says so: **the stockman still puts a load in the
+  nearest place that keeps it**, so with a higher place the food stands in fewer of them (600
+  berries in 3 places for 5). Drawn a tier to a place's own worth, four baskets a tier, each tier
+  20 cm over the one below (`Castle.Props.Basket_Tall`); the first tier is drawn as it always was.
+- **A barrel that is full has a second barrel stood on it** (`Barrel_Stack` 2; `Cell_View.Second`):
+  the carpenter makes it there, a log and a barrel's work, after the shelves and every place's first
+  barrel (`Next_Fitting`, `Wants_Second`: its first holds a barrel's worth, counted by what is in it,
+  not what is on its way). The place holds two barrels' worth from then on (120 lb of meat, 24 pails).
+  The lower one is drawn shut, the upper one as a single barrel is (open and full of water once more
+  than the lower one's worth is in). A second barrel that stands, stands, whatever the switch says
+  later. Saved as 2 in its place's byte for its barrel (blob 44 still, as the square's strips went
+  into spare bits; a blob written before has 0 or 1 there).
+- **How high are first values of mine, his calls** (three baskets, 65 cm; two barrels, 1.6 m).
+- **What it does** (fifty days at three stockyards, on against off): the floor was never more than a
+  third in use before (at most 14, 17 and 19 of its 57 places held food at once), so stacking does
+  not let the band keep more food, it puts it in fewer places (at most five places stacked at once
+  over thirty days at one of them). **The barrels are where it adds room**: all six meat barrels were
+  full at once for two fifths of the time at one site; with the stacks 5, 3 and 4 of the six stand
+  two high at the end and 645, 534 and 570 lb of meat are kept for 319, 336 and 360; both water
+  barrels stand two high (48 pails for 24). Hungry serf-hours 1,003, 1,276 and 1,237 for 1,016,
+  1,216 and 1,445; nobody died either way (member-hours with an empty belly, of every
+  member at every hourly look: 6, 44 and 8 against 16, 4 and 6: no one way).
+- **With `--no-store-stacks` the build is the build before**: the nine sites with the new storehouse
+  and with the old, and 62 saves taken half way, end in the same states (the blob is not changed, so
+  the states compare).
+
+## What a house is made of since 2026-11-19
+
+John's notes of 2026-11-17, built in the pass of 2026-11-19 (`docs/handoffs/Handoff_2026_11_19_next_pass.md`).
+A house keeps how it was begun (`Castle.Buildings.House.Truss`, `.Sill`, set by the colony when it
+begins one and saved with it), so a house begun before stays as it is.
+
+- **A window's timber** (`Set_Window_Timber`, `--no-window-timber`). "Fix floating timber for windows on
+  houses, make the timber extend the length of the timber columns it sit's inside. Change the color of
+  the first fraction of blocks around the window, like planks as trim." The sill runs from the post on
+  the window's one side to the post on its other, a lintel over it the same, and the block to either
+  side of the opening is plank. Whole blocks: a trim thinner than a block would be a drawing.
+- **The roof's timbers** (`Set_Roof_Timbers`, `--no-roof-timbers`). "Add timber truss the the ends of the
+  houses and cross member support to the sides of the houses perpendicular to the door, add trusses,
+  ridge beam, and cross member support for the storehouse." In each gable end a king post from the
+  wall's beam up, and a rafter two blocks deep under each slope, a block under the gable's trimmed top;
+  tie beams at the beam's row from eave wall to eave wall, about every `Tie_B` (2 m) of the house's
+  length; in a storehouse a king post and rafters on each tie beam and a ridge beam from gable to
+  gable. All of stage `Trim`: raised with the frame, before any daub. A hovel takes 77 to 122 blocks of
+  timber more (a log makes 96; five logs at the most, as before), the storehouse 260. A tie beam is
+  2 m or 2.25 m over the floor: walked under.
+- The blueprint is otherwise block for block what it was (four hundred hovels and the storehouse
+  compared, `colony_check`).
+- **The truss to the ends of its wall, the same either side of its middle** (2026-11-23;
+  `CB.House.Full`, `Set_Full_Truss`, `--no-full-truss`; a house keeps it, saved with the colony: blob
+  45). "can we extend the truss to the end of the wall? make it symmetrical, either add another support
+  if the length is even?" A gable's rafters met the wall's top beam three blocks in from either
+  corner, and its king post stood at the lower of the two middle places where the span is an even
+  number of blocks (188 of four hundred hovels; the storehouse, 20 and 32 across). Now the line of
+  each rafter goes on down through the wall's top corner to its corner post (`Brace_At`: three blocks
+  of timber where there was daub, at either end of each gable; never in an opening or where the wall
+  has timber or plank of its own), and an even span has two king posts side by side, in its gables and
+  on a storehouse's tie beams, and two ridge beams (`Is_King`). Twelve blocks of timber more for an odd
+  span, 41 to 47 for an even one, 84 for the storehouse of 40 by 20. Over the wall's top beam every
+  gable's timber is the same either side of its middle (`colony_check`, four hundred hovels).
+- Since his answers of the same day: **a hovel has a ridge beam too** (`CB.House.Ridge`; "eh, go ahead
+  and add a ridge beam to the hovels"), and **the wall beside a window is daub again**, with a thin
+  trim of plank drawn up each side of the opening and across its top (`CB.House.Jambs` false;
+  `Window_At`, `Castle.Props.Window_Trim`; "Thin trim around the tops and side(s)"). The trim is drawn
+  on every house's windows; a house begun with plank blocks there keeps them.
+- **The stockyard's gateways have leaves** ("yeah add the leafs on the gateways"): two of rails in
+  each, hung once its post is raised, swung into the yard while anyone or the cart is near
+  (`Gateway_At`, `Castle.Props.Gate_Leaf`). Drawn only.
+- **Doors** are drawn, not built: a leaf of planks in each doorway of a house whose walls stand, two
+  in a storehouse's doorways, swung in while anyone is within 1.3 m (`Doorway_At`; the game's
+  `Show_Doors`, `--no-doors`). The stockyard's gateways have none.
+
 ## What is shown
 
 A housing zone is filled like any zone (a pale blue). A house begun is
@@ -529,13 +956,74 @@ in daylight, with no colony.
 
 ## Options
 
+- `--no-build-help`: one builder a house, as before 2026-11-23 (not saved; held off in the reference
+  runs and `colony_check`'s `Reset`). `--no-full-truss`: a house begun from now on has the truss of
+  before (saved with the colony).
+- `--no-paths-meet`: a path is left half a metre off the trodden ground it meets; `--no-door-meet`: a
+  door's way is left as it was planned when its hovel was placed; both as before 2026-11-23. Neither
+  is saved; the reference runs, `stress.sh`, `look_cost.sh` and `colony_check`'s `Reset` hold both off.
+- `--no-reach-out`: a builder stands on the square metre of ground it makes ready, as before
+  2026-11-23. `--no-zigzag`: a storehouse's ground is worked every row from the same end, likewise.
+  Neither is saved; the reference runs, `stress.sh`, `look_cost.sh` and `colony_check`'s `Reset` hold
+  both off.
+- `--no-hovel-walk`: a hovel placed turned is walked as it stands (its people drawn through its turn,
+  the ground it is drawn on kept off), as before 2026-11-20. Saved.
+- `--no-smooth-covers`, `--no-fence-pieces`: a storehouse begun from now on has its coverings' roofs
+  left stepped, and (along a path at 45 degrees) its fence laid and drawn stepped, as before
+  2026-11-20. Saved.
+- `--no-cover-thatch` (the game's, drawing only): a covering's smoothed roof with texels of its own
+  and its rounded edge a metre at a time, as first drawn.
+- `--stockpile-box X Y WAY`: a stockpile put down whole with its path, as the player's tool puts it;
+  `--housing-pull X0 Y0 X1 Y1 ROWS`: housing pulled with its path from the first point to the second,
+  as the player's tool pulls it (ROWS 0: the side it was begun on, 1: the other, 2: both);
+  `--no-housing-pull`: the player's tool the strip beside a path that is there (`--housing` is that
+  strip, always).
+  `--no-box-place`: the player's stockpile zoned corner to corner. `--square X Y WAY`: the colony
+  founded on a square, the homestake and the campfire one; `--no-square`: the player's homestake the
+  post, the camp apart (`colony.md`). Both `--no-` switches are set where they are read, so a colony
+  the player founds by hand in that game has them too. The runner's `--square-census R STEP` and
+  `--square-scan R STEP` (`colony.md`) count where a square can be founded and look every one
+  founded over for pits; `--box-stats` says, of a square, how its floor, its hearth and its path
+  stand (at the start, as loaded, and at the end).
+
+(The windows' trim is on the wall's inner face too since 2026-11-19, "inside the house too".)
+
+(A hovel beside a path at 45 degrees is turned to it since 2026-11-19: `House.Turn`, set by `Place_House`
+from the path nearest its doorway, `--no-house-turn`. Drawing only: the house stands square on the grid
+for everything the colony does; `rendering.md`, "A building drawn turned". **Its ground is made where
+it is drawn as well** (`House.Turn_Ground`, `Set_Turn_Ground`, `--no-turn-ground`): the block columns
+under it as drawn, and two round, are of its site (levelled to its pad, cleared, walled) and of its
+lot; its floor of beaten earth is laid under it as drawn, its threshold under its doorway as drawn,
+and the square it stands on keeps its turf; its door's way is trodden square to the path where there
+is no stair; it reaches its ground to no neighbour's. The fall of the ground (2 m at the most) is
+taken under its walls as they stand, as a square house's is, so a turned hovel is placed wherever a
+square one would be, and its ground is made under it as drawn however far the land falls there
+(his word of 2026-11-19: "they need to be able to place diagonals on hillsides if they want to";
+`Set_Turn_Fall`, `--turn-fall`, for the rule of some hours before, under its walls as drawn too).
+Its floor's edge is drawn stepped by the texel, under its walls (`rendering.md`). Who walks keeps off the ground a standing
+one is drawn on (`Set_Keep_Off`, `--no-keep-off`; `routes.md`). `colony_run --turn-stats`,
+`tools/turned_streets.sh`.)
+
+(Since 2026-11-20: `--no-yard-turn`: a stockyard beside a path at 45 degrees is square to the grid, as
+before that day; on, the default, it is laid out along the path, its storehouse drawn turned and
+walked where it is drawn ("A stockyard along a path at 45 degrees", above). `colony_run --turn-stats`
+says its ground and who walked where; `tools/stockyard_sites.sh` has three such; `tools/yard_corners.py`
+works out the two corners for a script.)
+
+(Since 2026-11-19: `--no-roof-timbers`, `--no-window-timber` (a house is begun as before that day),
+`--no-path-level`, `--no-make-way`; the game's own `--no-doors`, `--no-wheel-roll`, `--no-full-thatch`,
+and for stills `--doors-open`, `--wheel-turn R`.)
+
 `--housing X0 Y0 X1 Y1` (a housing zone, up to 8), `--housing-inside X Y`
 (all the ground inside the paths round that point, up to 8), `--homes-built` (a
 hovel for everyone the zones have room for, built on the spot and drawn
 for, as `--camp-built` builds the camp), `--no-beds` (nobody makes itself
 a bed: the band as it was, which the seven older reference logs are run
 with), `--no-ladders` (every roof thatched from the ground, as before the
-pass's fourth round). `colony_run --no-memos` also turns off what housing keeps only to
+pass's fourth round), `--no-storehouse` (none asked for on the second
+morning), `--builders N` (at most N builders at once, 4 unless set; 0: no
+limit), `--no-stockman`, `--no-carpenter`, `--no-water` (the storehouse
+standing and nobody using it). `colony_run --no-memos` also turns off what housing keeps only to
 save work (a blueprint drawn once while it is the one in hand): a run
 must end the same either way, and `tools/stress.sh runner` proves it.
 
@@ -546,7 +1034,11 @@ At the top of `castle-buildings.ads`: the hovel's sizes (`Min_Floor_B`,
 its openings and its frame (`Door_W_B`, `Door_H_B`, `Window_B`,
 `Window_Up_B`, `Stud_B`), where it stands (`Setback_Min_B`,
 `Setback_Max_B`, `Max_Push_B`, `Max_Step_B`, `Apron_B`, `Apron_Front_B`,
-`Door_Landing_B`, `Lot_B`, `Max_Reach_B`). In `castle-colony.ads`, with `Zone_Housing`:
+`Door_Landing_B`, `Lot_B`, `Max_Reach_B`); the storehouse's (`Store_W_B`,
+`Store_D_B`, `Store_Door_W_B`, `Store_Yard_B`, `Fence_H_B`, `Fence_Post_B`,
+`Gate_Post_H_B`, `Cover_W_B`, `Cover_D_B`, `Cover_Front_H_B`,
+`Cover_Back_H_B`, `Max_Covers`; `Max_Long_B` 40, the longest side a
+building may have). In `castle-colony.ads`, with `Zone_Housing`:
 `Housing_Deep_M`, `Housing_Past_B`, `Housing_Snap_M`, `Housing_Long_M`,
 `Run_Straight`, `Run_Joint_M`; and under "housing" `Retain_Over_B`,
 `Wall_Per_Stone`, `Trim_S`; with the beds, `Bed_Straw` and where a sleeper
@@ -560,7 +1052,34 @@ lies by the fire (`Bed_Near_M`, `Bed_Far_M`, `Bed_Ring_M`, `Bed_Apart_M`,
 
 ## Saves
 
-Colony blob 25, after everything of 17: how many houses have ever been
+- Blob 44 (2026-11-21): with a storehouse, after its kind, its walls along its front and back from
+  it, a byte each in blocks. Blobs 30 to 43 still read: a storehouse of theirs is 40 by 20.
+- **A lot still to begin is saved as its place alone, and its house designed anew from its serial's
+  seed on load: whatever is given a design after `Castle.Buildings.Design` must be given again
+  there** (`Give_Timbers`, which `Place_House` and the loader both call). Until 2026-11-21 the
+  loader left the roof's timbers, the windows' timber, the plank beside the windows and the ridge
+  beam as the design alone has them, and every house begun after a load from a lot laid out before
+  it was built as houses were before those passes. `Lot_Design` (for the checks) is a lot's house,
+  whole: a check holds every lot the same design across a save.
+- Blob 41 (2026-11-20): a byte with each storehouse after what it is turned about (1: its coverings'
+  roofs smoothed, 2: its fence in pieces), and the two switches at the end. Blob 40: 8 in a house's
+  turn byte if it is walked where it is drawn (only one whose ground is made there), and the switch at
+  the end. Blobs 30 to 40 still read: their hovels walked as they stand, their stockyards as begun.
+
+(Blob 39, 2026-11-20: with a storehouse, the point it is turned about, two numbers; at the end, whether a
+stockyard beside a path at 45 degrees is laid out along it. Blobs of 30 to 38 are read: a stockyard of
+theirs is as it was zoned.)
+
+(Blob 32, his answers of 2026-11-19: with each house also whether plank stands beside its windows and
+whether a hovel has a ridge beam; at the end who is set to building. Blobs of 30 and 31 are read: a
+house of 31 has the plank and no ridge beam in a hovel, as it was begun.)
+
+(Blob 31, 2026-11-19: with each house, after how far its ground reaches, whether it has its roof's
+timbers, its windows' timber, and whether it is marked for razing; at the blob's end whether making way
+and path levelling are on and how the next house is to be made. A blob of 30 is still read: its houses
+without, the switches as a new colony's.)
+
+Colony blob 26 (25 before the stockpile's first pass), after everything of 17: how many houses have ever been
 begun (the next one's seed is made from it), then each house's zone, seed,
 front-left corner, the way it faces, its pad's level, how long its door's
 way is and the row of the ground where that meets the path, its front yard
@@ -589,7 +1108,13 @@ ladder stands under, where its foot is and the trees its builder has
 felled for want of one, and for each member the house whose ladder it is
 going for; then the fifth round's (24): whether a hole under a path is
 filled as it is laid (`colony.md`, "Paths"); then the lord's cart's tow
-(`colony.md`, "The lord's cart"). A house's
+(`colony.md`, "The lord's cart"). Blob 26 (the stockpile's passes): a
+house's kind after its seed, and for a storehouse its yard (its four
+bounds, the gateway's place, the coverings and where each stands); at the
+end how many may be builders, then the rest of the first pass
+(`colony.md`), then whether a storehouse is asked for, the stake's day,
+whether it has been asked, the storehouse's house and each place's closed
+flag. A house's
 size and openings are its seed's (`Design`), and what it takes is counted
 from its blueprint again on a load. **So a change to `Design`, to the
 order `Blueprint` emits in or to what a house keeps moves the blob's

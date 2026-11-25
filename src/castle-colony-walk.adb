@@ -48,8 +48,16 @@ begin
          C : constant Vec3 := R.Pts (M.Leg + 1).P;
          L : constant Float := R.Pts (M.Leg + 1).D - R.Pts (M.Leg).D;
          T : constant Float := (if L > 0.0 then M.Along / L else 0.0);
+         X : constant Float := A.X + (C.X - A.X) * T;
+         Y : constant Float := A.Y + (C.Y - A.Y) * T;
+         --  (in the place of the walking map the next point lies in: a point is put where the
+         --  height changes, the first eighth of a metre inside the next place)
+         In_Next : constant Boolean :=
+           Edge_On
+           and then Integer (Float'Floor (X / Castle.Nav.Cell_M)) = Integer (Float'Floor (C.X / Castle.Nav.Cell_M))
+           and then Integer (Float'Floor (Y / Castle.Nav.Cell_M)) = Integer (Float'Floor (C.Y / Castle.Nav.Cell_M));
       begin
-         M.Pos := (A.X + (C.X - A.X) * T, A.Y + (C.Y - A.Y) * T, A.Z);
+         M.Pos := (X, Y, (if In_Next then C.Z else A.Z));
       end;
    end;
    return False;

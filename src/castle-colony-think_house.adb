@@ -4,16 +4,35 @@ function Think_House (I : Positive) return Boolean is
    H : Natural := M.Site;
 
    --  The best at building of the foresters with no house to build takes
-   --  one (of equals, the first).
+   --  one (of equals, the first), while there are fewer builders than the
+   --  most there may be.
+   function Builders_Now return Natural is
+      N : Natural := 0;
+   begin
+      for J in 1 .. N_Members loop
+         if not Band (J).Is_Dead and then Band (J).Site /= 0 then
+            N := N + 1;
+         end if;
+      end loop;
+      return N;
+   end Builders_Now;
    function Best_Free_Builder return Boolean is
-     (for all J in 1 .. N_Members =>
-        J = I or else Band (J).Is_Dead or else Band (J).Job /= Forester or else Band (J).Site /= 0
-        or else Band (J).Skill (Building) < M.Skill (Building)
-        or else (Band (J).Skill (Building) = M.Skill (Building) and then J > I));
+     ((Builders_Cap = 0 or else Builders_Now < Builders_Cap)
+      and then
+      (for all J in 1 .. N_Members =>
+         J = I or else Band (J).Is_Dead or else Band (J).Job /= Forester or else Band (J).Site /= 0
+         or else (M.Build_First and then not Band (J).Build_First)        --  (one set to building before one not)
+         or else (Band (J).Build_First = M.Build_First
+                  and then (Band (J).Skill (Building) < M.Skill (Building)
+                            or else (Band (J).Skill (Building) = M.Skill (Building) and then J > I)))));
 
    --  How far on a house is: nothing while its ground is being made ready,
    --  then by the blocks of it laid.
    function On_By (K : Positive) return Natural is (if Houses (K).Pad_Done then 1 + Houses (K).Placed else 0);
+   --  How much of a house is still to lay, in blocks of its blueprint (all of it while its ground is made ready).
+   function Left_Of (K : Positive) return Natural is
+     (if not Houses (K).Pad_Done then Houses (K).Total
+      elsif Houses (K).Total > Houses (K).Placed then Houses (K).Total - Houses (K).Placed else 0);
    function Further_On (A, B : Positive) return Boolean is (On_By (A) > On_By (B));
 
    --  To a spot the work can be done from: Spot if it can be got to (or
@@ -35,6 +54,122 @@ function Think_House (I : Positive) return Boolean is
       end if;
       return False;
    end Go_To;
+
+   --  To beside patch P of its house's site, to work it from there (the
+   --  spec, "A piece of a site's ground is worked from beside it"): a place
+   --  of the walking map within Site_Reach_M of the middle of the work (C),
+   --  none of whose four block columns is of that patch, with a floor within
+   --  a figure's reach of the work's height; for choice one with no work
+   --  left in any of its columns, and of those the nearest to where it
+   --  stands.  The three best are tried, each only if there is a way from it
+   --  back to the stake.  False: none it can get to and back from.
+   function Go_Beside (P : Positive; C : Vec3) return Boolean is
+      F : CB.House renames Houses (H).F;
+      type Place is record
+         At_P : Vec3 := (0.0, 0.0, 0.0);
+         Key  : Float := Float'Last;
+      end record;
+      Best : array (1 .. 3) of Place;
+      Cx0 : constant Integer := Integer (Float'Floor ((C.X - Site_Reach_M) * 2.0));
+      Cx1 : constant Integer := Integer (Float'Floor ((C.X + Site_Reach_M) * 2.0));
+      Cy0 : constant Integer := Integer (Float'Floor ((C.Y - Site_Reach_M) * 2.0));
+      Cy1 : constant Integer := Integer (Float'Floor ((C.Y + Site_Reach_M) * 2.0));
+      --  a block column this bout writes: of the site and of patch P, or an earlier house's
+      --  beside one that is (For_Site visits those with it)
+      function Of_Patch (X, Y : Integer) return Boolean is
+        (In_Site (F, H_U (F, X, Y), H_V (F, X, Y)) and then Patch_Of (F, H_U (F, X, Y), H_V (F, X, Y)) = P);
+      function Written (X, Y : Integer) return Boolean is
+        (Of_Patch (X, Y)
+         or else (not In_Site (F, H_U (F, X, Y), H_V (F, X, Y))
+                  and then (Of_Patch (X - 1, Y) or else Of_Patch (X + 1, Y) or else Of_Patch (X, Y - 1)
+                            or else Of_Patch (X, Y + 1))));
+      function Work_Left (X, Y : Integer) return Boolean is
+         Work : Ground_Work;
+         N    : Natural;
+      begin
+         if not In_Site (F, H_U (F, X, Y), H_V (F, X, Y)) then
+            return False;
+         end if;
+         Work_In (H, H_U (F, X, Y), H_V (F, X, Y), Work, N);
+         return Work /= All_Done;
+      end Work_Left;
+      Load   : constant Item_Kind := M.Carry;
+      Loaded : constant Natural := M.Carried;
+      Use_Of : constant Camp_Use := M.Use_For;
+   begin
+      for Cx in Cx0 .. Cx1 loop
+         for Cy in Cy0 .. Cy1 loop
+            declare
+               Mid : constant Vec3 := ((Float (Cx) + 0.5) * 0.5, (Float (Cy) + 0.5) * 0.5, C.Z);
+               D   : constant Float := Flat_Dist (Mid, C);
+               Fl  : Castle.Nav.Floor_List;
+               Fn  : Natural;
+               Zb  : Integer := Integer'First;
+            begin
+               if D <= Site_Reach_M
+                 and then not (for some Dx in 0 .. 1 => (for some Dy in 0 .. 1 => Written (2 * Cx + Dx, 2 * Cy + Dy)))
+                 and then not (Help_On
+                               and then (for some J in 1 .. N_Members =>
+                                           J /= I and then not Band (J).Is_Dead and then Band (J).Site = H
+                                           and then Flat_Dist (Band (J).Pos, Mid) < 0.45))
+               then
+                  Castle.Nav.Floors_At (Cx, Cy, Fn, Fl);
+                  for K in 1 .. Fn loop
+                     if Fl (K).Speed > 0.0 and then Fl (K).Head >= Castle.Nav.Head_B
+                       and then abs (Float (Fl (K).Z) * 0.25 - C.Z) <= 1.5
+                       and then (Zb = Integer'First
+                                 or else abs (Float (Fl (K).Z) * 0.25 - C.Z) < abs (Float (Zb) * 0.25 - C.Z))
+                     then
+                        Zb := Fl (K).Z;
+                     end if;
+                  end loop;
+                  if Zb /= Integer'First then
+                     declare
+                        Spot : constant Vec3 := (Mid.X, Mid.Y, Float (Zb) * 0.25);
+                        --  (ground still to be worked counts as ten metres further off)
+                        Key  : constant Float :=
+                          Flat_Dist (Spot, M.Pos)
+                          + (if (for some Dx in 0 .. 1 => (for some Dy in 0 .. 1 => Work_Left (2 * Cx + Dx, 2 * Cy + Dy)))
+                             then 10.0 else 0.0);
+                        New_P : Place := (Spot, Key);
+                     begin
+                        for K in Best'Range loop
+                           if New_P.Key < Best (K).Key then
+                              declare
+                                 Was : constant Place := Best (K);
+                              begin
+                                 Best (K) := New_P;
+                                 New_P := Was;
+                              end;
+                           end if;
+                        end loop;
+                     end;
+                  end if;
+               end if;
+            end;
+         end loop;
+      end loop;
+      for K in Best'Range loop
+         exit when Best (K).Key = Float'Last;
+         --  (and never a place it could not walk out of: the walking map lets one drop a metre and
+         --  climb half of one, so a square metre dug down beside higher ground can be got into and
+         --  not out of; as Make_Way asks of where it puts someone)
+         if (not Stake_Set
+             or else Castle.Nav."=" (Castle.Nav.Plan (Best (K).At_P, Stake_At).Result, Castle.Nav.Found))
+           and then Route_To (M, Best (K).At_P, Beside_Near_M)
+         then
+            Release (M, I);
+            M.Carry := Load;
+            M.Carried := Loaded;
+            M.Use_For := Use_Of;
+            M.Site_Patch := P;
+            M.Spot := C;
+            M.State := To_Site;
+            return True;
+         end if;
+      end loop;
+      return False;
+   end Go_Beside;
 
    --  To a patch of its house's site that still has work in it: earth to
    --  move, or stone to lay where some lies there.  The patches nearest its
@@ -63,13 +198,29 @@ function Think_House (I : Positive) return Boolean is
                   Any := True;
                   if Wall (P) and then Houses (H).Lying (Stone) = 0 then
                      No_Stone_There := True;
-                  elsif not Failed (M, Site_Patch_Fail + P) then
+                  elsif not Failed (M, Site_Patch_Fail + P)
+                    and then not (for some J in 1 .. N_Members =>
+                                    J /= I and then not Castle.Colony.Band (J).Is_Dead and then Castle.Colony.Band (J).Site = H
+                                    and then Castle.Colony.Band (J).Site_Patch = P)
+                  then
                      declare
                         C : constant Vec3 := (Sum (P).X / Sum (P).Z, Sum (P).Y / Sum (P).Z, Pad_Z (Houses (H).F));
-                        D : constant Float := Flat_Dist (C, M.Pos);
+                        --  (a storehouse's ground: down the stair of its way in from the path, then
+                        --  outward over its floor from the stair's foot, by how far that is to walk when
+                        --  all is made: what is dug so far always has its way out)
+                        --  (worked there and back: its rows a metre of that order deep, and within a row
+                        --  the nearest to where it stands; --no-zigzag: every row from its same end)
+                        Store : constant Boolean := Is_Store (Houses (H).F);
+                        D : constant Float :=
+                          (if Store and then not Zigzag_On then Yard_Order (Houses (H).F, C) else Flat_Dist (C, M.Pos));
+                        Band : constant Natural :=
+                          (if not Store then Patch_Band (P)
+                           elsif Zigzag_On
+                           then Natural (Float'Floor (Float'Max (0.0, Yard_Order (Houses (H).F, C) + 64.0) / 4.0))
+                           else 0);
                      begin
-                        if Patch_Band (P) < Best_B or else (Patch_Band (P) = Best_B and then D < Best_D) then
-                           Best_B := Patch_Band (P);
+                        if Band < Best_B or else (Band = Best_B and then D < Best_D) then
+                           Best_B := Band;
                            Best_D := D;
                            Best := P;
                            At_P := C;
@@ -81,7 +232,7 @@ function Think_House (I : Positive) return Boolean is
             if Best = 0 then
                exit;
             end if;
-            if Go_To (At_P, At_P, At_P, Best) then
+            if (Reach_On and then Go_Beside (Best, At_P)) or else Go_To (At_P, At_P, At_P, Best) then
                No_Stone_There := False;
                return True;
             end if;
@@ -89,6 +240,7 @@ function Think_House (I : Positive) return Boolean is
          end;
       end loop;
       if not Any then
+         Meet_Door (H, Beaten => False);       --  (its way's steps to its path as that lies now: the spec)
          Read_Zone_Ground (Houses (H).Zone);   --  (its ground as it is made ready, before anything stands on it)
          Houses (H).Pad_Done := True;
          Houses (H).Lying (Stone) := 0;        --  (what is left of the last stone is rubble)
@@ -142,6 +294,41 @@ function Think_House (I : Positive) return Boolean is
          end;
       elsif M.Carry = Ladder and then M.Carried > 0 then
          return False;                         --  (no roof to stand it at: to a stockpile with it)
+      end if;
+      --  a storehouse's yard: beside the next blocks, on the side toward the
+      --  yard's middle
+      --  (and the floor of one drawn turned, which is laid where it is drawn: out over its yard)
+      if BP (Hs.Placed + 1).S in CB.Beaten | CB.Fence | CB.Cover | CB.Smooth
+        or else (Yard_Turned (F) and then BP (Hs.Placed + 1).S = CB.Floor)
+      then
+         declare
+            K1 : constant Item_Kind := Kind_Of (BP (Hs.Placed + 1));
+            Cu, Cv : Float;                     --  (the yard's middle, in its frame: where it is made)
+         begin
+            CB.Fore_Turn (F, Float (F.Yard_U0 + F.Yard_U1) / 2.0, Float (F.Yard_V0 + F.Yard_V1) / 2.0, Cu, Cv);
+            if not Yard_Turned (F) then
+               Cu := Float (F.Yard_U0 + F.Yard_U1) / 2.0;
+               Cv := Float (F.Yard_V0 + F.Yard_V1) / 2.0;
+            end if;
+            for K in Hs.Placed + 1 .. Integer'Min (BP_N, Hs.Placed + Lay_Blocks) loop
+               exit when Kind_Of (BP (K)) /= K1;
+               Su := Su + Float (H_U (F, Integer (BP (K).X), Integer (BP (K).Y)));
+               Sv := Sv + Float (H_V (F, Integer (BP (K).X), Integer (BP (K).Y)));
+               N := N + 1;
+            end loop;
+            Su := Su / Float (N);
+            Sv := Sv / Float (N);
+            declare
+               L  : constant Float := Float'Max (0.001, Sqrt ((Cu - Su) ** 2 + (Cv - Sv) ** 2));
+               Tu : constant Float := Su + (Cu - Su) / L * Float'Min (L, Stand_Off_B);
+               Tv : constant Float := Sv + (Cv - Sv) / L * Float'Min (L, Stand_Off_B);
+               First : constant Vec3 :=
+                 ((Float (BP (Hs.Placed + 1).X) + 0.5) * 0.25, (Float (BP (Hs.Placed + 1).Y) + 0.5) * 0.25,
+                  Float (BP (Hs.Placed + 1).Z) * 0.25 + 0.125);
+            begin
+               return Go_To (H_Point (F, Tu, Tv), H_Point (F, Su, Sv), First, 0);
+            end;
+         end;
       end if;
       K0 := Kind_Of (BP (Hs.Placed + 1));
       for K in Hs.Placed + 1 .. Integer'Min (BP_N, Hs.Placed + Lay_Blocks) loop
@@ -238,16 +425,33 @@ begin
    begin
       for K in 1 .. N_Houses loop
          if K /= H and then not Houses (K).Built and then Builder_Of (K) = 0 and then not Failed (M, Site_Fail + K)
+           and then not (Houses (K).Raze and then Houses (K).Owner /= 0)
            and then (Best = 0 or else Further_On (K, Best))
          then
             Best := K;
          end if;
       end loop;
-      if H > 0 and then Best > 0 and then Further_On (Best, H) then
-         H := Best;                               --  (what of its own lies at its site stays there)
-         M.Site := H;
+      if H > 0 and then Best > 0 and then (Further_On (Best, H) or else Helping (I)) then
+         H := Best;                               --  (what of its own lies at its site stays there;
+         M.Site := H;                             --  one that helps at another's house takes a house nobody builds)
          M.Site_Patch := 0;
+      elsif H > 0 and then Helping (I) and then (not Help_On or else Roof_Next (Houses (H))) then
+         M.Site := 0;                             --  (a helper: its roof is being thatched, one thatcher's work)
+         M.Site_Patch := 0;
+         return False;
       elsif H = 0 then
+         if Best = 0 and then Help_On and then Best_Free_Builder then
+            --  no house without a builder: to the one being built with the most still to do, if that is much
+            for K in 1 .. N_Houses loop
+               if not Houses (K).Built and then not Houses (K).Raze and then Builder_Of (K) /= 0
+                 and then not Failed (M, Site_Fail + K) and then not Roof_Next (Houses (K))
+                 and then Houses (K).Total > Help_Over_B and then Builders_At (K) <= Help_Most
+                 and then (Best = 0 or else Left_Of (K) > Left_Of (Best))
+               then
+                  Best := K;
+               end if;
+            end loop;
+         end if;
          if Best = 0 or else not Best_Free_Builder then
             return False;
          end if;
@@ -257,6 +461,48 @@ begin
    end;
    if Failed (M, Site_Fail + H) then
       return False;
+   end if;
+   --  one marked for razing is taken down, from before its door (John, 2026-11-19: "limit razing
+   --  buildings to unowned"; the rest as it was put to him: its builder takes it down block by block)
+   if Houses (H).Raze then
+      declare
+         Fh   : CB.House renames Houses (H).F;
+         Door : constant Vec3 := H_Point (Fh, Float (Mid_Lo (Fh) + Mid_Hi (Fh)) / 2.0, -2.5);
+      begin
+         if Go_To (Door, Door, Door + (0.0, 0.0, 1.5), 0) then
+            return True;
+         end if;
+         Remember_Failure (M, Site_Fail + H);
+         return False;
+      end;
+   end if;
+   --  a storehouse's: what lies on the places closed for it taken away first
+   if not Houses (H).Pad_Done and then Houses (H).F.Kind = CB.Storehouse then
+      declare
+         Left : Boolean;
+      begin
+         if Go_Clear_Closed (I, Houses (H).Zone, Left) then
+            return True;
+         end if;
+         if Left then
+            M.Why := No_Room;                  --  (no room for it yet, or no way to it: it fells meanwhile)
+            return False;
+         end if;
+      end;
+   end if;
+   --  a stockyard's trees felled before its ground is touched
+   if not Houses (H).Pad_Done and then Yard_Site (Houses (H).F) and then Own_Logs (I) = 0 then
+      declare
+         Standing : Boolean;
+      begin
+         if Go_Fell_Yard (I, H, Standing) then
+            return True;
+         end if;
+         if Standing then
+            M.Why := No_Way;                   --  (one stands there that it cannot get to, or another fells it)
+            return False;
+         end if;
+      end;
    end if;
    --  its ground first: the earth, and the walls of stone that hold it
    if not Houses (H).Pad_Done then

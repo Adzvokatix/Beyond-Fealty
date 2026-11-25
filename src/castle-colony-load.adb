@@ -28,8 +28,8 @@ begin
    Reset;
    Ok := False;
    Version := Natural (Get (2));
-   if Version not in 1 .. Save_Version or else Version in 18 .. 24 then
-      return;                       --  (18, 19: housing before its ground was walled: not read)
+   if Version not in 1 .. Save_Version or else Version in 18 .. 29 then
+      return;                       --  (18 to 25: housing before the stockpile's first pass: not read)
    end if;
    Tick_N := Natural (Get (4));
    Left_Over := Get_F;
@@ -591,7 +591,38 @@ begin
             Hs := (others => <>);
             Hs.Zone := Natural (Get (2));
             Hs.Seed := Get (8);
-            Hs.F := Castle.Buildings.Design (Hs.Seed);
+            case Get (1) is
+               when 0 =>
+                  Hs.F := Castle.Buildings.Design (Hs.Seed);
+               when 1 =>
+                  if Version >= 44 then           --  (its walls; a storehouse of an older blob is 40 by 20)
+                     declare
+                        W : constant Natural := Natural (Get (1));
+                        D : constant Natural := Natural (Get (1));
+                     begin
+                        if W not in 16 .. 64 or else D not in 12 .. 48 or else W mod 4 /= 0 or else D mod 4 /= 0 then
+                           raise Bad_Save;
+                        end if;
+                        Hs.F := Castle.Buildings.Storehouse_Design (W, D);
+                     end;
+                  else
+                     Hs.F := Castle.Buildings.Storehouse_Design;
+                  end if;
+                  Hs.F.Yard_U0 := Get_I16;
+                  Hs.F.Yard_U1 := Get_I16;
+                  Hs.F.Yard_V0 := Get_I16;
+                  Hs.F.Yard_V1 := Get_I16;
+                  Hs.F.Gate_U := Get_I16;
+                  Hs.F.Covers := Natural (Get (1));
+                  if Hs.F.Covers > Castle.Buildings.Max_Covers then
+                     raise Bad_Save;
+                  end if;
+                  for K in 1 .. Hs.F.Covers loop
+                     Hs.F.Cover_U (K) := Get_I16;
+                  end loop;
+               when others =>
+                  raise Bad_Save;
+            end case;
             Hs.F.Fx := Get_I16;
             Hs.F.Fy := Get_I16;
             case Get (1) is
@@ -612,6 +643,50 @@ begin
             if Hs.F.Reach_L > Castle.Buildings.Max_Reach_B or else Hs.F.Reach_R > Castle.Buildings.Max_Reach_B then
                raise Bad_Save;
             end if;
+            if Version >= 31 then                 --  (how it was begun; a house of blob 30: as they all were)
+               Hs.F.Truss := Get_B;
+               Hs.F.Sill := Get_B;
+               Hs.Raze := Get_B;
+            end if;
+            if Version >= 32 then                 --  (a house of blob 31: plank beside its windows, no ridge beam
+               Hs.F.Jambs := Get_B;               --  in a hovel, as they were begun)
+               Hs.F.Ridge := Get_B;
+            end if;
+            if Version >= 36 then                 --  (a house of an older blob: drawn as it stands)
+               declare
+                  T : constant Natural := Natural (Get (1));
+               begin
+                  --  (37: and 4 if its ground is made where it is drawn; one not turned has none such)
+                  --  (40: and 8 if it is walked where it is drawn: only one whose ground is made there)
+                  if T mod 4 > 2 or else T > 14 or else (T >= 4 and then (Version < 37 or else T mod 8 = 5))
+                    or else (T >= 8 and then (Version < 40 or else T < 12 or else T mod 4 = 1))
+                  then
+                     raise Bad_Save;
+                  end if;
+                  Hs.F.Turn := T mod 4 - 1;
+                  Hs.F.Turn_Ground := T mod 8 >= 4;
+                  Hs.F.Walk := T >= 8;
+               end;
+            end if;
+            if Version >= 39 and then Is_Store (Hs.F) then      --  (what a storehouse drawn turned is turned about)
+               Hs.F.Piv_U := Get_F;
+               Hs.F.Piv_V := Get_F;
+               if Hs.F.Piv_U not in -1_000.0 .. 1_000.0 or else Hs.F.Piv_V not in -1_000.0 .. 1_000.0 then
+                  raise Bad_Save;
+               end if;
+            end if;
+            if Version >= 41 and then Is_Store (Hs.F) then      --  (how its yard is made: one of an older blob,
+               declare                                          --  stepped, as it was begun)
+                  P : constant Natural := Natural (Get (1));
+               begin
+                  if P > 11 then
+                     raise Bad_Save;
+                  end if;
+                  Hs.F.Smooth_Covers := P mod 2 = 1;
+                  Hs.F.Fence_Pieces := P mod 4 >= 2;
+                  Hs.F.Way_End := P / 4;         --  (its way in at an end of its front: 4, 8; a blob of before has neither)
+               end;
+            end if;
             Hs.Got (Stone) := Natural (Get (2));
             Hs.Lying (Stone) := Natural (Get (2));
             Hs.Stone_Left := Natural (Get (2));
@@ -628,7 +703,12 @@ begin
                raise Bad_Save;
             end if;
             Measure_House (H);
-            if Hs.Placed > Hs.Total then
+            --  (a house of blob 45 on is looked at once its truss is known, at the end of the blob:
+            --  measured here it has the truss of before, and one that stands with the fuller truss
+            --  has more blocks laid than that blueprint holds.  Until 2026-11-23, late, this refused
+            --  every save in which such a house stood or was at its last blocks: "no colony in
+            --  that save".  No check and no script of the gate had saved one.)
+            if Version < 45 and then Hs.Placed > Hs.Total then
                raise Bad_Save;
             end if;
          end;
@@ -686,6 +766,20 @@ begin
             for U in L.F.Front'Range loop
                L.F.Front (U) := Natural (Get (1));
             end loop;
+            if Version >= 37 then
+               declare
+                  T : constant Natural := Natural (Get (1));
+               begin
+                  if T mod 4 > 2 or else T > 14 or else T mod 8 = 5
+                    or else (T >= 8 and then (Version < 40 or else T < 12 or else T mod 4 = 1))
+                  then
+                     raise Bad_Save;
+                  end if;
+                  L.F.Turn := T mod 4 - 1;
+                  L.F.Turn_Ground := T mod 8 >= 4;
+                  L.F.Walk := T >= 8;
+               end;
+            end if;
             if L.Zone not in 1 .. N_Zones then
                raise Bad_Save;
             end if;
@@ -734,6 +828,211 @@ begin
       if Cart_By > N_Members or else (Cart_Towed and then Cart_By = 0) then
          raise Bad_Save;
       end if;
+      Builders_Cap := Natural (Get (1));   --  (26: the stockpile's first pass)
+      Least_M := Get_F;
+      if not (Least_M >= 0.0 and then Least_M <= Max_Lot_M) then
+         raise Bad_Save;
+      end if;
+      Overflow_On := Get_B;
+      for K in 1 .. N_Cells loop
+         Cells (K).Overflow := Get_B;
+      end loop;
+      Store_On := Get_B;
+      declare
+         V : constant Natural := Natural (Get (2));
+      begin
+         Stake_Day := (if V >= 32_768 then V - 65_536 else V);
+      end;
+      Store_Asked := Get_B;
+      Store_House := Natural (Get (1));
+      if Store_House > N_Houses
+        or else (Store_House > 0 and then Houses (Store_House).F.Kind /= Castle.Buildings.Storehouse)
+      then
+         raise Bad_Save;
+      end if;
+      for K in 1 .. N_Cells loop
+         Cells (K).Closed := Get_B;
+      end loop;
+      for K in 1 .. N_Cells loop            --  (28: the storehouse used)
+         declare
+            F : constant Natural := Natural (Get (1));
+         begin
+            if F > Fitting'Pos (Fitting'Last) then
+               raise Bad_Save;
+            end if;
+            Cells (K).Fit := Fitting'Val (F);
+         end;
+         declare
+            V : constant Natural := Natural (Get (1));       --  (2: a second barrel on the first, since 2026-11-21)
+         begin
+            if V > 2 then
+               raise Bad_Save;
+            end if;
+            Cells (K).Made := V /= 0;
+            Cells (K).Second := V = 2 and then Cells (K).Fit in Meat_Barrel | Water_Barrel;
+         end;
+      end loop;
+      Keep_On := Get_B;
+      Keeper_N := Natural (Get (1));
+      Carp_On := Get_B;
+      Carp_N := Natural (Get (1));
+      Water_Is_On := Get_B;
+      Store_Built_By := Natural (Get (1));
+      if Keeper_N > N_Members or else Carp_N > N_Members or else Store_Built_By > N_Members then
+         raise Bad_Save;
+      end if;
+      Last_N := Natural (Get (2));          --  (29: the playtest round of 2026-11-18)
+      One_Pile_On := Get_B;
+      Top_Cut_On := Get_B;
+      Share_On := Get_B;
+      for Z in 1 .. N_Zones loop            --  (30: the stockyard)
+         Zones (Z).Yard := Get_B;
+         if Zones (Z).Yard and then Zones (Z).Kind /= Stockpile_Zone then
+            raise Bad_Save;
+         end if;
+      end loop;
+      Yard_Level_On := Get_B;
+      Move_On := Get_B;
+      if Version >= 31 then                 --  (31: the next pass of his notes)
+         Way_On := Get_B;
+         Path_Level_On := Get_B;
+         Truss_On := Get_B;
+         Sill_On := Get_B;
+      end if;
+      for H in 1 .. N_Houses loop           --  (since 32 no hovel is both marked and owned: a mark of
+         if Houses (H).Raze and then Houses (H).Owner /= 0 then      --  blob 31 on one lived in is lifted)
+            Houses (H).Raze := False;
+         end if;
+      end loop;
+      if Version >= 32 then                 --  (32: his answers of 2026-11-19)
+         for I in 1 .. N_Members loop
+            Band (I).Build_First := Get_B;
+         end loop;
+      end if;
+      if Version < 34 then                  --  (a colony saved before 2026-11-19's second round goes on by its
+         One_Pile_On := False;              --  rules: the player's stockpile of any size, as often as zoned,
+         Move_On := False;                  --  and stockpiles open beside the stockyard)
+      end if;
+      if Version >= 33 then                 --  (33: how far the foresters look for a tree)
+         Wood_Reach := Get_F;
+         Wood_Far_On := Get_B;
+         if Version >= 34 then
+            Wood_From := Get_F;
+            if not (Wood_From >= 0.0) then
+               raise Bad_Save;
+            end if;
+         end if;
+         if Version >= 35 then
+            Food_Reach := Get_F;
+            Haul_Reach := Get_F;
+            if not (Food_Reach >= 0.0 and then Food_Reach <= Fell_Reach_Max_M
+                    and then Haul_Reach >= 0.0 and then Haul_Reach <= Fell_Reach_Max_M)
+            then
+               raise Bad_Save;
+            end if;
+         end if;
+         if Version >= 36 then
+            Turn_On := Get_B;
+         end if;
+         if Version >= 37 then
+            Turn_Ground_On := Get_B;
+            Keep_Off_On := Get_B;
+         end if;
+         if not (Wood_Reach >= 0.0 and then Wood_Reach <= Fell_Reach_Max_M) then
+            raise Bad_Save;
+         end if;
+         for N in 1 .. Natural (Get (2)) loop
+            declare
+               K : constant Natural := Natural (Get (2));
+            begin
+               if K not in 1 .. N_Trees then
+                  raise Bad_Save;
+               end if;
+               Trees (K).No_Way_Till := Natural (Get (4));
+            end;
+         end loop;
+         if Version >= 38 then
+            Ways_Told_On := Get_B;
+            for N in 1 .. Natural (Get (2)) loop
+               declare
+                  Id : constant Natural := Natural (Get (4));
+               begin
+                  Told (Id mod Max_Told) := (Id => Id, Until_Tick => Natural (Get (4)));
+               end;
+            end loop;
+         end if;
+         if Version >= 39 then              --  (a stockyard zoned by an older blob stays as it was laid out;
+            Yard_Turn_On := Get_B;          --  one zoned from now on beside a path at 45 degrees lies along it)
+         end if;
+         if Version >= 40 then              --  (a turned hovel of an older blob stays walked as it stands;
+            Hovel_Walk_On := Get_B;         --  one placed from now on is walked where it is drawn)
+         end if;
+         if Version >= 41 then              --  (a storehouse of an older blob stays as it was begun; one
+            Smooth_Covers_On := Get_B;      --  begun from now on has its coverings smoothed, and its fence
+            Fence_Pieces_On := Get_B;       --  in pieces along a turned yard)
+         end if;
+         if Version >= 42 then              --  (no zone of an older blob has a frame; the player's
+            Box_On := Get_B;                --  stockpile is put down whole from now on)
+            for Z in 1 .. N_Zones loop
+               if Get_B then
+                  Zones (Z).Placed := True;
+                  Zones (Z).Fx := Integer (Get (2));
+                  Zones (Z).Fy := Integer (Get (2));
+                  declare
+                     W : constant Natural := Natural (Get (1));
+                  begin
+                     if W > Way_Index'Last then
+                        raise Constraint_Error with "a zone's way out of range";
+                     end if;
+                     Zones (Z).Way := W;
+                  end;
+                  Zones (Z).Along_B := Natural (Get (2));
+               end if;
+            end loop;
+         end if;
+         if Version >= 43 then              --  (a colony of an older blob has its stake and its camp apart)
+            Camp_Square := Get_B;
+         end if;
+         if Version >= 46 then              --  (which stockpiles are ordered removed: none of an older blob)
+            for Z in 1 .. N_Zones loop
+               Zones (Z).Leaving := Get_B;
+            end loop;
+         end if;
+         if Version >= 45 then              --  (a house of an older blob has the truss it was begun with)
+            Full_On := Get_B;
+            for H in 1 .. N_Houses loop
+               Houses (H).F.Full := Get_B;
+               --  (it was measured above, before this was read: one with the fuller truss has more
+               --  blocks to its blueprint, and its counts were another house's until it was measured
+               --  again; and only now can what is laid of it be held against its blueprint)
+               if Houses (H).F.Full then
+                  Measure_House (H);
+               end if;
+               if Houses (H).Placed > Houses (H).Total then
+                  raise Bad_Save;
+               end if;
+            end loop;
+         else
+            Full_On := True;
+         end if;
+         --  (a square founded with its walls outside its floor: said over the blocks of its zone's
+         --  frame, with the rings kept outside its four sides: Save)
+         Square_Outside := False;
+         Square_Strip := [others => 0];
+         if Camp_Square and then Camp_Zone_N > 0 and then Zones (Camp_Zone_N).Placed
+           and then Zones (Camp_Zone_N).Along_B >= 128
+         then
+            declare
+               Packed : constant Natural := Zones (Camp_Zone_N).Along_B / 256;
+            begin
+               Square_Outside := True;
+               Square_Strip := [Packed mod 4, (Packed / 4) mod 4, (Packed / 16) mod 4, (Packed / 64) mod 4];
+               Zones (Camp_Zone_N).Along_B := Zones (Camp_Zone_N).Along_B mod 128;
+            end;
+         end if;
+      end if;                               --  (a colony of blob 30: its houses stay as they were begun; the
+                                            --  next it begins, and what its people do, are as a colony's
+                                            --  founded now)
    else
       --  (a blob of before housing: nobody is building a house; beds are
       --  made from now on, as a colony founded now makes them)
@@ -745,6 +1044,19 @@ begin
       Ladders_On := False;              --  (and its roofs thatched from the ground)
       Holes_On := False;                --  (and its paths laid down into holes)
       Pull_On := False;                 --  (and the cart, had it one, left where it stood)
+      Builders_Cap := 0;                --  (and no limit on its builders,
+      Least_M := 0.0;                   --  and a stockpile of any size,
+      Overflow_On := False;             --  with no overflow places,
+      Store_On := False;                --  and no storehouse,
+      Keep_On := False;                 --  no stockman,
+      Keeper_N := 0;
+      Carp_On := False;                 --  no carpenter,
+      Carp_N := 0;
+      Water_Is_On := False;             --  no water brought in,
+      Last_N := 0;                      --  none of the stores' places kept,
+      Top_Cut_On := False;              --  long grass cut where it was found,
+      Share_On := False;                --  and a bush one gatherer's)
+      Store_Built_By := 0;
       Cart_Towed := False;
       Cart_Bound := False;
       Cart_By := 0;
@@ -771,6 +1083,9 @@ begin
       Path_List (K).Todo := (if Labour_On then All_Metres (Path_List (K)) else 0);
    end loop;
    Count_Paths;
+   Walls_Stale := True;                   --  (nothing of a square's walls is kept: counted at the next step,
+   Wall_Left_N := 0;                      --  and a stockpile's trees when next asked)
+   Box_Trees_At := Natural'Last;
    Paths_Stale := True;
    --  what each had reserved, and the way it was going
    for I in 1 .. N_Members loop
@@ -792,7 +1107,10 @@ begin
          if M.State in To_Take | Taking and then M.Cell in 1 .. N_Cells then
             Cells (M.Cell).Outgoing := Cells (M.Cell).Outgoing + M.Due;
          end if;
-         if M.State in To_Tree | Chopping and then M.Tree in 1 .. N_Trees then
+         --  (a tree is whoever's errand it is, felling it or picking its apples: it is taken and
+         --  let go together with M.Tree, in every state.  Until 2026-11-21 only a feller's was made
+         --  again, and an apple tree being picked was nobody's after a load: another went for it)
+         if M.Tree in 1 .. N_Trees then
             Trees (M.Tree).Reserved_By := I;
          end if;
          if M.State in To_Pile | Lifting and then M.Pile in 1 .. N_Piles then
@@ -809,6 +1127,22 @@ begin
    if Pos /= B'Last + 1 then
       raise Bad_Save;
    end if;
+   --  (a lot laid out by a blob before 37: the turn its house is to have, as when it was laid out; its
+   --  ground the square one it was laid out with)
+   if Version < 37 then
+      for K in 1 .. N_Lots loop
+         Lots (K).F.Turn := Turn_For (Lots (K).F);
+      end loop;
+   end if;
+   --  (a lot's house was designed anew from its seed above: with the timbers a lot laid out now
+   --  is given, which are of the settings read since)
+   for K in 1 .. N_Lots loop
+      Give_Timbers (Lots (K).F);
+   end loop;
+   Kept_Key := -1;                        --  (the walking map told anew what is kept off,
+   Drawn_Key := -1;                       --  and what is walked where it is drawn)
+   Castle.Nav.Set_Drawn ([]);
+   Walk_Drawn;
    Ok := True;
 exception
    when Bad_Save | Constraint_Error =>

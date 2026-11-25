@@ -75,17 +75,31 @@ begin
       Drop_Stretch (M);                         --  (a stretch of path it had is given up)
       return;
    end if;
+   --  a stockpile the player has ordered removed: a porter with empty hands takes a load out of it
+   --  before anything else of its work
+   if M.Job = Porter and then M.Carried = 0 and then (for some Z in 1 .. N_Zones => Zones (Z).Leaving)
+     and then Go_Move_In (I)
+   then
+      return;
+   end if;
    if M.Carry = Carcass then                    --  home with it, or (no hunter now) put it down
-      if M.Job /= Hunter then
+      --  (given another job with a deer on its shoulders, it brings the deer home and butchers it
+      --  first: Kill_Home_On; else, and with nowhere to butcher it, it puts it down where it stands)
+      if M.Job /= Hunter and then not Kill_Home_On then
+         Note_Drop (M, No_Hunter_Now);
          Drop_Carcass (M);
       elsif Go_Butcher (I) then
          return;
+      elsif M.Job /= Hunter then
+         Note_Drop (M, No_Hunter_Now);
+         Drop_Carcass (M);
       elsif Needs_On and then (M.Fed < Hungry_At or else Bedtime (M)) then
          --  nowhere to butcher it, and it is hungry or night has come: it
          --  puts its kill down and sees to itself (a serf won't let itself
          --  starve: it stood with the deer in its arms until there was room,
          --  which at the pace of 2026-11-12 the reference band's one
          --  stockpile ran out of); the kill lies there until there is room
+         Note_Drop (M, (if M.Why = No_Way then No_Way_Home else No_Room_For_It));
          Drop_Carcass (M);
          if Sees_To_Needs then
             return;
@@ -128,7 +142,10 @@ begin
                or else Paths_Left_M > 0
                or else (M.Carry = Earth and then M.Carried > 0)
                or else Cart_To_Pull
-               or else (M.Job /= Cook and then M.Use_For not in For_Store | For_House | For_Bed | For_Ladder))
+               or else Box_Trees_Standing > 0    --  (a tree to fell in a stockpile put down whole)
+               or else Wall_Left_N > 0           --  (the square's walls to lay)
+               or else M.Use_For = For_Wall      --  (stone in hand for them, whoever holds it)
+               or else (M.Job /= Cook and then M.Use_For not in For_Store | For_House | For_Bed | For_Ladder | For_Fitting))
    then
       if Think_Build (I) then
          return;
@@ -142,6 +159,10 @@ begin
    end if;
    --  a load for the house it is building: there with it
    if M.Carried > 0 and then M.Use_For = For_House and then Think_House (I) then
+      return;
+   end if;
+   --  a log for the carpenter's next shelf or barrel: there with it
+   if M.Carried > 0 and then M.Use_For = For_Fitting and then Think_Carpenter (I) then
       return;
    end if;
    if M.Carried > 0 and then not Topping_Up then
@@ -170,11 +191,15 @@ begin
       if Go_Haul (I) then
          return;
       end if;
+      --  the carpenter: the storehouse's shelves and barrels, and no house
+      if Is_Carpenter (I) and then Think_Carpenter (I) then
+         return;
+      end if;
       --  a builder: its house, while there is something to build it with
       declare
          Waits : Why_Idle := Nothing_Yet;
       begin
-         if N_Houses > 0 then
+         if N_Houses > 0 and then not Is_Carpenter (I) then
             if Think_House (I) then
                return;
             end if;
@@ -193,10 +218,16 @@ begin
       end;
       if M.Why = Enough_Wood then
          Rest (I);
+      elsif Room_Gated and then M.Why in No_Room | Nearly_Full and then M.Carried = 0 then
+         Wait_For_Room (I);
       else
          M.Wait := 4.0;
          M.State := Idle;
       end if;
+      return;
+   end if;
+   --  the stockman: the storehouse's work before a porter's
+   if M.Job = Porter and then Is_Keeper (I) and then Think_Keeper (I) then
       return;
    end if;
    if M.Job = Porter then
@@ -231,18 +262,23 @@ begin
             for F of Fetch_Order loop
                if Asked_For (F) then
                   Short := True;
-                  if not Room_For (F) then
+                  if (if Last_N > 0 then not Room_To_Set_Out (F) else not Room_For (F)) then
                      Roomless := True;
                   elsif Failed (M, Kind_Id (F)) then
                      M.Fetch := F;
                   end if;
                end if;
             end loop;
-            M.Why := (if not Short then Stocks_Full elsif Roomless then No_Room else No_Source);
+            M.Why := (if not Short then Stocks_Full elsif Roomless then Full_Why else No_Source);
          end if;
       end;
+      if M.Why in Stocks_Full | No_Source and then Go_Move_In (I) then
+         return;                                --  (nothing to fetch: a load out of the old stockpile)
+      end if;
       if M.Why = Stocks_Full then
          Rest (I);
+      elsif Room_Gated and then M.Why in No_Room | Nearly_Full then
+         Wait_For_Room (I);
       else
          M.Wait := 4.0;
          M.State := Idle;
@@ -264,8 +300,14 @@ begin
          M.Why := Enough_Meat;
          Rest (I);
          return;
-      elsif not Room_For (Meat) or else not Room_For (Hide) then
-         M.Why := No_Room;
+      elsif (if Last_N > 0 then not Room_To_Set_Out (Meat) or else not Room_To_Set_Out (Hide)
+             else not Room_For (Meat) or else not Room_For (Hide))
+      then
+         M.Why := Full_Why;
+         if Room_Gated then
+            Wait_For_Room (I);
+            return;
+         end if;
       elsif Go_Hunt (I) then
          return;
       end if;

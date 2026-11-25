@@ -16,7 +16,8 @@ procedure Find_Source (K : Item_Kind; From : Vec3; Self : Positive; Tgt : out Bl
    begin
       if D < Best_D and then Flat_Dist (Stake_At, C) <= Reach_M
         and then (Least_M <= 0.0 or else Flat_Dist (Stake_At, C) >= Least_M)
-        and then not Failed (M, Source_Id (P)) and then not Taken (K, P, Self)
+        and then not Failed (M, Source_Id (P)) and then not No_Way_Told (Source_Id (P))
+        and then not Taken (K, P, Self)
       then
          Best_D := D;
          Tgt := P;

@@ -36,11 +36,12 @@ package Castle.HUD is
    type Palette_Array is array (1 .. 7) of Material;
    Palette : constant Palette_Array := [Plank, Log, Shingle, Granite, Dirt, Sand, Footpath];
 
-   type Tool_Mode is (Edit, Stake, Path, Stockpile, Camp, Housing);
+   type Tool_Mode is (Edit, Stake, Path, Stockpile, Camp, Housing, Stockyard, Unzone);
    --  What a left click on the ground does: dig or place (Edit), raise the
    --  homestake, lay a path from the last point, zone a stockpile corner to
    --  corner, zone the camp (the fire where it is clicked), zone housing
-   --  corner to corner.
+   --  corner to corner; Unzone: take housing out again, corner to corner
+   --  (begun from the ground's menu on housing).
 
    type Band_Tab is (People_Tab, Stores_Tab, Camp_Tab, Orders_Tab, Skills_Tab);
    Band_Rows : constant := 12;       --  people shown at once in the band's list
@@ -62,6 +63,14 @@ package Castle.HUD is
       Path_Started : Boolean := False;
       Zone_From    : Vec3 := (0.0, 0.0, 0.0);
       Zone_Started : Boolean := False;
+      --  a box held to be put down (the stockpile): the way it is turned, an
+      --  eighth a step (Castle.Colony.Way_Index), and why it would be
+      --  refused where it is held ("": it would not), said by the cursor
+      Way          : Natural := 0;
+      Warn         : Castle.Text.Line;
+      --  housing pulled with its path: which rows (0: the side it was begun
+      --  on, 1: the other, 2: both: Castle.Colony.Pull_Rows by position)
+      Rows         : Natural := 0;
       Last_Done    : Boolean := True;   --  the last order was carried out
       --  what the last order came to, said for a few seconds (and to the log)
       Note       : Castle.Text.Line;
@@ -134,7 +143,8 @@ package Castle.HUD is
 
    function Cancel (Tools : in out Tool_State) return Boolean;
    --  Esc: the menu closed, or the path line or the stockpile half drawn
-   --  ended.  False: there was nothing to cancel.
+   --  ended, or a box held to be put down put away.  False: there was
+   --  nothing to cancel.
 
    function Menu_Open return Boolean;
    function Menu_On return Castle.Pick.Thing;   --  what the open menu is about (to mark it in the world)

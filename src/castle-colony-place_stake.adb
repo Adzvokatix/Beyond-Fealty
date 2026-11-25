@@ -1,8 +1,12 @@
 separate (Castle.Colony)
-procedure Place_Stake (Ground : Vec3; Band_Size : Positive; Seed : U64) is
-   Bx  : constant Integer := B (Ground.X);
-   By  : constant Integer := B (Ground.Y);
-   Top : constant Integer := Ground_Row (Bx, By, B (Ground.Z));
+procedure Place_Stake (Ground : Vec3; Band_Size : Positive; Seed : U64; Post : Boolean := True;
+                       As_Read : Boolean := False) is
+   --  (with no post: the block column whose corner is the corner of blocks nearest, as a camp's fire has it)
+   Bx  : constant Integer := (if Post then B (Ground.X) else Integer (Float'Floor (Ground.X * 4.0 + 0.5)));
+   By  : constant Integer := (if Post then B (Ground.Y) else Integer (Float'Floor (Ground.Y * 4.0 + 0.5)));
+   --  (As_Read: the height given is the ground's own, its top the row under it)
+   Top : constant Integer := (if As_Read and then not Post then B (Ground.Z + 0.01) - 1
+                              else Ground_Row (Bx, By, B (Ground.Z)));
 begin
    if Stake_Set or else Top < 0 then
       return;
@@ -10,12 +14,15 @@ begin
    Stake_Set := True;
    Band_Seed := Seed;
    Demand (Stone) := Stone_Quota;
-   Stake_At := ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25, Float (Top + 1) * 0.25);
+   Stake_At := (if Post then ((Float (Bx) + 0.5) * 0.25, (Float (By) + 0.5) * 0.25, Float (Top + 1) * 0.25)
+                else (Float (Bx) * 0.25, Float (By) * 0.25, Float (Top + 1) * 0.25));
    Castle.Herds.Found (Stake_At, Castle.Hash.Derive (Seed, 9));   --  placed round it once its ground is in
-   for Z in Top + 1 .. Top + 7 loop                       --  a post, 1.75 m
-      Write_Src (Bx, By, Z, (Mat => Log, State => 0));
-   end loop;
-   Write_Src (Bx, By, Top + 8, (Mat => Plank, State => 0));   --  a board on top
+   if Post then
+      for Z in Top + 1 .. Top + 7 loop                       --  a post, 1.75 m
+         Write_Src (Bx, By, Z, (Mat => Log, State => 0));
+      end loop;
+      Write_Src (Bx, By, Top + 8, (Mat => Plank, State => 0));   --  a board on top
+   end if;
    for K in 1 .. Integer'Min (Band_Size, Max_Members) loop
       N_Members := N_Members + 1;
       declare
@@ -23,9 +30,38 @@ begin
          H : constant U64 := Castle.Hash.Derive (Seed, U64 (1_000 + K));
          A : constant Float := 2.0 * Ada.Numerics.Pi * Float (K) / Float (Band_Size) + 0.3;
          R : constant Float := 2.0 + Castle.Hash.Unit (H + 7);
-         P : constant Vec3 := (Stake_At.X + R * Cos (A), Stake_At.Y + R * Sin (A), Stake_At.Z);
-         Z : constant Float := Castle.Nav.Surface_Z (P.X, P.Y);
+         P : Vec3 := (Stake_At.X + R * Cos (A), Stake_At.Y + R * Sin (A), Stake_At.Z);
+         Z : Float := Castle.Nav.Surface_Z (P.X, P.Y);
       begin
+         --  (founded on a square, which may be among trees: the highest floor where one of the band is to
+         --  stand can be a tree's top.  The floor nearest the square's own height then, a little further
+         --  out along the same way if there is none within 2 m of it where it was to stand.  With a post
+         --  raised, as it always was.)
+         if not Post then
+            for Try in 0 .. 8 loop
+               declare
+                  Rt : constant Float := R + 0.5 * Float (Try);
+                  Pt : constant Vec3 := (Stake_At.X + Rt * Cos (A), Stake_At.Y + Rt * Sin (A), Stake_At.Z);
+                  Fl : Castle.Nav.Floor_List;
+                  Fn : Natural;
+                  Best : Float := Float'Last;
+               begin
+                  Castle.Nav.Floors_At (Integer (Float'Floor (Pt.X * 2.0)), Integer (Float'Floor (Pt.Y * 2.0)), Fn, Fl);
+                  for F in 1 .. Fn loop
+                     if Fl (F).Speed > 0.0
+                       and then abs (Float (Fl (F).Z) * 0.25 - Stake_At.Z) < abs (Best - Stake_At.Z)
+                     then
+                        Best := Float (Fl (F).Z) * 0.25;
+                     end if;
+                  end loop;
+                  if Best < Float'Last and then abs (Best - Stake_At.Z) <= 2.0 then
+                     P := Pt;
+                     Z := Best;
+                     exit;
+                  end if;
+               end;
+            end loop;
+         end if;
          M := (others => <>);
          M.Seed := H;
          M.Elder := K = 5;                        --  one elder in the band

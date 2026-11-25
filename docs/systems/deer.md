@@ -45,11 +45,40 @@ forequarters so their rounded ends leave no groove between them.
   never below 85 % of standing, the two ends dipping together so the back
   stays nearly level. Standing, it shifts one hoof at a time; its head is up
   and turning when alert, down in the grass when grazing.
+* **One piece on steep ground** (`Castle.Animals.Whole_Back`; John,
+  2026-11-22, with a picture of a deer in two halves on a rock face: "deer
+  can split in half when running up steep terrain"). The hips and the
+  withers each stood at their height over the ground under them, half a
+  spine either side of the middle, and on a hillside those two grounds are
+  far apart: the hindquarters and the forequarters, a box each on a bone
+  each, were drawn that far apart. Now the back is pitched as the ground
+  under its two ends asks, no steeper than 45 degrees (`Back_Pitch_Tan`:
+  as steep as a way up the walking map can be), and the two ends stand
+  that much nearer each other across the ground, a back's length apart
+  along the back, each over the ground there. On ground steeper than that
+  the higher end stands on its own ground and the lower is held up as far
+  as the back lets it hang, its legs reaching down for their hooves and
+  falling short. The hooves are put down under the joints as they then
+  are. `--no-whole-back` is the deer as they were. Measured on recorded
+  walks by the reference stake (`--deer-walk` with `--deer-stats`, 400
+  frames each; the hips and the withers apart, in backs' lengths as they
+  stand on level ground):
+
+  | the walk | as it was: frames over 1.1, the furthest | mended |
+  |---|---|---|
+  | up the limestone hillside, 1204 1112 to 1228 1134, at 6 m/s | 378, 2.62 | 0, 1.00 |
+  | the same at a trot (2.6 m/s) | 384, 2.54 | 0, 1.00 |
+  | across granite, 1255 1128 to 1272 1132 | 254, 3.08 | 0, 1.00 |
+  | 1225 1148 to 1236 1152 | 240, 2.18 | 0, 1.00 |
+  | the meadow by the stake, 1160 1080 to 1195 1080 | 6, 1.14 | 0, 1.00 |
 
 Test options on the game: `--deer N` (N deer in a row at the start focus,
 every class in turn, grazing, idle or alert), `--deer-walk X0 Y0 X1 Y1 SPEED`
 (a deer going there and back by planned routes at SPEED m/s, which picks the
-gait; up to eight), `--follow-deer` (the camera on the first).
+gait; up to eight), `--follow-deer` (the camera on the first), `--deer-stats`
+(at the end: how many deer were drawn, a deer a frame, how many of them with
+the hips and the withers more than 1.1 backs' lengths apart, and the
+furthest), `--no-whole-back`.
 
 ```sh
 ./bin/castle_game --float --at 1176 1080 --cam 2.9 0.3 6 --deer 6
@@ -64,12 +93,19 @@ the walk's order, trotting the diagonal pairs lift together, bounding all
 four are off the ground between strides, the gait follows the speed, the
 stride is the same at 30 and 120 frames a second, the legs reach their
 planted hooves, the back stays within 15 degrees of level, and the body
-keeps up.
+keeps up. Then a doe up a made-up hillside (the ground given to the hooves
+by `Castle.Serfs.Set_Ground_Source`: 27 degrees, 56 degrees at a trot and
+bounding, and a wall of rock 3 m high): the hips and the withers never
+further apart than a back's length (with the rule out the same runs draw
+them 1.19, 1.99, 2.09 and 4.45 lengths apart, and the check says so), the
+back pitched with the hill and never over 45 degrees, the higher end not
+sunk into the hill.
 
 **Herds** (`Castle.Herds`, simulated on the colony's clock and saved with
 it). When a colony is founded, two herds are placed round the stake (once
 its ground is in) on walkable ground 30 to 55 m off: a stag or a young stag,
-does, a fawn. Each herd has a node, which is where the herd is and decides
+does, a fawn. **A herd is put down only where a deer can walk off**
+(`Set_Walk_Off`, 2026-11-22: "A herd is not put up a tree", below). Each herd has a node, which is where the herd is and decides
 where it goes: it grazes a few minutes, then plans a route (`Castle.Nav`)
 to another spot 15 to 30 m away and walks it, keeping at least 32 m from the
 stake and within 70 m of it (the colony's ground, which stays loaded); a
@@ -227,6 +263,45 @@ plans routes.
   astray against 8, 27.8 m against 3.9, 139 turns against 36, and the 41
   days 29 deer with 72 arrows against 32 with 87: the herds as they were
   go by chance from world to world, the herds fleeing together hardly.)
+* **A herd is not put up a tree** (John, 2026-11-22, with a picture of
+  deer among the boughs of a spruce: "get stuck in the tree if they spawn
+  in inside a tree?"). A herd was put on the highest floor the walking map
+  has at the place drawn for it, and a trunk two blocks thick has a floor
+  on its top, among its leaves (leaves are not solid: a cell needs two of
+  its four block columns to stand on, and room overhead). All five deer
+  are put down at the herd's node, and a deer steps down a metre at the
+  most. Counted (`colony_run --seed 1 --stake 1178 1078 --herd-scan 200
+  20`: a colony founded at each of 441 places 20 m apart, 400 of them on
+  land; `--herds-anywhere` for the first column):
+
+  | | as it was | with the rule |
+  |---|---|---|
+  | herds put down | 800 | 800 |
+  | of them, more than 1.5 m over the land as the generator made it | 15: 14 on a trunk's top (3.6 to 6.4 m up), 1 on a boulder | 1, on a boulder on a mountainside |
+  | herds put where a deer cannot walk 6 m off | 17 | 0 |
+  | deer (of 4,000) that cannot walk 6 m off from where they stand: as put down, and a game hour on | 88, 98 | 3, 17 |
+
+  `tools/herd_places.sh` runs both counts and is in the gate: it fails if,
+  with the rule, a herd is put on a trunk or where a deer cannot walk
+  off, and if the count with the rule off no longer finds any there.
+  `colony_check` has the rule both ways on its made-up meadow, with a
+  trunk two blocks thick stood where the first herd is put.
+
+  The rule (`Can_Leave`): a place is taken only if, stepping as a deer
+  steps (up a step, down a metre, into no water), ground 6 m away
+  (`Leave_M`) can be got to from it, by a flood over the walking map's
+  cells round it; one that fails is passed over for the next place drawn,
+  as one in water is. It asks nothing of the planner and draws no number,
+  so a herd that was put on good ground is put on the very same ground:
+  the eight reference logs and the log of the game as it is played are
+  line for line with it on. `--herds-anywhere` (`Set_Walk_Off (False)`):
+  as it was. Not saved: it is how a herd is put down, once; **a colony
+  saved with a herd up a tree keeps it there**. **The seventeen deer that
+  still cannot walk off after an hour are another thing, found by this
+  count and not mended**: every one stands on a mountainside (62 to 139 m
+  up), on a ledge it stepped down to and cannot step back up from (a deer
+  goes down a metre and up half of one); five of them are one herd's.
+  The same deer are in the first column's 98.
 * **Deer wander in.** Every three game days two grown deer join the
   smallest herd if it has fewer than five (`Arrive_Days`, `Full_Herd`), so
   a hunted-out neighbourhood recovers.
