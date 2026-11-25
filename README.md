@@ -26,6 +26,13 @@ may be done with it. People have skills that grow with the work they do
 (stage 5b). Housing, trades, an
 economy and lordship are ahead (the phases are in the framework).
 
+<img width="2560" height="1440" alt="swappy-20261121-220829" src="https://github.com/user-attachments/assets/c924f5e7-ac4f-4254-b100-02c070554c50" />
+<img width="2560" height="1440" alt="swappy-20261121-220831" src="https://github.com/user-attachments/assets/974ff76c-03e9-4a88-ade3-5a4a18c88197" />
+<img width="2560" height="1440" alt="swappy-20261121-221305" src="https://github.com/user-attachments/assets/cedb78ae-2130-458e-962a-924499d61704" />
+<img width="2560" height="1440" alt="swappy-20261121-221607" src="https://github.com/user-attachments/assets/9feb4496-5076-4d64-98c4-369d191a0a9b" />
+<img width="2560" height="1440" alt="swappy-20261121-221609" src="https://github.com/user-attachments/assets/a5d3e0d1-5632-4233-8d0e-3843706d467a" />
+
+
 Where to read:
 
 - `docs/production/Production_Framework.md`: what must stay true, the phases, how a stage is run.
